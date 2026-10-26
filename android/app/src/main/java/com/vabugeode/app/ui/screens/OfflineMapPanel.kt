@@ -42,7 +42,7 @@ fun OfflineMapsPanel() {
         Spacer(Modifier.height(14.dp))
         MapSlot(
             OfflineMap.Kind.SATELLITE,
-            "Растровый .mbtiles или .pmtiles (JPEG/PNG/WebP). Подписи берутся из схемы, если она загружена.",
+            "Растровый .mbtiles или .pmtiles (JPEG/PNG/WebP). Гибрид: снимок + дороги и подписи из схемы.",
         )
         Spacer(Modifier.height(10.dp))
         Text("Без файлов карта показывается только с интернетом.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)

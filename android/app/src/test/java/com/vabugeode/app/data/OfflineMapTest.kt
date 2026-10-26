@@ -64,10 +64,14 @@ class OfflineMapTest {
         assertEquals("mbtiles://" + File(dir, "satellite").absolutePath, sat.getString("url"))
         assertEquals(2, style.getJSONArray("layers").length())
 
-        // Есть схема — поверх снимка подписи
+        // Есть схема: спутник — только снимок, гибрид — снимок + дороги и подписи
         File(dir, "region.pmtiles").writeBytes(ByteArray(8))
-        style = JSONObject(OfflineMap.satelliteStyleJson(ctx)!!)
-        assertTrue(style.getJSONArray("layers").length() > 5)
+        assertEquals(2, JSONObject(OfflineMap.satelliteStyleJson(ctx)!!).getJSONArray("layers").length())
+        style = JSONObject(OfflineMap.satelliteStyleJson(ctx, hybrid = true)!!)
+        val layers = style.getJSONArray("layers")
+        val types = (0 until layers.length()).map { layers.getJSONObject(it).getString("type") }
+        assertTrue("line" in types && "symbol" in types)
+        assertTrue("fill" !in types)
         assertTrue(style.getJSONObject("sources").has("protomaps"))
         dir.deleteRecursively()
     }

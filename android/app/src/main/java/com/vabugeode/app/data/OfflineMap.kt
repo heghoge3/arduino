@@ -60,10 +60,10 @@ object OfflineMap {
     }
 
     /**
-     * Стиль «спутник»: растровый слой, а поверх подписи из схемы (если она загружена) —
-     * чтобы на снимке были видны названия посёлков и улиц.
+     * Стиль «спутник»: только снимок. hybrid — гибрид: поверх снимка дороги, тропы,
+     * границы и подписи из схемы (если она загружена).
      */
-    fun satelliteStyleJson(ctx: Context): String? {
+    fun satelliteStyleJson(ctx: Context, hybrid: Boolean = false): String? {
         val f = file(ctx, Kind.SATELLITE)
         if (!f.isFile) return null
         val fmt = runCatching { detect(f.inputStream().use { readHead(it) }) }.getOrNull() ?: return null
@@ -79,13 +79,22 @@ object OfflineMap {
         val layers = JSONArray()
             .put(JSONObject().put("id", "background").put("type", "background").put("paint", JSONObject().put("background-color", "#060A12")))
             .put(JSONObject().put("id", "sat").put("type", "raster").put("source", "sat"))
-        styleJson(ctx)?.let { scheme ->
+        if (hybrid) styleJson(ctx)?.let { scheme ->
             val s = JSONObject(scheme)
             sources.put("protomaps", s.getJSONObject("sources").getJSONObject("protomaps"))
             val all = s.getJSONArray("layers")
             for (i in 0 until all.length()) {
                 val l = all.getJSONObject(i)
-                if (l.optString("type") == "symbol") layers.put(l)
+                val id = l.optString("id")
+                when {
+                    l.optString("type") == "symbol" -> layers.put(l)
+                    // Линии дорог и троп без «обводок» — на снимке обводка выглядит грязью
+                    l.optString("type") == "line" && (id.startsWith("roads") || id.startsWith("boundaries")) && !id.contains("casing") -> {
+                        val paint = l.optJSONObject("paint") ?: JSONObject().also { l.put("paint", it) }
+                        paint.put("line-opacity", 0.75)
+                        layers.put(l)
+                    }
+                }
             }
         }
         return style.put("sources", sources).put("layers", layers).toString()

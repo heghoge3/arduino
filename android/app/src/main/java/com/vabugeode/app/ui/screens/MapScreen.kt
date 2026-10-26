@@ -1,6 +1,7 @@
 package com.vabugeode.app.ui.screens
 
 import android.os.Build
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.filled.Satellite
 import com.vabugeode.app.data.OfflineMap
@@ -133,6 +134,9 @@ fun MapLegend(spoofCount: Int) {
     }
 }
 
+/** Подложка карты */
+private enum class BaseMap(val title: String) { SCHEME("Схема"), SATELLITE("Спутник"), HYBRID("Гибрид") }
+
 /** На JVM-тестах (Robolectric) нативной карты нет — рисуем заглушку */
 private val mapAvailable = Build.FINGERPRINT != "robolectric"
 
@@ -196,11 +200,17 @@ fun TrackMap(
 
     // Подложка: спутник или схема (офлайн-файлы), без файлов — онлайн-схема
     val hasSat = remember { OfflineMap.available(context, OfflineMap.Kind.SATELLITE) }
-    var satellite by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(map, satellite) {
+    val hasScheme = remember { OfflineMap.available(context, OfflineMap.Kind.SCHEME) }
+    var mode by rememberSaveable { mutableStateOf(BaseMap.SCHEME) }
+    if (!hasSat) mode = BaseMap.SCHEME
+    LaunchedEffect(map, mode) {
         val m = map ?: return@LaunchedEffect
         style = null
-        val json = if (satellite && hasSat) OfflineMap.satelliteStyleJson(context) else OfflineMap.styleJson(context)
+        val json = when (mode) {
+            BaseMap.SCHEME -> OfflineMap.styleJson(context)
+            BaseMap.SATELLITE -> OfflineMap.satelliteStyleJson(context)
+            BaseMap.HYBRID -> OfflineMap.satelliteStyleJson(context, hybrid = true)
+        }
         val builder = if (json != null) Style.Builder().fromJson(json) else Style.Builder().fromUri(STYLE_URL)
         m.setStyle(builder) { s ->
             setupLayers(s)
@@ -231,11 +241,18 @@ fun TrackMap(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (hasSat) {
+                // По кругу: схема → спутник → гибрид (гибрид — только если есть схема для дорог и подписей)
                 SmallFloatingActionButton(
-                    onClick = { satellite = !satellite },
-                    containerColor = if (satellite) Palette.Geo else Palette.SurfaceHigh,
-                    contentColor = if (satellite) Palette.Bg else Palette.Text,
-                ) { Icon(Icons.Filled.Satellite, if (satellite) "Схема" else "Спутник") }
+                    onClick = {
+                        mode = when (mode) {
+                            BaseMap.SCHEME -> BaseMap.SATELLITE
+                            BaseMap.SATELLITE -> if (hasScheme) BaseMap.HYBRID else BaseMap.SCHEME
+                            BaseMap.HYBRID -> BaseMap.SCHEME
+                        }
+                    },
+                    containerColor = if (mode != BaseMap.SCHEME) Palette.Geo else Palette.SurfaceHigh,
+                    contentColor = if (mode != BaseMap.SCHEME) Palette.Bg else Palette.Text,
+                ) { Icon(if (mode == BaseMap.HYBRID) Icons.Filled.Layers else Icons.Filled.Satellite, "Подложка: ${mode.title}") }
             }
             if (track.any { it.spoofLat != null }) {
                 SmallFloatingActionButton(
@@ -257,7 +274,7 @@ fun TrackMap(
         }
         Text(
             when {
-                satellite && hasSat -> "Спутник · офлайн"
+                mode != BaseMap.SCHEME -> "${mode.title} · офлайн"
                 OfflineMap.available(context) -> "© OpenStreetMap · офлайн"
                 else -> "© OpenStreetMap · онлайн"
             },
