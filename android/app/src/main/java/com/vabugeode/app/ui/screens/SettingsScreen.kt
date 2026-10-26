@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vabugeode.app.data.Source
 import com.vabugeode.app.ui.AppViewModel
 import com.vabugeode.app.ui.Fmt
 import com.vabugeode.app.ui.components.KeyValue
@@ -49,6 +50,26 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
+        val source by vm.link.source.collectAsStateWithLifecycle()
+        Panel {
+            SectionLabel("Источник данных")
+            Spacer(Modifier.height(8.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                Source.entries.forEachIndexed { i, s ->
+                    SegmentedButton(
+                        selected = source == s,
+                        onClick = { vm.link.setSource(s) },
+                        shape = SegmentedButtonDefaults.itemShape(i, Source.entries.size),
+                    ) { Text(s.title) }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (source == Source.GADGET) "Настоящий гаджет по Bluetooth. Выбор и подключение — на вкладке «Трекер»."
+                else "Виртуальный гаджет внутри приложения — для проверки без железа.",
+                style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
+            )
+        }
         Panel(accent = Palette.Geo) {
             SectionLabel("Виртуальное устройство", color = Palette.Geo)
             Spacer(Modifier.height(6.dp))

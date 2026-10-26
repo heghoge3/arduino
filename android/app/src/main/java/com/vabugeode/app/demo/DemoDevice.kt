@@ -13,6 +13,7 @@ import com.vabugeode.app.model.PowerState
 import com.vabugeode.app.model.Satellite
 import com.vabugeode.app.model.SpoofReason
 import com.vabugeode.app.model.TrackPoint
+import com.vabugeode.app.protocol.BeaconMsg
 import com.vabugeode.app.protocol.CheckMsg
 import com.vabugeode.app.protocol.Cmd
 import com.vabugeode.app.protocol.InfoMsg
@@ -434,6 +435,24 @@ class DemoDevice(private val scope: CoroutineScope) {
             hoursLeft = st.power.hoursLeft, seq = seq and 0xFFFF,
         )
     }
+
+    /** Сводка для маячка — как в прошивке (makeBeacon). */
+    fun beaconMsg(): BeaconMsg {
+        val st = current ?: run { publish(); current!! }
+        var flags = Proto.B_SD_OK
+        if (st.recording) flags = flags or Proto.B_RECORDING
+        if (st.gps.fix == GpsFix.FIX_3D || st.gps.fix == GpsFix.FIX_2D) flags = flags or Proto.B_FIX
+        if (st.gps.spoof) flags = flags or Proto.B_SPOOF
+        if (timeSynced) flags = flags or Proto.B_TIME_OK
+        return BeaconMsg(
+            mode = st.mode.ordinal, flags = flags,
+            alerts = if (st.gps.spoof) Proto.AL_SPOOF else 0,
+            tempCorr = st.env.tempCorr, battPct = st.power.percent, satsUsed = st.gps.satsUsed,
+            pressureHpa = st.env.pressureHpa, lastRecordUtc = (points.lastOrNull()?.tsUtcMs ?: 0) / 1000,
+            hikeId = (hikeStartUtcSec and 0xFFFF).toInt(), counter = (beaconCounter++) and 0xFF,
+        )
+    }
+    private var beaconCounter = 0
 
     fun satsMsg(): SatsMsg = SatsMsg(
         (current?.gps?.satellites ?: emptyList()).map {

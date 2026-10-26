@@ -1,6 +1,8 @@
 package com.vabugeode.app.transport
 
 import com.vabugeode.app.model.LinkState
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -27,4 +29,14 @@ interface Transport {
 
     /** Запись в характеристику Command. false — не отправлено (нет связи). */
     suspend fun send(data: ByteArray): Boolean
+}
+
+/** Гаджет ещё не выбран: ни подключиться, ни отправить. */
+object NoTransport : Transport {
+    override val deviceName = "Гаджет не выбран"
+    override val state: StateFlow<LinkState> = MutableStateFlow(LinkState.DISCONNECTED)
+    override val incoming: SharedFlow<Packet> = MutableSharedFlow()
+    override fun connect() {}
+    override fun disconnect() {}
+    override suspend fun send(data: ByteArray) = false
 }

@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vabugeode.app.model.DeviceStatus
+import com.vabugeode.app.model.LinkState
 import com.vabugeode.app.model.GpsFix
 import com.vabugeode.app.model.PowerMode
 import com.vabugeode.app.model.SpoofReason
@@ -61,7 +62,6 @@ import com.vabugeode.app.ui.components.Pill
 import com.vabugeode.app.ui.components.SectionLabel
 import com.vabugeode.app.ui.components.SnrBars
 import com.vabugeode.app.ui.components.StatTile
-import com.vabugeode.app.ui.components.Waiting
 import com.vabugeode.app.ui.theme.Palette
 import kotlin.math.abs
 
@@ -76,7 +76,7 @@ fun HomeScreen(
     val track by vm.repo.track.collectAsStateWithLifecycle()
     val sun by vm.sun.collectAsStateWithLifecycle()
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
-    val st = status ?: return Waiting(contentPadding, "Подключение к устройству…")
+    val st = status ?: return NotConnected(vm, contentPadding)
 
     Column(
         Modifier
@@ -295,4 +295,43 @@ private fun trendArrow(d: Double) = when {
     d <= -1 -> "↘"
     d >= 1 -> "↗"
     else -> "→"
+}
+
+/** Нет данных сеанса: показываем, что знаем из маячка, и как подключиться. */
+@Composable
+private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
+    val link by vm.repo.link.collectAsStateWithLifecycle()
+    val name by vm.link.selectedName.collectAsStateWithLifecycle()
+    val beacon by vm.link.lastBeacon.collectAsStateWithLifecycle()
+    Column(
+        Modifier.fillMaxSize().padding(contentPadding).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Panel {
+            SectionLabel(name ?: "Гаджет не выбран")
+            Spacer(Modifier.height(8.dp))
+            val b = beacon
+            if (b != null) {
+                Text(beaconSummary(b.beacon), style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+                Text(
+                    "маячок ${Fmt.duration(System.currentTimeMillis() - b.seenAtMs)} назад",
+                    style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
+                )
+            } else {
+                Text(
+                    if (name == null) "Выберите гаджет на вкладке «Трекер»."
+                    else "Гаджет пока не слышно. Он выходит в эфир раз в 30–60 с; чтобы сразу — зажмите B на 1,5 с.",
+                    style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            when (link) {
+                LinkState.CONNECTING -> Text("Подключение…", color = Palette.Warn)
+                LinkState.CONNECTED -> Text("Подключено, загружаем данные…", color = Palette.Good)
+                else -> if (name != null) {
+                    Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(14.dp)) { Text("Подключить") }
+                }
+            }
+        }
+    }
 }

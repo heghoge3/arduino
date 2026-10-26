@@ -154,43 +154,6 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     }
 }
 
-/** Связь с устройством: подключение и счётчики обмена. */
-@Composable
-private fun LinkPanel(vm: AppViewModel) {
-    val link by vm.repo.link.collectAsStateWithLifecycle()
-    val stats by vm.repo.stats.collectAsStateWithLifecycle()
-    val color = when (link) {
-        LinkState.CONNECTED -> Palette.Good
-        LinkState.CONNECTING -> Palette.Warn
-        else -> Palette.TextDim
-    }
-    Panel(accent = color) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconBadge(Icons.Filled.Bluetooth, color, 40.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(vm.repo.deviceName, style = MaterialTheme.typography.titleMedium, color = Palette.Text)
-                Text(link.title, style = MaterialTheme.typography.labelMedium, color = color)
-            }
-            if (link == LinkState.DISCONNECTED) {
-                Button(onClick = { vm.repo.connect() }, shape = RoundedCornerShape(14.dp)) { Text("Подключить") }
-            } else {
-                OutlinedButton(onClick = { vm.repo.disconnect() }, shape = RoundedCornerShape(14.dp)) { Text("Отключить") }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        KeyValue("Принято пакетов", "${stats.packetsIn} · ${Fmt.num(stats.bytesIn / 1024.0)} КБ")
-        KeyValue("Отправлено команд", "${stats.packetsOut}")
-        KeyValue("Потеряно STATUS", "${stats.lostStatus}", if (stats.lostStatus > 0) Palette.Warn else Palette.Text)
-        KeyValue("Ошибок разбора", "${stats.errors}", if (stats.errors > 0) Palette.Bad else Palette.Text)
-        if (stats.syncing) KeyValue("Синхронизация", "идёт…", Palette.Warn)
-        Text(
-            "Отключите и подключите снова — приложение догрузит пропущенные точки и метки.",
-            style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint,
-        )
-    }
-}
-
 /** Журнал обмена: что ушло на устройство и что пришло, в байтах. */
 @Composable
 private fun ExchangeLog(vm: AppViewModel) {

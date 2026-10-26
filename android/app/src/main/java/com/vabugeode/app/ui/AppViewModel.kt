@@ -1,11 +1,23 @@
 package com.vabugeode.app.ui
 
-import androidx.lifecycle.ViewModel
+import android.Manifest
+import android.app.Application
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vabugeode.app.astro.SunCalc
+import com.vabugeode.app.data.LinkManager
 import com.vabugeode.app.data.ProtocolDeviceRepository
+import com.vabugeode.app.data.SharedLinkPrefs
 import com.vabugeode.app.demo.DemoDevice
 import com.vabugeode.app.model.BlacklistPoint
+import com.vabugeode.app.model.LinkState
+import com.vabugeode.app.transport.BleScanner
+import com.vabugeode.app.transport.BleTransport
+import com.vabugeode.app.transport.GadgetScanner
+import com.vabugeode.app.transport.VirtualScanner
 import com.vabugeode.app.transport.VirtualTransport
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,25 +29,56 @@ import java.time.Instant
 import java.time.ZoneId
 import kotlin.math.roundToInt
 
-class AppViewModel : ViewModel() {
+class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
-     * Пока железа нет — виртуальное устройство. Данные идут тем же путём, что и с ESP32:
+     * Источник данных — эмулятор или настоящий гаджет по BLE. Путь данных один:
      * устройство → байты протокола → транспорт → репозиторий → экраны.
-     * После прихода платы здесь появится выбор: виртуальное или BLE.
      */
     val demo = DemoDevice(viewModelScope)
-    val transport = VirtualTransport(viewModelScope, demo)
+    private val virtualTransport = VirtualTransport(viewModelScope, demo)
+
     val repo = ProtocolDeviceRepository(
-        viewModelScope, transport,
+        viewModelScope, virtualTransport,
         listOf(
             BlacklistPoint(60.0346, 30.5693, 1000, "Лес у ручья Генерального"),
             BlacklistPoint(60.1161, 31.3864, 1000, "Ладога, о. Кареджи"),
         ),
     )
 
+    private var bleScanner: GadgetScanner? = null
+
+    val link = LinkManager(
+        scope = viewModelScope,
+        repo = repo,
+        prefs = SharedLinkPrefs(app),
+        virtualScanner = VirtualScanner(viewModelScope, demo) { repo.currentTransport === virtualTransport && repo.link.value != LinkState.DISCONNECTED },
+        virtualTransport = virtualTransport,
+        bleScanner = { bleScanner ?: BleScanner(app, viewModelScope).also { bleScanner = it } },
+        bleTransport = { id, name -> BleTransport(app, viewModelScope, id, name) },
+    )
+
     init {
-        repo.connect()
+        repo.phonePosition = ::phonePosition
+    }
+
+    /** Последняя известная позиция телефона (вышки, Wi-Fi, GPS) — для проверки подмены на гаджете. */
+    private fun phonePosition(): Triple<Double, Double, Int>? {
+        val ctx = getApplication<Application>()
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) return null
+        val lm = ctx.getSystemService(LocationManager::class.java) ?: return null
+        val loc = try {
+            lm.getProviders(true)
+                .mapNotNull { lm.getLastKnownLocation(it) }
+                // Свежая и точная лучше; старше 30 мин не берём
+                .filter { System.currentTimeMillis() - it.time < 30 * 60_000 }
+                .minByOrNull { it.accuracy }
+        } catch (_: SecurityException) {
+            null
+        } ?: return null
+        return Triple(loc.latitude, loc.longitude, loc.accuracy.roundToInt().coerceIn(1, 65535))
     }
 
     /**

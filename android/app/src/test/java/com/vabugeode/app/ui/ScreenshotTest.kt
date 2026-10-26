@@ -14,6 +14,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowLooper
@@ -38,7 +39,7 @@ class ScreenshotTest {
         // Симулятор тикает постоянно — время двигаем вручную, иначе тест не дождётся «тишины»
         compose.mainClock.advanceTimeBy(1_000)
         // Корутины viewModelScope живут на главном потоке Robolectric — двигаем и его время (подключение, синхронизация)
-        ShadowLooper.idleMainLooper(3, TimeUnit.SECONDS)
+        ShadowLooper.idleMainLooper(6, TimeUnit.SECONDS)
         compose.mainClock.advanceTimeBy(500)
         val view = compose.activity.window.decorView
         val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
@@ -71,7 +72,7 @@ class ScreenshotTest {
     @Test
     fun evening() {
         compose.mainClock.autoAdvance = false
-        val vm = AppViewModel()
+        val vm = AppViewModel(RuntimeEnvironment.getApplication())
         vm.demo.restart(historyMin = 255)
         compose.setContent { VabuTheme { App(vm) } }
         shot("6_home_evening_spoof")

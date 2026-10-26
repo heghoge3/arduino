@@ -98,6 +98,20 @@ internal fun App(vm: AppViewModel = viewModel()) {
     // Ответы устройства, которые надо показать (отказ команды, нет связи)
     LaunchedEffect(Unit) { vm.repo.notices.collect { toast(it) } }
 
+    // Приложение на экране — слушаем маячки и подключаемся; свернули — перестаём искать
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            when (e) {
+                androidx.lifecycle.Lifecycle.Event.ON_START -> vm.link.setForeground(true)
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> vm.link.setForeground(false)
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
+
     BackHandler(enabled = settings) { settings = false }
     BackHandler(enabled = !settings && tab != Tab.HOME) { tab = Tab.HOME }
 

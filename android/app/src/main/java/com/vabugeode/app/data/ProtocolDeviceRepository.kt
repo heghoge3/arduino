@@ -33,6 +33,7 @@ import com.vabugeode.app.protocol.toHex
 import com.vabugeode.app.transport.Packet
 import com.vabugeode.app.transport.Transport
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,14 +69,21 @@ data class LinkStats(
 /**
  * Состояние устройства, собранное из пакетов протокола.
  * Не знает, откуда идут байты: виртуальное устройство или настоящий BLE.
+ * Источник можно сменить на ходу ([use]) — экраны подписаны на этот же объект.
  */
 class ProtocolDeviceRepository(
     private val scope: CoroutineScope,
-    private val transport: Transport,
+    initialTransport: Transport,
     private val initialBlacklist: List<BlacklistPoint>,
 ) : DeviceRepository {
 
-    override val link: StateFlow<LinkState> = transport.state
+    private var transport: Transport = initialTransport
+    private var transportJobs: List<Job> = emptyList()
+
+    override val link = MutableStateFlow(LinkState.DISCONNECTED)
+
+    /** Позиция телефона для проверки подмены (lat, lon, точность м). null — нет разрешения или данных. */
+    var phonePosition: (() -> Triple<Double, Double, Int>?)? = null
     override val status = MutableStateFlow<DeviceStatus?>(null)
     override val track = MutableStateFlow<List<TrackPoint>>(emptyList())
     override val marks = MutableStateFlow<List<Mark>>(emptyList())
@@ -103,10 +111,7 @@ class ProtocolDeviceRepository(
     private var syncAfterInfo = false
 
     init {
-        scope.launch { transport.incoming.collect { onPacket(it) } }
-        scope.launch {
-            transport.state.collect { st -> if (st == LinkState.CONNECTED) onConnected() }
-        }
+        attach(initialTransport)
         // Самопроверка на устройстве идёт раз в минуту — INFO перезапрашиваем, чтобы не устаревал
         scope.launch {
             while (isActive) {
@@ -135,6 +140,40 @@ class ProtocolDeviceRepository(
 
     fun connect() = transport.connect()
     fun disconnect() = transport.disconnect()
+    val currentTransport: Transport get() = transport
+
+    /** Сменить источник байтов: старый отключается, данные очищаются (это другое устройство). */
+    fun use(t: Transport) {
+        if (t === transport) return
+        transport.disconnect()
+        transportJobs.forEach { it.cancel() }
+        points.clear()
+        markMap.clear()
+        lastSats = null
+        lastInfo = null
+        hikeStartSec = null
+        hikeStartMs.value = null
+        status.value = null
+        info.value = null
+        track.value = emptyList()
+        marks.value = emptyList()
+        stats.value = LinkStats()
+        log.value = emptyList()
+        attach(t)
+    }
+
+    private fun attach(t: Transport) {
+        transport = t
+        transportJobs = listOf(
+            scope.launch { t.incoming.collect { onPacket(it) } },
+            scope.launch {
+                t.state.collect { st ->
+                    link.value = st
+                    if (st == LinkState.CONNECTED) onConnected()
+                }
+            },
+        )
+    }
 
     // ---- Команды ----
 
@@ -169,6 +208,7 @@ class ProtocolDeviceRepository(
         val now = System.currentTimeMillis()
         val tz = java.util.TimeZone.getDefault().getOffset(now) / 60_000
         send(Cmd.SetTime(now / 1000, tz))
+        phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
         send(Cmd.Blacklist(blacklist.value.map { Cmd.Blacklist.Entry(it.lat, it.lon, it.radiusM) }))
         // Дальше — по ответу INFO: понять, тот же ли поход, и догрузить недостающее
         send(Cmd.GetInfo)
