@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vabugeode.app.model.CheckLevel
+import com.vabugeode.app.model.LinkState
+import com.vabugeode.app.protocol.Proto
 import com.vabugeode.app.model.SelfCheck
 import com.vabugeode.app.ui.AppViewModel
 import com.vabugeode.app.ui.Fmt
@@ -48,8 +54,8 @@ import com.vabugeode.app.ui.theme.Palette
 fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     val info by vm.repo.info.collectAsStateWithLifecycle()
     val status by vm.repo.status.collectAsStateWithLifecycle()
-    val i = info ?: return
-    val st = status ?: return
+    val i = info
+    val st = status
 
     Column(
         Modifier
@@ -60,6 +66,11 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
+        LinkPanel(vm)
+        if (i == null || st == null) {
+            ExchangeLog(vm)
+            return@Column
+        }
         Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconBadge(Icons.Filled.Memory, Palette.Geo, 44.dp)
@@ -72,7 +83,6 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             Spacer(Modifier.height(10.dp))
             KeyValue("Работает", Fmt.duration(i.uptimeSec * 1000))
             KeyValue("Режим", st.mode.title)
-            KeyValue("Связь", vm.repo.link.value.title)
             KeyValue("Спутниковые системы", i.gnssSystems)
         }
 
@@ -139,7 +149,79 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             KeyValue("Свободно", "${Fmt.num(i.sdFreeMb / 1024.0)} из ${Fmt.num(i.sdTotalMb / 1024.0)} ГБ")
             KeyValue("Текущий файл", "/tracks/…csv", Palette.TextDim)
         }
+        ExchangeLog(vm)
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** Связь с устройством: подключение и счётчики обмена. */
+@Composable
+private fun LinkPanel(vm: AppViewModel) {
+    val link by vm.repo.link.collectAsStateWithLifecycle()
+    val stats by vm.repo.stats.collectAsStateWithLifecycle()
+    val color = when (link) {
+        LinkState.CONNECTED -> Palette.Good
+        LinkState.CONNECTING -> Palette.Warn
+        else -> Palette.TextDim
+    }
+    Panel(accent = color) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Filled.Bluetooth, color, 40.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(vm.repo.deviceName, style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+                Text(link.title, style = MaterialTheme.typography.labelMedium, color = color)
+            }
+            if (link == LinkState.DISCONNECTED) {
+                Button(onClick = { vm.repo.connect() }, shape = RoundedCornerShape(14.dp)) { Text("Подключить") }
+            } else {
+                OutlinedButton(onClick = { vm.repo.disconnect() }, shape = RoundedCornerShape(14.dp)) { Text("Отключить") }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        KeyValue("Принято пакетов", "${stats.packetsIn} · ${Fmt.num(stats.bytesIn / 1024.0)} КБ")
+        KeyValue("Отправлено команд", "${stats.packetsOut}")
+        KeyValue("Потеряно STATUS", "${stats.lostStatus}", if (stats.lostStatus > 0) Palette.Warn else Palette.Text)
+        KeyValue("Ошибок разбора", "${stats.errors}", if (stats.errors > 0) Palette.Bad else Palette.Text)
+        if (stats.syncing) KeyValue("Синхронизация", "идёт…", Palette.Warn)
+        Text(
+            "Отключите и подключите снова — приложение догрузит пропущенные точки и метки.",
+            style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint,
+        )
+    }
+}
+
+/** Журнал обмена: что ушло на устройство и что пришло, в байтах. */
+@Composable
+private fun ExchangeLog(vm: AppViewModel) {
+    val log by vm.repo.log.collectAsStateWithLifecycle()
+    Panel {
+        SectionLabel("Журнал обмена · протокол v${Proto.VERSION}")
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "→ команда на устройство, ← ответ. STATUS показан каждый десятый, POINT — не показан.",
+            style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint,
+        )
+        Spacer(Modifier.height(6.dp))
+        if (log.isEmpty()) Text("Пока пусто", color = Palette.TextDim)
+        log.takeLast(25).asReversed().forEach { e ->
+            Column(Modifier.padding(vertical = 4.dp)) {
+                Row {
+                    Text(
+                        (if (e.outgoing) "→ " else "← ") + e.name,
+                        fontSize = 12.sp, fontFamily = FontFamily.Monospace,
+                        color = when {
+                            e.error -> Palette.Bad
+                            e.outgoing -> Palette.Geo
+                            else -> Palette.Humidity
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("${e.size} Б · ${Fmt.timeSec(e.timeMs)}", fontSize = 11.sp, color = Palette.TextFaint)
+                }
+                Text(e.hex, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Palette.TextDim, maxLines = 2)
+            }
+        }
     }
 }
 

@@ -1,29 +1,31 @@
 package com.vabugeode.app.demo
 
 import com.vabugeode.app.astro.SunCalc
-import com.vabugeode.app.data.DeviceRepository
-import com.vabugeode.app.model.BlacklistPoint
-import com.vabugeode.app.model.CheckLevel
-import com.vabugeode.app.model.DeviceInfo
 import com.vabugeode.app.model.DeviceStatus
 import com.vabugeode.app.model.EnvState
 import com.vabugeode.app.model.GpsFix
 import com.vabugeode.app.model.GpsState
-import com.vabugeode.app.model.LinkState
 import com.vabugeode.app.model.Mark
 import com.vabugeode.app.model.MarkType
 import com.vabugeode.app.model.PositionSource
 import com.vabugeode.app.model.PowerMode
 import com.vabugeode.app.model.PowerState
 import com.vabugeode.app.model.Satellite
-import com.vabugeode.app.model.SelfCheck
 import com.vabugeode.app.model.SpoofReason
 import com.vabugeode.app.model.TrackPoint
+import com.vabugeode.app.protocol.CheckMsg
+import com.vabugeode.app.protocol.Cmd
+import com.vabugeode.app.protocol.InfoMsg
+import com.vabugeode.app.protocol.MarkMsg
+import com.vabugeode.app.protocol.PointMsg
+import com.vabugeode.app.protocol.Proto
+import com.vabugeode.app.protocol.SatMsg
+import com.vabugeode.app.protocol.SatsMsg
+import com.vabugeode.app.protocol.StatusMsg
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -39,30 +41,30 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * Демо-устройство: симулирует поход под Петербургом, чтобы приложение
- * можно было смотреть без железа. Сценарий:
+ * Виртуальное устройство: ведёт себя как прошивка — пишет «на SD» трек и метки,
+ * принимает команды и отдаёт данные в виде сообщений протокола (docs/protocol.md).
+ * Наружу общается только через [VirtualTransport] байтами — как настоящий ESP32 по BLE.
+ *
+ * Симулирует поход под Петербургом. Сценарий:
  * - старт сегодня в 14:00 МСК, первые 2 часа уже «записаны» (история);
  * - дальше поход идёт вживую с ускорением времени;
  * - после заката резко падает температура (исходная идея проекта);
  * - стоянки с выключенным GPS, потеря сигнала в здании, эпизоды подмены GNSS.
  */
-class DemoDevice(private val scope: CoroutineScope) : DeviceRepository {
+class DemoDevice(private val scope: CoroutineScope) {
 
     private val zone = ZoneId.of("Europe/Moscow")
     private val rnd = Random(42)
 
-    override val link = MutableStateFlow(LinkState.DEMO)
-    override val status = MutableStateFlow<DeviceStatus?>(null)
-    override val track = MutableStateFlow<List<TrackPoint>>(emptyList())
-    override val marks = MutableStateFlow<List<Mark>>(emptyList())
-    override val info = MutableStateFlow<DeviceInfo?>(null)
-    override val blacklist = MutableStateFlow(
-        listOf(
-            BlacklistPoint(60.0346, 30.5693, 1000, "Лес у ручья Генерального"),
-            BlacklistPoint(60.1161, 31.3864, 1000, "Ладога, о. Кареджи"),
-        )
+    /** Чёрный список «на SD» — меняется командой BLACKLIST. */
+    var blacklist: List<Cmd.Blacklist.Entry> = listOf(
+        Cmd.Blacklist.Entry(60.0346, 30.5693, 1000),
+        Cmd.Blacklist.Entry(60.1161, 31.3864, 1000),
     )
-    override val hikeStartMs = MutableStateFlow<Long?>(null)
+        private set
+
+    /** Меняется при каждом перезапуске — это «новый поход» (другое hike_start). */
+    val restarts = MutableStateFlow(0)
 
     /** Во сколько раз демо-время быстрее реального. */
     val speed = MutableStateFlow(30)
@@ -93,6 +95,11 @@ class DemoDevice(private val scope: CoroutineScope) : DeviceRepository {
     private var prevSpoof = false
 
     private var job: Job? = null
+    private var restartCount = 0
+    private var current: DeviceStatus? = null
+    private var timeSynced = false
+    private var movingIntervalMs = 10_000L
+    private var idleIntervalMs = 60_000L
     private val scriptedDone = mutableSetOf<Int>()
 
     init {
@@ -106,7 +113,9 @@ class DemoDevice(private val scope: CoroutineScope) : DeviceRepository {
     fun restart(historyMin: Int = 120) {
         job?.cancel()
         val today = LocalDate.now(zone)
-        startMs = today.atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
+        // +N секунд на каждый перезапуск: у каждого похода свой hike_start, как на настоящем устройстве
+        startMs = today.atTime(14, 0).atZone(zone).toInstant().toEpochMilli() + restartCount * 1000L
+        restartCount++
         simMs = startMs
         sunsetMs = SunCalc.times(today, START_LAT, START_LON).sunsetUtcMs ?: (startMs + 3 * HOUR)
         lat = START_LAT; lon = START_LON; heading = 40.0
@@ -117,7 +126,7 @@ class DemoDevice(private val scope: CoroutineScope) : DeviceRepository {
         points = ArrayList(); markList = ArrayList()
         pdrActive = false; prevSpoof = false
         scriptedDone.clear()
-        hikeStartMs.value = startMs
+        timeSynced = false
 
         // История: первые 2 часа похода считаем сразу
         addMarkInternal(MarkType.MARK, "Старт похода")
@@ -127,6 +136,7 @@ class DemoDevice(private val scope: CoroutineScope) : DeviceRepository {
             scriptedMarks()
         }
         publish()
+        restarts.value++
 
         job = scope.launch {
             while (isActive) {
@@ -238,7 +248,7 @@ class DemoDevice(private val scope: CoroutineScope) : DeviceRepository {
 
         // Запись точки: раз в 10 с в движении, раз в 60 с на стоянке
         sinceLastPointMs = if (sinceLastPointMs == Long.MAX_VALUE) Long.MAX_VALUE else sinceLastPointMs + dtMs
-        val interval = if (resting) 60_000L else 10_000L
+        val interval = if (resting) idleIntervalMs else movingIntervalMs
         if (recording && (sinceLastPointMs >= interval)) {
             sinceLastPointMs = 0
             points.add(makePoint(resting, spoof, indoor))
@@ -382,7 +392,7 @@ class DemoDevice(private val scope: CoroutineScope) : DeviceRepository {
             pdrActive -> pdrLat to pdrLon
             else -> points.lastOrNull { !it.spoof }?.let { it.lat to it.lon } ?: (lat to lon)
         }
-        status.value = DeviceStatus(
+        current = DeviceStatus(
             timeUtcMs = simMs,
             mode = if (resting) PowerMode.IDLE_LOG else PowerMode.MOVING,
             recording = recording,
@@ -392,65 +402,142 @@ class DemoDevice(private val scope: CoroutineScope) : DeviceRepository {
             positionSource = src,
             lat = pos.first, lon = pos.second,
         )
-        if (track.value.size != points.size) track.value = points.toList()
-        if (marks.value.size != markList.size) marks.value = markList.toList()
-        info.value = buildInfo(gps, env)
     }
 
-    private fun buildInfo(gps: GpsState, env: EnvState): DeviceInfo {
-        val pw = powerNow()
-        val uptime = (simMs - startMs) / 1000
-        val sdFree = 7480 - points.size / 40
-        val gpsCheck = when {
-            gps.fix == GpsFix.OFF -> SelfCheck("GPS ATGM336H", "Выключен — стоянка, экономия заряда", CheckLevel.OK, "UART")
-            gps.spoof -> SelfCheck("GPS ATGM336H", "NMEA идёт, но подозрение на подмену", CheckLevel.WARN, "UART")
-            gps.fix == GpsFix.SEARCHING -> SelfCheck("GPS ATGM336H", "NMEA идёт, ищет спутники (${gps.satsInView} видно)", CheckLevel.WARN, "UART")
-            else -> SelfCheck("GPS ATGM336H", "NMEA 9600, ${gps.satsUsed} спутн., HDOP %.1f".format(gps.hdop), CheckLevel.OK, "UART")
+    // ---- Выдача данных в формате протокола (как прошивка) ----
+
+    val hikeStartUtcSec: Long get() = startMs / 1000
+    val pointCount: Int get() = points.size
+    val markCount: Int get() = markList.size
+
+    fun statusMsg(seq: Int): StatusMsg {
+        val st = current ?: run { publish(); current!! }
+        val g = st.gps
+        var flags = Proto.F_SD_OK
+        if (st.recording) flags = flags or Proto.F_RECORDING
+        if (g.fix != GpsFix.OFF) flags = flags or Proto.F_GPS_ON
+        if (g.spoof) flags = flags or Proto.F_SPOOF
+        if (timeSynced) flags = flags or Proto.F_TIME_SYNCED
+        if (st.power.percent < 20) flags = flags or Proto.F_LOW_BATT
+        return StatusMsg(
+            timeUtc = st.timeUtcMs / 1000, mode = st.mode.ordinal, flags = flags, fix = g.fix.ordinal,
+            satsUsed = g.satsUsed, satsView = g.satsInView,
+            hdop = if (g.fix == GpsFix.FIX_2D || g.fix == GpsFix.FIX_3D) g.hdop else null,
+            lat = st.lat, lon = st.lon, src = srcCode(st.positionSource), spoofMask = g.spoofMask,
+            altGps = g.altGps, speedKmh = if (st.mode == PowerMode.MOVING) g.speedKmh.coerceAtLeast(0.0) else 0.0,
+            courseDeg = g.courseDeg,
+            tempRaw = st.env.tempRaw, tempCorr = st.env.tempCorr, humidity = st.env.humidity,
+            pressureHpa = st.env.pressureHpa, altBaro = st.env.altBaro, trend3h = st.env.pressureTrend3h,
+            battMv = (st.power.voltage * 1000).toInt(), battMa = st.power.currentMa,
+            battPct = st.power.percent, usedMah = st.power.usedMah.toInt(),
+            steps = st.steps.toLong(), headingDeg = st.headingDeg, distanceM = (st.distanceKm * 1000).toLong(),
+            hoursLeft = st.power.hoursLeft, seq = seq and 0xFFFF,
+        )
+    }
+
+    fun satsMsg(): SatsMsg = SatsMsg(
+        (current?.gps?.satellites ?: emptyList()).map {
+            SatMsg(
+                system = when (it.system) { "GPS" -> 0; "BDS" -> 1; "GLO" -> 2; else -> 3 },
+                prn = it.prn, snr = it.snr, used = it.used,
+            )
         }
-        val checks = listOf(
-            SelfCheck("Экран SSD1306", "Отвечает", CheckLevel.OK, "0x3C"),
-            SelfCheck("Питание INA219", "%.2f В, %.0f мА".format(pw.voltage, pw.currentMa), CheckLevel.OK, "0x40"),
-            SelfCheck("Акселерометр MPU6050", "Шаги: $steps", CheckLevel.OK, "0x68"),
-            SelfCheck("Компас QMC5883L", "Не откалиброван — откалибруйте вращением", CheckLevel.WARN, "0x0D"),
-            SelfCheck("Климат BME280", "chip id 0x60, %.1f° / %.0f гПа".format(env.tempRaw, env.pressureHpa), CheckLevel.OK, "0x76"),
-            SelfCheck("Карта SD", "FAT32, свободно %.1f ГБ".format(sdFree / 1024.0), CheckLevel.OK, "SPI"),
-            gpsCheck,
-            SelfCheck(
-                "Аккумулятор", "${pw.percent} %%, хватит на ~%.0f ч".format(pw.hoursLeft),
-                if (pw.percent < 20) CheckLevel.WARN else CheckLevel.OK,
+    )
+
+    fun infoMsg(): InfoMsg {
+        val st = current ?: run { publish(); current!! }
+        val g = st.gps
+        val gpsCheck = when {
+            g.fix == GpsFix.OFF -> CheckMsg(7, 0, 7, 0)
+            g.spoof -> CheckMsg(7, 1, 5, 0)
+            g.fix == GpsFix.SEARCHING -> CheckMsg(7, 1, 6, 0)
+            else -> CheckMsg(7, 0, 0, 0)
+        }
+        return InfoMsg(
+            fwMajor = 0, fwMinor = 1, fwPatch = 0, chip = 1,
+            uptimeSec = (simMs - startMs) / 1000,
+            sdTotalMb = 7580, sdFreeMb = 7480L - points.size / 40, gnssMask = 0b11,
+            hikeStartUtc = startMs / 1000,
+            checks = listOf(
+                CheckMsg(1, 0, 0, 0x3C),
+                CheckMsg(2, 0, 0, 0x40),
+                CheckMsg(3, 0, 0, 0x68),
+                CheckMsg(4, 1, 3, 0x0D),
+                CheckMsg(5, 0, 0, 0x76),
+                CheckMsg(6, 0, 0, 0),
+                gpsCheck,
+                CheckMsg(8, if (st.power.percent < 20) 1 else 0, if (st.power.percent < 20) 8 else 0, 0),
             ),
         )
-        return DeviceInfo(
-            name = "vabuGEOde-01",
-            chipModel = "ESP32-S3 (демо)",
-            firmware = "0.1.0-demo",
-            uptimeSec = uptime,
-            sdTotalMb = 7580, sdFreeMb = sdFree,
-            gnssSystems = "GPS + BeiDou",
-            checks = checks,
+    }
+
+    fun pointMsg(i: Int): PointMsg {
+        val p = points[i]
+        return PointMsg(
+            timeUtc = p.tsUtcMs / 1000, lat = p.lat, lon = p.lon, src = srcCode(p.src),
+            spoof = p.spoof, spoofMask = p.spoofMask, spoofLat = p.spoofLat, spoofLon = p.spoofLon,
+            tempRaw = p.tempRaw, tempCorr = p.tempCorr, humidity = p.humidity, pressureHpa = p.pressureHpa,
+            altBaro = p.altBaro, altGps = p.altGps, battMv = (p.battV * 1000).toInt(), battPct = p.battPercent,
+            sats = p.sats, hdop = if (p.sats > 0) p.hdop else null, steps = p.steps.toLong(),
+            headingDeg = p.headingDeg, speedKmh = p.speedKmh.coerceAtLeast(0.0),
         )
     }
 
-    // ---- Команды ----
+    fun markMsg(i: Int): MarkMsg {
+        val m = markList[i]
+        return MarkMsg(m.id, m.tsUtcMs / 1000, m.type.ordinal, m.lat, m.lon, m.text)
+    }
+
+    /** Индекс первой точки не раньше времени since (Unix-с). */
+    fun firstPointSince(sinceSec: Long): Int {
+        val ms = sinceSec * 1000
+        var lo = 0; var hi = points.size
+        while (lo < hi) {
+            val mid = (lo + hi) / 2
+            if (points[mid].tsUtcMs < ms) lo = mid + 1 else hi = mid
+        }
+        return lo
+    }
+
+    fun firstMarkSince(sinceSec: Long): Int = markList.indexOfFirst { it.tsUtcMs >= sinceSec * 1000 }.let { if (it < 0) markList.size else it }
+
+    private fun srcCode(s: PositionSource) = when (s) {
+        PositionSource.NONE -> 0
+        PositionSource.GPS -> 1
+        PositionSource.PDR -> 2
+    }
+
+    // ---- Команды (как обработчик в прошивке). Возвращает код ACK ----
+
+    fun handle(cmd: Cmd): Int {
+        when (cmd) {
+            is Cmd.SetTime -> timeSynced = true // время в демо ускорено — телефонное не применяем
+            is Cmd.PhonePos -> {}
+            is Cmd.Record -> recording = cmd.on
+            is Cmd.Mark -> {
+                val type = MarkType.entries.getOrNull(cmd.type) ?: return Proto.ACK_BAD_ARGS
+                addMarkInternal(type, cmd.text)
+            }
+            Cmd.Clap -> addMarkInternal(MarkType.SYNC, "")
+            Cmd.Find -> {} // пищать нечему
+            is Cmd.SetIntervals -> {
+                if (cmd.movingSec !in 1..3600 || cmd.idleSec !in 1..3600) return Proto.ACK_BAD_ARGS
+                movingIntervalMs = cmd.movingSec * 1000L
+                idleIntervalMs = cmd.idleSec * 1000L
+            }
+            is Cmd.CalibAlt -> {}
+            is Cmd.CalibCompass -> {}
+            is Cmd.Blacklist -> blacklist = cmd.points
+            Cmd.GetInfo, is Cmd.SyncTrack, is Cmd.SyncMarks -> {} // ответы шлёт транспорт
+        }
+        publish()
+        return Proto.ACK_OK
+    }
 
     private fun addMarkInternal(type: MarkType, text: String) {
         val p = points.lastOrNull { !it.spoof }
         markList.add(Mark(++markSeq, simMs, type, text, p?.lat ?: lat, p?.lon ?: lon))
     }
-
-    override fun addMark(type: MarkType, text: String) {
-        addMarkInternal(type, text)
-        publish()
-    }
-
-    override fun clap() = addMark(MarkType.SYNC, "")
-
-    override fun setRecording(on: Boolean) {
-        recording = on
-        publish()
-    }
-
-    override fun findDevice() { /* в демо пищать нечему */ }
 
     // ---- Утилиты ----
 

@@ -273,6 +273,7 @@ private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
     var cur = ArrayList<Point>()
     var curSrc: String? = null
     for (p in track) {
+        if (p.lat.isNaN() || p.lon.isNaN()) continue
         val src = if (p.src == PositionSource.PDR) "pdr" else "gps"
         val pt = Point.fromLngLat(p.lon, p.lat)
         if (src != curSrc) {
@@ -299,7 +300,7 @@ private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
     }
     s.getSourceAs<GeoJsonSource>("marks")?.setGeoJson(FeatureCollection.fromFeatures(mk))
 
-    track.lastOrNull()?.let { p ->
+    track.lastOrNull { !it.lat.isNaN() }?.let { p ->
         s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)))
     }
 }
@@ -308,7 +309,7 @@ private fun lineFeature(pts: List<Point>, src: String) =
     Feature.fromGeometry(LineString.fromLngLats(pts)).apply { addStringProperty("src", src) }
 
 private fun fitTrack(map: MapLibreMap?, track: List<TrackPoint>) {
-    val pts = track.map { LatLng(it.lat, it.lon) }
+    val pts = track.filter { !it.lat.isNaN() && !it.lon.isNaN() }.map { LatLng(it.lat, it.lon) }
     fitPoints(map, pts)
 }
 

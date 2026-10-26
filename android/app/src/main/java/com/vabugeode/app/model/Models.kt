@@ -175,8 +175,7 @@ data class BlacklistPoint(val lat: Double, val lon: Double, val radiusM: Int, va
 
 /** Подключение к устройству. */
 enum class LinkState(val title: String) {
-    DEMO("Демо-режим"),
-    DISCONNECTED("Не подключено"),
+    DISCONNECTED("Нет связи"),
     CONNECTING("Подключение…"),
     CONNECTED("Подключено"),
 }

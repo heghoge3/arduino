@@ -33,6 +33,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,6 +95,9 @@ internal fun App(vm: AppViewModel = viewModel()) {
         }
     }
 
+    // Ответы устройства, которые надо показать (отказ команды, нет связи)
+    LaunchedEffect(Unit) { vm.repo.notices.collect { toast(it) } }
+
     BackHandler(enabled = settings) { settings = false }
     BackHandler(enabled = !settings && tab != Tab.HOME) { tab = Tab.HOME }
 
@@ -120,10 +124,11 @@ internal fun App(vm: AppViewModel = viewModel()) {
                 }
                 Spacer(Modifier.weight(1f))
                 Pill(
-                    link.title,
+                    // Пока устройство виртуальное — показываем это явно, чтобы не путать с настоящим
+                    if (link == LinkState.CONNECTED) "Эмулятор" else link.title,
                     when (link) {
-                        LinkState.DEMO -> Palette.Geo
-                        LinkState.CONNECTED -> Palette.Good
+                        LinkState.CONNECTED -> Palette.Geo
+                        LinkState.CONNECTING -> Palette.Warn
                         else -> Palette.TextDim
                     },
                 )

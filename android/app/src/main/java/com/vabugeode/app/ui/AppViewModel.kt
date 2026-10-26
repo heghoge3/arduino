@@ -3,8 +3,10 @@ package com.vabugeode.app.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vabugeode.app.astro.SunCalc
-import com.vabugeode.app.data.DeviceRepository
+import com.vabugeode.app.data.ProtocolDeviceRepository
 import com.vabugeode.app.demo.DemoDevice
+import com.vabugeode.app.model.BlacklistPoint
+import com.vabugeode.app.transport.VirtualTransport
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -17,9 +19,24 @@ import kotlin.math.roundToInt
 
 class AppViewModel : ViewModel() {
 
-    /** Пока железа нет — демо. Потом здесь будет выбор между демо и BLE. */
+    /**
+     * Пока железа нет — виртуальное устройство. Данные идут тем же путём, что и с ESP32:
+     * устройство → байты протокола → транспорт → репозиторий → экраны.
+     * После прихода платы здесь появится выбор: виртуальное или BLE.
+     */
     val demo = DemoDevice(viewModelScope)
-    val repo: DeviceRepository = demo
+    val transport = VirtualTransport(viewModelScope, demo)
+    val repo = ProtocolDeviceRepository(
+        viewModelScope, transport,
+        listOf(
+            BlacklistPoint(60.0346, 30.5693, 1000, "Лес у ручья Генерального"),
+            BlacklistPoint(60.1161, 31.3864, 1000, "Ладога, о. Кареджи"),
+        ),
+    )
+
+    init {
+        repo.connect()
+    }
 
     /**
      * Закат и сумерки для дня похода по текущей позиции.

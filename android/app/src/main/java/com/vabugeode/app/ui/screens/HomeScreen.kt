@@ -61,6 +61,7 @@ import com.vabugeode.app.ui.components.Pill
 import com.vabugeode.app.ui.components.SectionLabel
 import com.vabugeode.app.ui.components.SnrBars
 import com.vabugeode.app.ui.components.StatTile
+import com.vabugeode.app.ui.components.Waiting
 import com.vabugeode.app.ui.theme.Palette
 import kotlin.math.abs
 
@@ -75,7 +76,7 @@ fun HomeScreen(
     val track by vm.repo.track.collectAsStateWithLifecycle()
     val sun by vm.sun.collectAsStateWithLifecycle()
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
-    val st = status ?: return
+    val st = status ?: return Waiting(contentPadding, "Подключение к устройству…")
 
     Column(
         Modifier

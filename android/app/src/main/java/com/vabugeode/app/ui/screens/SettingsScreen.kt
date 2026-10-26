@@ -50,10 +50,10 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     ) {
         Spacer(Modifier.height(4.dp))
         Panel(accent = Palette.Geo) {
-            SectionLabel("Демо-режим", color = Palette.Geo)
+            SectionLabel("Виртуальное устройство", color = Palette.Geo)
             Spacer(Modifier.height(6.dp))
             Text(
-                "Устройства ещё нет — данные даёт симулятор похода под Петербургом: закат, стоянки, потеря сигнала в здании и подмена GPS.",
+                "Платы ещё нет — её заменяет эмулятор. Он шлёт байты по тому же протоколу, что и прошивка, а приложение их разбирает. Сценарий: поход под Петербургом, закат, стоянки, потеря сигнала в здании, подмена GPS.",
                 style = MaterialTheme.typography.bodyMedium, color = Palette.Text,
             )
             Spacer(Modifier.height(12.dp))

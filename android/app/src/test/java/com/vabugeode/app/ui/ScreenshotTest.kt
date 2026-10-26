@@ -16,8 +16,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowLooper
 import java.io.File
 import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 /**
  * Отрисовка экранов с демо-данными в PNG (app/build/screenshots).
@@ -35,6 +37,9 @@ class ScreenshotTest {
     private fun shot(name: String) {
         // Симулятор тикает постоянно — время двигаем вручную, иначе тест не дождётся «тишины»
         compose.mainClock.advanceTimeBy(1_000)
+        // Корутины viewModelScope живут на главном потоке Robolectric — двигаем и его время (подключение, синхронизация)
+        ShadowLooper.idleMainLooper(3, TimeUnit.SECONDS)
+        compose.mainClock.advanceTimeBy(500)
         val view = compose.activity.window.decorView
         val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
         compose.runOnUiThread { view.draw(Canvas(bmp)) }

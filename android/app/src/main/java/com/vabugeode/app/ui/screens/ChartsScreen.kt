@@ -44,6 +44,7 @@ import com.vabugeode.app.ui.components.KeyValue
 import com.vabugeode.app.ui.components.LineChart
 import com.vabugeode.app.ui.components.Panel
 import com.vabugeode.app.ui.components.SectionLabel
+import com.vabugeode.app.ui.components.Waiting
 import com.vabugeode.app.ui.theme.Palette
 import kotlin.math.abs
 
@@ -68,7 +69,7 @@ fun ChartsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     val sun by vm.sun.collectAsStateWithLifecycle()
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
     var selected by rememberSaveable { mutableStateOf(Metric.TEMP) }
-    if (track.size < 2) return
+    if (track.size < 2) return Waiting(contentPadding, "Трек ещё не загружен")
     val sunset = sun?.sunsetUtcMs
     val dusk = sun?.civilDuskUtcMs
 
@@ -111,6 +112,10 @@ fun ChartsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     }
 }
 
+/** Ряд для графика без пустых значений (датчик не ответил). */
+private fun seriesOf(track: List<TrackPoint>, f: (TrackPoint) -> Double) =
+    track.mapNotNull { p -> f(p).takeIf { !it.isNaN() }?.let { p.tsUtcMs to it } }
+
 /** Сводка «что произошло на закате» — ради этого проект и затевался. */
 @Composable
 private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sunset: Long?, dusk: Long?) {
@@ -140,11 +145,12 @@ private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sunset: Long?, 
 
 @Composable
 private fun BigChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: Long?) {
-    val values = track.map { m.value(it) }
+    val values = track.map { m.value(it) }.filter { !it.isNaN() }
+    if (values.isEmpty()) return
     val series = buildList {
-        add(ChartSeries(track.map { it.tsUtcMs to m.value(it) }, m.color, if (m == Metric.TEMP) "воздух" else m.title.lowercase()))
+        add(ChartSeries(seriesOf(track, m.value), m.color, if (m == Metric.TEMP) "воздух" else m.title.lowercase()))
         if (m == Metric.TEMP) {
-            add(ChartSeries(track.map { it.tsUtcMs to it.tempRaw }, Palette.TextDim, "датчик", dashed = true, fill = false))
+            add(ChartSeries(seriesOf(track) { it.tempRaw }, Palette.TextDim, "датчик", dashed = true, fill = false))
         }
     }
     Panel(padding = PaddingValues(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 12.dp)) {
@@ -196,7 +202,7 @@ private fun SmallChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: 
                 }
             }
             LineChart(
-                series = listOf(ChartSeries(track.map { it.tsUtcMs to m.value(it) }, m.color, m.title)),
+                series = listOf(ChartSeries(seriesOf(track, m.value), m.color, m.title)),
                 modifier = Modifier.weight(1f).height(48.dp),
                 sunsetMs = sunset, duskMs = dusk, showAxes = false, interactive = false,
             )

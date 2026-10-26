@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -158,6 +159,14 @@ fun Meter(fraction: Float, color: Color, modifier: Modifier = Modifier, height: 
                 .clip(RoundedCornerShape(50))
                 .background(color),
         )
+    }
+}
+
+/** Заглушка, пока данных с устройства ещё нет. */
+@Composable
+fun Waiting(contentPadding: PaddingValues, text: String = "Ждём данные с устройства…") {
+    Box(Modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
+        Text(text, color = Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
     }
 }
 

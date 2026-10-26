@@ -29,9 +29,9 @@ object Fmt {
         return "%02d:%02d:%02d".format(s / 3600, (s / 60) % 60, s % 60)
     }
 
-    fun num(v: Double, digits: Int = 1): String = String.format(Locale.US, "%.${digits}f", v).replace('.', ',')
+    fun num(v: Double, digits: Int = 1): String = if (v.isNaN()) "—" else String.format(Locale.US, "%.${digits}f", v).replace('.', ',')
 
-    fun signed(v: Double, digits: Int = 1): String = (if (v > 0) "+" else if (v < 0) "−" else "") + num(abs(v), digits)
+    fun signed(v: Double, digits: Int = 1): String = if (v.isNaN()) "—" else (if (v > 0) "+" else if (v < 0) "−" else "") + num(abs(v), digits)
 
     fun coord(lat: Double, lon: Double): String = String.format(Locale.US, "%.5f, %.5f", lat, lon)
 
