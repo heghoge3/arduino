@@ -57,11 +57,12 @@ class OfflineMapTest {
     fun satelliteMbtilesWithSchemeLabels() {
         val dir = File(ctx.filesDir, "maps").apply { deleteRecursively(); mkdirs() }
         assertNull(OfflineMap.satelliteStyleJson(ctx))
-        File(dir, "satellite").writeBytes("SQLite format 3\u0000".toByteArray() + ByteArray(100))
+        SatTilesTest.makeMbtiles(File(dir, "satellite"), listOf(Triple(10, 598, 297)))
         var style = JSONObject(OfflineMap.satelliteStyleJson(ctx)!!)
         val sat = style.getJSONObject("sources").getJSONObject("sat")
         assertEquals("raster", sat.getString("type"))
-        assertEquals("mbtiles://" + File(dir, "satellite").absolutePath, sat.getString("url"))
+        assertTrue(sat.getJSONArray("tiles").getString(0).startsWith("http://127.0.0.1:"))
+        assertEquals(10, sat.getInt("maxzoom"))
         assertEquals(2, style.getJSONArray("layers").length())
 
         // Есть схема: спутник — только снимок, гибрид — снимок + дороги и подписи

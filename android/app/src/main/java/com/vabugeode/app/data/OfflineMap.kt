@@ -73,16 +73,22 @@ object OfflineMap {
         val f = file(ctx, Kind.SATELLITE)
         if (!f.isFile) return null
         val fmt = runCatching { detect(f.inputStream().use { readHead(it) }) }.getOrNull() ?: return null
-        val url = when (fmt) {
-            // Описание файла дописываем до того, как его прочитает карта (см. MbTiles)
-            Format.MBTILES -> MbTiles.fix(f).let { "mbtiles://" + f.absolutePath }
-            else -> "pmtiles://file://" + f.absolutePath
-        }
+        val sat = when (fmt) {
+            // MBTiles — через свой сервер тайлов: он затыкает дыры выгрузки снимком уровнем ниже (см. SatTiles).
+            // Уровни берём по факту из файла: выше последнего карта растягивает снимок сама
+            Format.MBTILES -> {
+                val info = MbTiles.fix(f) ?: return null
+                JSONObject().put("type", "raster")
+                    .put("tiles", JSONArray().put(SatTiles.urlTemplate(f)))
+                    .put("minzoom", info.minZoom).put("maxzoom", info.maxZoom)
+            }
+            else -> JSONObject().put("type", "raster").put("url", "pmtiles://file://" + f.absolutePath)
+        }.put("tileSize", 256)
         val style = JSONObject()
             .put("version", 8)
             .put("name", "vabuGEOde satellite")
             .put("glyphs", "asset://fonts/{fontstack}/{range}.pbf")
-        val sources = JSONObject().put("sat", JSONObject().put("type", "raster").put("url", url).put("tileSize", 256))
+        val sources = JSONObject().put("sat", sat)
         val layers = JSONArray()
             .put(JSONObject().put("id", "background").put("type", "background").put("paint", JSONObject().put("background-color", "#060A12")))
             .put(JSONObject().put("id", "sat").put("type", "raster").put("source", "sat"))
@@ -179,6 +185,7 @@ object OfflineMap {
     }
 
     fun delete(ctx: Context, kind: Kind) {
+        if (kind == Kind.SATELLITE) SatTiles.close()
         file(ctx, kind).delete()
         refresh(ctx, kind)
     }

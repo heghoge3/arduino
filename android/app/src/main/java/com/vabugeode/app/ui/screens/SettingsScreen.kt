@@ -142,7 +142,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         Panel {
             Logo(size = 28.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Версия 0.7.3 · на железе не проверено", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+            Text("Версия 0.7.4 · на железе не проверено", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             Text("Карта: © OpenStreetMap, Protomaps, OpenFreeMap", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             Text("Шрифты: VT323, IBM Plex Mono (OFL)", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
         }
