@@ -3,7 +3,7 @@ package com.vabugeode.app.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.vabugeode.app.astro.SunCalc
+import com.vabugeode.app.astro.SunSchedule
 import com.vabugeode.app.data.LinkManager
 import com.vabugeode.app.log.AppLog
 import com.vabugeode.app.log.LogText
@@ -205,19 +205,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Закат и сумерки для дня похода по текущей позиции.
-     * Координаты округляем до ~10 км, чтобы не пересчитывать на каждый шаг.
+     * Восходы, закаты и сумерки на весь поход (и на сутки вперёд) по текущей позиции.
+     * Координаты округляем до ~10 км, время — до часа, чтобы не пересчитывать на каждый шаг.
      */
-    val sun: StateFlow<SunCalc.SunTimes?> = combine(repo.hikeStartMs, repo.status) { start, st ->
+    val sun: StateFlow<SunSchedule?> = combine(repo.hikeStartMs, repo.status) { start, st ->
         val lat = st?.lat ?: return@combine null
         val lon = st.lon ?: return@combine null
-        Triple(start ?: st.timeUtcMs, (lat * 10).roundToInt(), (lon * 10).roundToInt())
+        listOf((start ?: st.timeUtcMs) / HOUR, st.timeUtcMs / HOUR, (lat * 10).roundToInt().toLong(), (lon * 10).roundToInt().toLong())
     }
         .distinctUntilChanged()
-        .map { key ->
-            key ?: return@map null
-            val date = Instant.ofEpochMilli(key.first).atZone(ZoneId.systemDefault()).toLocalDate()
-            SunCalc.times(date, key.second / 10.0, key.third / 10.0)
+        .map { k ->
+            k ?: return@map null
+            SunSchedule.compute(k[0] * HOUR, (k[1] + 36) * HOUR, k[2] / 10.0, k[3] / 10.0)
         }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private companion object {
+        const val HOUR = 3_600_000L
+    }
 }

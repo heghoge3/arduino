@@ -47,6 +47,7 @@ import com.vabugeode.app.ui.components.SectionLabel
 import com.vabugeode.app.ui.components.TermButton
 import com.vabugeode.app.ui.components.Waiting
 import com.vabugeode.app.ui.theme.Palette
+import com.vabugeode.app.astro.SunSchedule
 import com.vabugeode.app.ui.theme.Fonts
 import kotlin.math.abs
 
@@ -71,8 +72,6 @@ fun ChartsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     val sun by vm.sun.collectAsStateWithLifecycle()
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
     if (track.size < 2) return Waiting(contentPadding, "Трек ещё не загружен")
-    val sunset = sun?.sunsetUtcMs
-    val dusk = sun?.civilDuskUtcMs
 
     Column(
         Modifier
@@ -83,16 +82,16 @@ fun ChartsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
-        ChartsBody(track, start, sunset, dusk, "Поход сегодня")
+        ChartsBody(track, start, sun, "Поход сегодня")
         Spacer(Modifier.height(8.dp))
     }
 }
 
 /** Сводка заката + графики всех показателей. Общие для вкладки «Графики» и экрана похода. */
 @Composable
-fun ChartsBody(track: List<TrackPoint>, start: Long?, sunset: Long?, dusk: Long?, summaryTitle: String) {
+fun ChartsBody(track: List<TrackPoint>, start: Long?, sun: SunSchedule?, summaryTitle: String) {
     var selected by rememberSaveable { mutableStateOf(Metric.TEMP) }
-    SunsetSummary(track, start, sunset, dusk, summaryTitle)
+    SunsetSummary(track, start, sun, summaryTitle)
 
     Row(
         Modifier.horizontalScroll(rememberScrollState()),
@@ -103,11 +102,11 @@ fun ChartsBody(track: List<TrackPoint>, start: Long?, sunset: Long?, dusk: Long?
         }
     }
 
-    BigChart(selected, track, sunset, dusk)
+    BigChart(selected, track, sun)
 
     SectionLabel("Все показатели", Modifier.padding(top = 4.dp))
     Metric.entries.filter { it != selected }.forEach { m ->
-        SmallChart(m, track, sunset, dusk) { selected = m }
+        SmallChart(m, track, sun) { selected = m }
     }
 }
 
@@ -115,33 +114,54 @@ fun ChartsBody(track: List<TrackPoint>, start: Long?, sunset: Long?, dusk: Long?
 private fun seriesOf(track: List<TrackPoint>, f: (TrackPoint) -> Double) =
     track.mapNotNull { p -> f(p).takeIf { !it.isNaN() }?.let { p.tsUtcMs to it } }
 
-/** Сводка «что произошло на закате» — ради этого проект и затевался. */
+/**
+ * Сводка «что происходит после заката» — ради этого проект и затевался.
+ * На каждую ночь похода: температура на закате, минимум до восхода и когда он был.
+ */
 @Composable
-private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sunset: Long?, dusk: Long?, title: String) {
+private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sun: SunSchedule?, title: String) {
     val last = track.last()
+    val now = last.tsUtcMs
     Panel(accent = Palette.Sunset, title = title) {
-        if (start != null) KeyValue("Старт", "${Fmt.time(start)} · в пути ${Fmt.duration(last.tsUtcMs - start)}")
-        if (sunset != null) KeyValue("Закат", Fmt.time(sunset), Palette.Sunset)
-        if (dusk != null) KeyValue("Конец сумерек", Fmt.time(dusk))
-        if (sunset != null && last.tsUtcMs > sunset) {
-            val atSunset = track.minBy { abs(it.tsUtcMs - sunset) }.tempCorr
-            val after = track.filter { it.tsUtcMs >= sunset }
-            val minAfter = after.minOf { it.tempCorr }
-            val hours = (last.tsUtcMs - sunset) / 3_600_000.0
+        if (start != null) KeyValue("Старт", "${Fmt.time(start)} · в пути ${Fmt.duration(now - start)}")
+        if (sun == null) {
+            Text("Закат посчитается, когда будет позиция", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+            return@Panel
+        }
+        val t0 = track.first().tsUtcMs
+        sun.of(SunSchedule.Kind.SUNSET).filter { it.timeMs in t0..now }.forEach { ss ->
+            val atSunset = track.minBy { abs(it.tsUtcMs - ss.timeMs) }.tempCorr
+            val rise = sun.next(SunSchedule.Kind.SUNRISE, ss.timeMs)
+            val night = track.filter { it.tsUtcMs >= ss.timeMs && (rise == null || it.tsUtcMs <= rise.timeMs) && !it.tempCorr.isNaN() }
+            val min = night.minByOrNull { it.tempCorr }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Закат ${Fmt.dayMonth(ss.timeMs)}, ${Fmt.time(ss.timeMs)}",
+                style = MaterialTheme.typography.labelLarge, color = Palette.SunsetSun,
+            )
             KeyValue("На закате", "${Fmt.num(atSunset)}°")
-            KeyValue("Сейчас", "${Fmt.num(last.tempCorr)}°  (${Fmt.signed(last.tempCorr - atSunset)}°)", Palette.Cold)
-            KeyValue("Минимум после заката", "${Fmt.num(minAfter)}°", Palette.Cold)
-            if (hours > 0.3) {
-                KeyValue("Скорость остывания", "${Fmt.num((last.tempCorr - atSunset) / hours)}° в час")
+            if (min != null) {
+                KeyValue(
+                    "Минимум ночи",
+                    "${Fmt.num(min.tempCorr)}° в ${Fmt.time(min.tsUtcMs)} (${Fmt.signed(min.tempCorr - atSunset)}°)",
+                    Palette.Cold,
+                )
             }
-        } else if (sunset != null) {
-            KeyValue("До заката", Fmt.duration(sunset - last.tsUtcMs), Palette.Sunset)
+            if (rise != null && rise.timeMs <= now) KeyValue("Восход", Fmt.time(rise.timeMs), Palette.Sunrise)
+        }
+        Spacer(Modifier.height(6.dp))
+        val nextSet = sun.next(SunSchedule.Kind.SUNSET, now)
+        val nextRise = sun.next(SunSchedule.Kind.SUNRISE, now)
+        when {
+            nextSet != null && (nextRise == null || nextSet.timeMs < nextRise.timeMs) ->
+                KeyValue("До заката", "${Fmt.duration(nextSet.timeMs - now)} · в ${Fmt.time(nextSet.timeMs)}", Palette.SunsetSun)
+            nextRise != null -> KeyValue("До восхода", "${Fmt.duration(nextRise.timeMs - now)} · в ${Fmt.time(nextRise.timeMs)}", Palette.Sunrise)
         }
     }
 }
 
 @Composable
-private fun BigChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: Long?) {
+private fun BigChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?) {
     val values = track.map { m.value(it) }.filter { !it.isNaN() }
     if (values.isEmpty()) return
     val series = buildList {
@@ -166,7 +186,7 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: Lo
             series = series,
             modifier = Modifier.fillMaxWidth().height(260.dp),
             unit = m.unit, digits = m.digits,
-            sunsetMs = sunset, duskMs = dusk,
+            sun = sun,
         )
         if (m == Metric.TEMP) {
             Spacer(Modifier.height(6.dp))
@@ -187,7 +207,7 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: Lo
 }
 
 @Composable
-private fun SmallChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: Long?, onClick: () -> Unit) {
+private fun SmallChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?, onClick: () -> Unit) {
     Panel(Modifier.fillMaxWidth().clip(RoundedCornerShape(2.dp)).clickable(onClick = onClick), padding = PaddingValues(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.width(110.dp)) {
@@ -201,7 +221,7 @@ private fun SmallChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: 
             LineChart(
                 series = listOf(ChartSeries(seriesOf(track, m.value), m.color, m.title)),
                 modifier = Modifier.weight(1f).height(48.dp),
-                sunsetMs = sunset, duskMs = dusk, showAxes = false, interactive = false,
+                sun = sun, showAxes = false, interactive = false,
             )
         }
     }

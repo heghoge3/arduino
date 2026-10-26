@@ -34,7 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.vabugeode.app.astro.SunCalc
+import com.vabugeode.app.astro.SunSchedule
 import com.vabugeode.app.data.HikeSummary
 import com.vabugeode.app.model.Mark
 import com.vabugeode.app.model.TrackPoint
@@ -186,12 +186,10 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
                 Row(Modifier.padding(horizontal = 12.dp)) { MapLegend(track.count { it.spoof }) }
             }
             if (track.size >= 2) {
-                val sun = remember(h.hike, track.size > 0) {
-                    track.firstOrNull { !it.lat.isNaN() }?.let { p ->
-                        SunCalc.times(Instant.ofEpochMilli(h.startMs).atZone(ZoneId.systemDefault()).toLocalDate(), p.lat, p.lon)
-                    }
+                val sun = remember(h.hike, track.size) {
+                    track.firstOrNull { !it.lat.isNaN() }?.let { p -> SunSchedule.compute(h.startMs, h.endMs, p.lat, p.lon) }
                 }
-                ChartsBody(track, h.startMs, sun?.sunsetUtcMs, sun?.civilDuskUtcMs, "Закат и температура")
+                ChartsBody(track, h.startMs, sun, "Закат и температура")
             }
             SectionLabel("Метки · ${marks.size}", Modifier.padding(top = 4.dp))
             Column { marks.forEach { MarkLine(it, h.startMs) } }

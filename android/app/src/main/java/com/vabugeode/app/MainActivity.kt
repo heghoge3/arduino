@@ -165,7 +165,7 @@ internal fun App(vm: AppViewModel = viewModel()) {
     ) { padding ->
         if (settings) {
             SettingsScreen(vm, padding)
-        } else when (tab) {
+        } else androidx.compose.animation.Crossfade(tab, animationSpec = androidx.compose.animation.core.tween(200), label = "tab") { tab -> when (tab) {
             Tab.HOME -> HomeScreen(
                 vm, padding,
                 onMark = { vm.repo.addMark(com.vabugeode.app.model.MarkType.MARK); toast("📍 Метка поставлена") },
@@ -175,7 +175,7 @@ internal fun App(vm: AppViewModel = viewModel()) {
             Tab.CHARTS -> ChartsScreen(vm, padding)
             Tab.HIKES -> HikesScreen(vm, padding)
             Tab.DEVICE -> DeviceScreen(vm, padding)
-        }
+        } }
     }
 }
 

@@ -43,6 +43,8 @@ object Palette {
     val Altitude = Color(0xFF7CE3B0)
     val Battery = Color(0xFF7CE3B0)
     val Sunset = Color(0xFFFF8FA8)
+    val SunsetSun = Color(0xFFFF9A4D)    // солнышко заката — оранжевое
+    val Sunrise = Color(0xFFFFD75A)      // солнышко восхода — жёлтое
     val Pdr = Color(0xFFC2A8FF)
     val Pink = Color(0xFFFF9FCB)
 

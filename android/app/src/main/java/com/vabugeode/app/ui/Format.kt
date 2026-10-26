@@ -13,6 +13,8 @@ object Fmt {
     private val hms = DateTimeFormatter.ofPattern("HH:mm:ss")
 
     fun time(ms: Long): String = hm.format(Instant.ofEpochMilli(ms).atZone(zone))
+    private val dm = DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("ru"))
+    fun dayMonth(ms: Long): String = dm.format(Instant.ofEpochMilli(ms).atZone(zone))
     fun timeSec(ms: Long): String = hms.format(Instant.ofEpochMilli(ms).atZone(zone))
 
     /** 2 ч 05 мин / 35 мин */

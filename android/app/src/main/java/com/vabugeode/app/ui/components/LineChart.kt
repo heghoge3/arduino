@@ -1,6 +1,12 @@
 package com.vabugeode.app.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.drawscope.clipRect
+import com.vabugeode.app.astro.SunSchedule
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
@@ -47,7 +53,7 @@ data class ChartSeries(
 )
 
 /**
- * Линейный график по времени. Умеет: линию заката и затенение ночи,
+ * Линейный график по времени. Умеет: восходы и закаты (солнышки), затенение ночей,
  * разрывы при пропусках данных, «ползунок» пальцем с подсказкой значения.
  */
 @Composable
@@ -56,13 +62,15 @@ fun LineChart(
     modifier: Modifier = Modifier,
     unit: String = "",
     digits: Int = 1,
-    sunsetMs: Long? = null,
-    duskMs: Long? = null,
+    sun: SunSchedule? = null,
     showAxes: Boolean = true,
     interactive: Boolean = true,
 ) {
     val measurer = rememberTextMeasurer()
     var touchX by remember { mutableStateOf<Float?>(null) }
+    // Линия прорисовывается слева направо один раз — при первом показе графика
+    val reveal = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
 
     val all = series.flatMap { it.points }
     if (all.size < 2) {
@@ -108,18 +116,28 @@ fun LineChart(
         fun x(t: Long) = left + ((t - t0).toFloat() / (t1 - t0).toFloat()) * w
         fun y(v: Double) = top + ((vMax - v) / (vMax - vMin)).toFloat() * h
 
-        // Ночь после заката
-        if (sunsetMs != null && sunsetMs < t1) {
-            val xs = x(max(sunsetMs, t0))
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    listOf(Color(0x00312A5C), Color(0x40312A5C)),
-                    startX = xs, endX = x(duskMs ?: sunsetMs) + 1f,
-                ),
-                topLeft = Offset(xs, top), size = Size(x(duskMs ?: sunsetMs) - xs + 1f, h),
-            )
-            if (duskMs != null && duskMs < t1) {
-                drawRect(Color(0x40312A5C), topLeft = Offset(x(duskMs), top), size = Size(left + w - x(duskMs), h))
+        // Ночь: от конца вечерних сумерек до начала утренних; сумерки — плавным переходом
+        if (sun != null) {
+            for ((n0, n1) in sun.nights(t0, t1)) {
+                drawRect(NIGHT, topLeft = Offset(x(n0), top), size = Size(x(n1) - x(n0), h))
+            }
+            for (e in sun.events) {
+                val other = when (e.kind) {
+                    SunSchedule.Kind.SUNSET -> sun.next(SunSchedule.Kind.DUSK, e.timeMs)
+                    SunSchedule.Kind.DAWN -> sun.next(SunSchedule.Kind.SUNRISE, e.timeMs)
+                    else -> null
+                } ?: continue
+                val a0 = max(e.timeMs, t0)
+                val a1 = min(other.timeMs, t1)
+                if (a1 <= a0) continue
+                val evening = e.kind == SunSchedule.Kind.SUNSET
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        if (evening) listOf(NIGHT.copy(alpha = 0f), NIGHT) else listOf(NIGHT, NIGHT.copy(alpha = 0f)),
+                        startX = x(e.timeMs), endX = x(other.timeMs),
+                    ),
+                    topLeft = Offset(x(a0), top), size = Size(x(a1) - x(a0), h),
+                )
             }
         }
 
@@ -157,23 +175,34 @@ fun LineChart(
             }
         }
 
-        // Линия заката
-        if (sunsetMs != null && sunsetMs in t0..t1) {
-            val xs = x(sunsetMs)
-            drawLine(
-                Palette.Sunset, Offset(xs, top), Offset(xs, top + h), strokeWidth = 1.5.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)),
-            )
-            if (showAxes) {
-                val tl = measurer.measure("☀ закат ${Fmt.time(sunsetMs)}", TextStyle(color = Palette.Sunset, fontSize = 10.sp, fontWeight = FontWeight.SemiBold))
-                val tx = min(xs + 4.dp.toPx(), left + w - tl.size.width)
-                drawText(tl, topLeft = Offset(tx, 1.dp.toPx()))
+        // Закаты и восходы: пунктир и солнышко (закат — оранжевое садится, восход — жёлтое встаёт)
+        if (sun != null) {
+            for (e in sun.events) {
+                if (e.kind != SunSchedule.Kind.SUNSET && e.kind != SunSchedule.Kind.SUNRISE) continue
+                if (e.timeMs !in t0..t1) continue
+                val rising = e.kind == SunSchedule.Kind.SUNRISE
+                val c = if (rising) Palette.Sunrise else Palette.SunsetSun
+                val xs = x(e.timeMs)
+                drawLine(
+                    c.copy(alpha = 0.8f), Offset(xs, top), Offset(xs, top + h), strokeWidth = 1.2.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
+                )
+                val r = (if (showAxes) 4.5f else 3.5f).dp.toPx()
+                val horizon = if (showAxes) top - 3.dp.toPx() else top + r * 2.4f
+                drawSun(xs, horizon, r, c, rising)
+                if (showAxes) {
+                    val tl = measurer.measure(Fmt.time(e.timeMs), TextStyle(color = c, fontSize = 10.sp, fontWeight = FontWeight.SemiBold))
+                    val tx = min(xs + r * 2.6f, left + w - tl.size.width)
+                    drawText(tl, topLeft = Offset(tx, horizon - tl.size.height + 2.dp.toPx()))
+                }
             }
         }
 
         // Ряды
         val maxPts = max(60, (w / 2.5f).toInt())
-        series.forEach { s -> drawSeries(s, maxPts, ::x, ::y, top + h) }
+        clipRect(left = 0f, top = 0f, right = left + w * reveal.value + 2f, bottom = size.height) {
+            series.forEach { s -> drawSeries(s, maxPts, ::x, ::y, top + h) }
+        }
 
         // Ползунок
         val tx = touchX
@@ -199,6 +228,27 @@ fun LineChart(
 }
 
 private const val HOUR = 3_600_000L
+private val NIGHT = Color(0x4A2A2F66)
+
+/** Солнышко на линии горизонта: половина диска, лучи и стрелка вверх (восход) или вниз (закат) */
+private fun DrawScope.drawSun(cx: Float, horizon: Float, r: Float, c: Color, rising: Boolean) {
+    drawArc(c, startAngle = 180f, sweepAngle = 180f, useCenter = true, topLeft = Offset(cx - r, horizon - r), size = Size(r * 2, r * 2))
+    for (deg in listOf(200.0, 235.0, 270.0, 305.0, 340.0)) {
+        val a = Math.toRadians(deg)
+        val ca = kotlin.math.cos(a).toFloat()
+        val sa = kotlin.math.sin(a).toFloat()
+        drawLine(c, Offset(cx + ca * r * 1.45f, horizon + sa * r * 1.45f), Offset(cx + ca * r * 2.0f, horizon + sa * r * 2.0f), strokeWidth = r * 0.28f)
+    }
+    drawLine(c, Offset(cx - r * 2.2f, horizon), Offset(cx + r * 2.2f, horizon), strokeWidth = r * 0.3f)
+    // Стрелка под горизонтом
+    val ay = horizon + r * 0.9f
+    val p = Path().apply {
+        if (rising) { moveTo(cx - r * 0.7f, ay + r * 0.6f); lineTo(cx + r * 0.7f, ay + r * 0.6f); lineTo(cx, ay - r * 0.1f) }
+        else { moveTo(cx - r * 0.7f, ay); lineTo(cx + r * 0.7f, ay); lineTo(cx, ay + r * 0.7f) }
+        close()
+    }
+    drawPath(p, c)
+}
 private const val GAP_MS = 5 * 60_000L
 
 private fun DrawScope.drawSeries(
