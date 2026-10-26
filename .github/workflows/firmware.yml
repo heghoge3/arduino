@@ -1,0 +1,37 @@
+name: Firmware
+
+on:
+  push:
+    paths:
+      - "firmware/**"
+      - "docs/protocol_vectors.json"
+      - ".github/workflows/firmware.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firmware
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('firmware/platformio.ini') }}
+      - run: pip install platformio
+      - name: Тесты ядра (протокол, NMEA, подмена, шаги, логика)
+        run: pio test -e native
+      - name: Сборка под ESP32-S3
+        run: pio run -e s3 -e s3_fake
+      - name: Прошивки
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-bin
+          path: |
+            firmware/.pio/build/s3/firmware.bin
+            firmware/.pio/build/s3_fake/firmware.bin

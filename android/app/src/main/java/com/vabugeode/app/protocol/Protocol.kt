@@ -7,12 +7,12 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 /**
- * Протокол BLE v1 — точное отражение docs/protocol.md.
+ * Протокол BLE v2 — точное отражение docs/protocol.md.
  * Здесь обе стороны: телефон (кодирует команды, разбирает сообщения)
  * и устройство (наоборот) — вторая нужна виртуальному устройству и тестам.
  */
 object Proto {
-    const val VERSION = 1
+    const val VERSION = 2
 
     val SERVICE: UUID = UUID.fromString("e0f30001-5642-4744-8a1e-76616275676f")
     val CHAR_STATUS: UUID = UUID.fromString("e0f30002-5642-4744-8a1e-76616275676f")
@@ -29,6 +29,7 @@ object Proto {
     const val MSG_POINT = 0x05
     const val MSG_SYNC_DONE = 0x06
     const val MSG_ACK = 0x07
+    const val MSG_ALERT = 0x08
 
     // Команды телефона
     const val CMD_SET_TIME = 0x01
@@ -42,8 +43,13 @@ object Proto {
     const val CMD_CALIB_COMPASS = 0x09
     const val CMD_BLACKLIST = 0x0A
     const val CMD_GET_INFO = 0x0B
+    const val CMD_SESSION = 0x0C
+    const val CMD_BYE = 0x0D
+    const val CMD_SET_GPS_MODE = 0x0E
+    const val CMD_SET_RADIO = 0x0F
     const val CMD_SYNC_TRACK = 0x10
     const val CMD_SYNC_MARKS = 0x11
+    const val CMD_ACK_ALERT = 0x12
 
     // Результаты ACK
     const val ACK_OK = 0
@@ -60,6 +66,24 @@ object Proto {
     const val F_CHARGING = 1 shl 4
     const val F_SD_OK = 1 shl 5
     const val F_LOW_BATT = 1 shl 6
+    const val F_ALERT = 1 shl 7
+
+    // Тревоги (байт alerts)
+    const val AL_SPOOF = 1 shl 0
+    const val AL_LOW_BATT = 1 shl 1
+    const val AL_CRIT_BATT = 1 shl 2
+    const val AL_SD_ERROR = 1 shl 3
+
+    // Маячок
+    const val COMPANY_ID = 0xFFFF
+    const val BEACON_TAG = 0x56
+    const val BEACON_SIZE = 18
+    const val B_RECORDING = 1 shl 0
+    const val B_FIX = 1 shl 1
+    const val B_SPOOF = 1 shl 2
+    const val B_TIME_OK = 1 shl 3
+    const val B_WINDOW = 1 shl 4
+    const val B_SD_OK = 1 shl 5
 
     const val NA16: Int = -32768
     const val HDOP_NA = 255
@@ -67,7 +91,7 @@ object Proto {
     const val MAX_SATS = 24
     const val MAX_BLACKLIST = 24
 
-    const val STATUS_SIZE = 63
+    const val STATUS_SIZE = 64
     const val POINT_SIZE = 51
 }
 
@@ -110,6 +134,7 @@ data class StatusMsg(
     val distanceM: Long,
     val hoursLeft: Double,
     val seq: Int,
+    val alerts: Int = 0,
 ) : DeviceMsg {
     fun has(flag: Int) = flags and flag != 0
 }
@@ -130,6 +155,9 @@ data class InfoMsg(
     val gnssMask: Int,
     val hikeStartUtc: Long?,
     val checks: List<CheckMsg>,
+    val gpsMode: Int = 0,
+    val gpsPulseS: Int = 30,
+    val beaconS: Int = 30,
 ) : DeviceMsg
 
 data class MarkMsg(
@@ -167,6 +195,21 @@ data class PointMsg(
 
 data class SyncDoneMsg(val what: Int, val count: Long) : DeviceMsg
 data class AckMsg(val cmd: Int, val result: Int) : DeviceMsg
+data class AlertMsg(val timeUtc: Long, val alerts: Int, val fresh: Int, val battPct: Int, val spoofMask: Int) : DeviceMsg
+
+/** Сводка маячка (данные производителя в рекламе, без company id). Координат нет намеренно. */
+data class BeaconMsg(
+    val mode: Int,
+    val flags: Int,
+    val alerts: Int,
+    val tempCorr: Double?,
+    val battPct: Int,
+    val satsUsed: Int,
+    val pressureHpa: Double?,
+    val lastRecordUtc: Long,
+    val hikeId: Int,
+    val counter: Int,
+)
 
 // ---------------------------------------------------------------------------
 // Команды телефона → устройство
@@ -186,6 +229,11 @@ sealed interface Cmd {
         data class Entry(val lat: Double, val lon: Double, val radiusM: Int)
     }
     data object GetInfo : Cmd
+    data class Session(val live: Boolean) : Cmd
+    data object Bye : Cmd
+    data class SetGpsMode(val pulse: Boolean, val pulseS: Int) : Cmd
+    data class SetRadio(val beaconS: Int) : Cmd
+    data class AckAlert(val mask: Int) : Cmd
     data class SyncTrack(val sinceUtc: Long) : Cmd
     data class SyncMarks(val sinceUtc: Long) : Cmd
 }
@@ -219,6 +267,11 @@ object Codec {
             }
         }
         Cmd.GetInfo -> packet(Proto.CMD_GET_INFO, 0) {}
+        is Cmd.Session -> packet(Proto.CMD_SESSION, 1) { u8(if (cmd.live) 1 else 0) }
+        Cmd.Bye -> packet(Proto.CMD_BYE, 0) {}
+        is Cmd.SetGpsMode -> packet(Proto.CMD_SET_GPS_MODE, 3) { u8(if (cmd.pulse) 1 else 0); u16(cmd.pulseS) }
+        is Cmd.SetRadio -> packet(Proto.CMD_SET_RADIO, 2) { u16(cmd.beaconS) }
+        is Cmd.AckAlert -> packet(Proto.CMD_ACK_ALERT, 1) { u8(cmd.mask) }
         is Cmd.SyncTrack -> packet(Proto.CMD_SYNC_TRACK, 4) { u32(cmd.sinceUtc) }
         is Cmd.SyncMarks -> packet(Proto.CMD_SYNC_MARKS, 4) { u32(cmd.sinceUtc) }
     }
@@ -248,6 +301,11 @@ object Codec {
                 Cmd.Blacklist(List(n) { Cmd.Blacklist.Entry(r.coordRaw(), r.coordRaw(), r.u16()) })
             }
             Proto.CMD_GET_INFO -> Cmd.GetInfo
+            Proto.CMD_SESSION -> Cmd.Session(r.u8() != 0)
+            Proto.CMD_BYE -> Cmd.Bye
+            Proto.CMD_SET_GPS_MODE -> Cmd.SetGpsMode(r.u8() != 0, r.u16())
+            Proto.CMD_SET_RADIO -> Cmd.SetRadio(r.u16())
+            Proto.CMD_ACK_ALERT -> Cmd.AckAlert(r.u8())
             Proto.CMD_SYNC_TRACK -> Cmd.SyncTrack(r.u32())
             Proto.CMD_SYNC_MARKS -> Cmd.SyncMarks(r.u32())
             else -> throw ProtocolException("Неизвестная команда 0x%02X".format(code))
@@ -273,7 +331,7 @@ object Codec {
             i16(scaledOrNa(m.altBaro, 10.0)); i16(scaledOrNa(m.trend3h, 100.0))
             u16(m.battMv); i16(scaled(m.battMa, 10.0)); u8(m.battPct); u16(m.usedMah)
             u32(m.steps); u16(scaled(m.headingDeg, 10.0)); u32(m.distanceM)
-            u16(scaled(m.hoursLeft, 10.0)); u16(m.seq)
+            u16(scaled(m.hoursLeft, 10.0)); u16(m.seq); u8(m.alerts)
         }
         is SatsMsg -> {
             val sats = m.sats.take(Proto.MAX_SATS)
@@ -282,10 +340,11 @@ object Codec {
                 sats.forEach { u8(it.system); u8(it.prn); u8(it.snr); u8(if (it.used) 1 else 0) }
             }
         }
-        is InfoMsg -> packet(Proto.MSG_INFO, 22 + 4 * m.checks.size) {
+        is InfoMsg -> packet(Proto.MSG_INFO, 27 + 4 * m.checks.size) {
             u8(m.fwMajor); u8(m.fwMinor); u8(m.fwPatch); u8(m.chip)
             u32(m.uptimeSec); u32(m.sdTotalMb); u32(m.sdFreeMb); u8(m.gnssMask)
             u32(m.hikeStartUtc ?: 0)
+            u8(m.gpsMode); u16(m.gpsPulseS); u16(m.beaconS)
             u8(m.checks.size)
             m.checks.forEach { u8(it.id); u8(it.level); u8(it.code); u8(it.addr) }
         }
@@ -307,6 +366,7 @@ object Codec {
         }
         is SyncDoneMsg -> packet(Proto.MSG_SYNC_DONE, 5) { u8(m.what); u32(m.count) }
         is AckMsg -> packet(Proto.MSG_ACK, 2) { u8(m.cmd); u8(m.result) }
+        is AlertMsg -> packet(Proto.MSG_ALERT, 8) { u32(m.timeUtc); u8(m.alerts); u8(m.fresh); u8(m.battPct); u8(m.spoofMask) }
     }
 
     // ---- Телефон: байты → сообщение ----
@@ -326,7 +386,7 @@ object Codec {
                     altBaro = r.i16OrNull(10.0), trend3h = r.i16OrNull(100.0),
                     battMv = r.u16(), battMa = r.i16() / 10.0, battPct = r.u8(), usedMah = r.u16(),
                     steps = r.u32(), headingDeg = r.u16() / 10.0, distanceM = r.u32(),
-                    hoursLeft = r.u16() / 10.0, seq = r.u16(),
+                    hoursLeft = r.u16() / 10.0, seq = r.u16(), alerts = r.u8(),
                 )
             }
             Proto.MSG_SATS -> {
@@ -338,8 +398,9 @@ object Codec {
                 val ma = r.u8(); val mi = r.u8(); val pa = r.u8(); val chip = r.u8()
                 val up = r.u32(); val tot = r.u32(); val free = r.u32(); val gnss = r.u8()
                 val hike = r.u32().takeIf { it != 0L }
+                val gpsMode = r.u8(); val pulse = r.u16(); val beacon = r.u16()
                 val n = r.u8()
-                InfoMsg(ma, mi, pa, chip, up, tot, free, gnss, hike, List(n) { CheckMsg(r.u8(), r.u8(), r.u8(), r.u8()) })
+                InfoMsg(ma, mi, pa, chip, up, tot, free, gnss, hike, List(n) { CheckMsg(r.u8(), r.u8(), r.u8(), r.u8()) }, gpsMode, pulse, beacon)
             }
             Proto.MSG_MARK -> {
                 val id = r.u16(); val t = r.u32(); val mt = r.u8(); val la = r.coord(); val lo = r.coord()
@@ -362,8 +423,34 @@ object Codec {
             }
             Proto.MSG_SYNC_DONE -> SyncDoneMsg(r.u8(), r.u32())
             Proto.MSG_ACK -> AckMsg(r.u8(), r.u8())
+            Proto.MSG_ALERT -> AlertMsg(r.u32(), r.u8(), r.u8(), r.u8(), r.u8())
             else -> throw ProtocolException("Неизвестный тип сообщения 0x%02X".format(type))
         }.also { r.expectEnd() }
+    }
+
+    // ---- Маячок ----
+
+    fun encodeBeacon(m: BeaconMsg): ByteArray {
+        val buf = ByteBuffer.allocate(Proto.BEACON_SIZE).order(ByteOrder.LITTLE_ENDIAN)
+        val w = Writer(buf)
+        w.u8(Proto.VERSION); w.u8(Proto.BEACON_TAG)
+        w.u8(m.mode); w.u8(m.flags); w.u8(m.alerts)
+        w.i16(scaledOrNa(m.tempCorr, 100.0)); w.u8(m.battPct); w.u8(m.satsUsed)
+        w.u16(m.pressureHpa?.let { scaled(it, 10.0) } ?: 0)
+        w.u32(m.lastRecordUtc); w.u16(m.hikeId); w.u8(m.counter)
+        return buf.array()
+    }
+
+    /** Разбор сводки из данных производителя (без company id). null — не наш маячок. */
+    fun decodeBeacon(data: ByteArray): BeaconMsg? {
+        if (data.size != Proto.BEACON_SIZE) return null
+        val r = Reader(data)
+        if (r.u8() != Proto.VERSION || r.u8() != Proto.BEACON_TAG) return null
+        return BeaconMsg(
+            mode = r.u8(), flags = r.u8(), alerts = r.u8(), tempCorr = r.i16OrNull(100.0),
+            battPct = r.u8(), satsUsed = r.u8(), pressureHpa = r.u16().takeIf { it != 0 }?.let { it / 10.0 },
+            lastRecordUtc = r.u32(), hikeId = r.u16(), counter = r.u8(),
+        )
     }
 
     // ---- Внутреннее ----

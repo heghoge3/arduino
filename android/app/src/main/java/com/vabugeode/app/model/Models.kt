@@ -7,10 +7,10 @@ package com.vabugeode.app.model
 
 /** Режим питания устройства (ТЗ, раздел 4). */
 enum class PowerMode(val title: String) {
-    DEEP_SLEEP("Сон"),
-    IDLE_LOG("Стоянка"),
-    MOVING("Движение"),
-    BLE_SESSION("Сеанс BLE"),
+    CAMP("Стоянка"),
+    MOVING("В пути"),
+    ECONOMY("Экономия"),
+    CRITICAL("Критический заряд"),
 }
 
 /** Источник позиции точки трека. */
@@ -35,7 +35,8 @@ enum class SpoofReason(val bit: Int, val title: String) {
     IMPOSSIBLE_JUMP(2, "Невозможный скачок"),
     SNR_FLAT(3, "Одинаковый SNR спутников"),
     BARO_MISMATCH(4, "Высота не совпадает с барометром"),
-    ACCEL_MISMATCH(5, "Шаги не совпадают с движением");
+    ACCEL_MISMATCH(5, "Шаги не совпадают с движением"),
+    TIME_MISMATCH(6, "Время GPS не совпадает с часами");
 
     companion object {
         fun fromMask(mask: Int): List<SpoofReason> = entries.filter { mask and (1 shl it.bit) != 0 }

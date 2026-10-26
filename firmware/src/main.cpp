@@ -1,0 +1,944 @@
+// vabuGEOde — прошивка устройства.
+// Логика: docs/gadget-logic.md. Протокол: docs/protocol.md. ТЗ: CLAUDE.md.
+//
+// Цикл: кнопки → акселерометр (шаги) → GPS → раз в секунду: датчики, состояние питания,
+// запись, тревоги, маячок, живой сеанс → команды телефона → синхронизация → сон, если можно.
+
+#include <Arduino.h>
+#include <Preferences.h>
+#include <driver/rtc_io.h>
+#include <esp_sleep.h>
+#include <math.h>
+
+#include "app.h"
+#include "clock.h"
+#include "config.h"
+#include "gps.h"
+#include "nmea.h"
+#include "pins.h"
+#include "proto.h"
+#include "radio.h"
+#include "sensors.h"
+#include "spoof.h"
+#include "storage.h"
+#include "sun.h"
+#include "ui.h"
+
+Persist P;
+Settings S;
+Snapshot N;
+
+namespace {
+
+RTC_DATA_ATTR uint8_t g_rtcBlob[sizeof(Persist)];
+
+Preferences g_prefs;
+bool g_storageReady = false;
+bool g_sdError = false;
+uint32_t g_bootMs = 0;
+uint32_t g_motionCheckUntil = 0;
+uint32_t g_awakeUntil = 0;       // не спать до (окно после включения и т. п.)
+uint32_t g_lastAccelMs = 0, g_lastSecondMs = 0;
+uint32_t g_lastEnvMs = 0, g_lastSelftestMs = 0, g_lastResyncMs = 0;
+uint32_t g_tick = 0;
+uint32_t g_powerOnUtc = 0;
+bool g_fixAnnounced = false;
+
+// Синхронизация: идёт порциями в цикле, чтобы не блокировать остальное
+struct SyncJob {
+  bool active = false;
+  uint8_t what = 0;
+  uint32_t idx = 0, end = 0, sent = 0;
+};
+SyncJob g_sync, g_syncNext;
+
+// ---------------------------------------------------------------------------
+// Настройки и состояние
+// ---------------------------------------------------------------------------
+
+void loadSettings() {
+  g_prefs.begin("vabu", false);
+  S.gpsMode = g_prefs.getUChar("gm", logic::GPS_ALWAYS);
+  S.gpsPulseS = g_prefs.getUShort("gp", DEF_GPS_PULSE_S);
+  S.beaconS = g_prefs.getUShort("bs", DEF_BEACON_S);
+  S.logMovingS = g_prefs.getUShort("lm", DEF_LOG_MOVING_S);
+  S.logCampS = g_prefs.getUShort("lc", DEF_LOG_CAMP_S);
+  S.tzMin = g_prefs.getShort("tz", 180);
+  S.seaLevelHpa = g_prefs.getFloat("sl", DEF_SEA_LEVEL_HPA);
+  S.baroCalibrated = g_prefs.getBool("bc", false);
+  sensors::setSeaLevel(S.seaLevelHpa);
+}
+
+void saveSettings() {
+  g_prefs.putUChar("gm", S.gpsMode);
+  g_prefs.putUShort("gp", S.gpsPulseS);
+  g_prefs.putUShort("bs", S.beaconS);
+  g_prefs.putUShort("lm", S.logMovingS);
+  g_prefs.putUShort("lc", S.logCampS);
+  g_prefs.putShort("tz", S.tzMin);
+  g_prefs.putFloat("sl", S.seaLevelHpa);
+  g_prefs.putBool("bc", S.baroCalibrated);
+}
+
+void applySettings() {
+  logic::PowerConfig& c = P.power.config();
+  c.logMovingS = S.logMovingS;
+  c.logCampS = S.logCampS;
+  P.pulse.configure(S.gpsPulseS);
+}
+
+void initPersist() {
+  memset(g_rtcBlob, 0, sizeof(g_rtcBlob));
+  P = Persist();
+  P.magic = PERSIST_MAGIC;
+  P.recording = true;
+  P.avgMa = 30;
+}
+
+void ensureStorage() {
+  if (g_storageReady) return;
+  storage::begin();
+  storage::openHike(P.hikeStart);
+  g_storageReady = true;
+}
+
+void newHike(uint32_t start) {
+  P.hikeStart = start;
+  P.distM = 0;
+  P.stepDet.setCount(0);
+  P.campN = 0;
+  P.lastPointTime = 0;
+  g_prefs.putULong("hike", start);
+  g_prefs.putULong("last", 0);
+  if (g_storageReady) storage::openHike(start);
+  Serial.printf("[hike] новый поход %lu\n", (unsigned long)start);
+}
+
+void loadBlacklist() {
+  proto::BlEntry bl[proto::MAX_BLACKLIST];
+  uint8_t n = 0;
+  if (!storage::loadBlacklist(bl, n) || n == 0) {
+    // Известные ложные точки (ТЗ, раздел 7)
+    bl[0] = {600346000, 305693000, 1000};
+    bl[1] = {601161000, 313864000, 1000};
+    n = 2;
+  }
+  double la[proto::MAX_BLACKLIST], lo[proto::MAX_BLACKLIST];
+  uint16_t r[proto::MAX_BLACKLIST];
+  for (uint8_t i = 0; i < n; i++) {
+    la[i] = bl[i].lat7 / 1e7;
+    lo[i] = bl[i].lon7 / 1e7;
+    r[i] = bl[i].radiusM;
+  }
+  P.spoof.setBlacklist(la, lo, r, n);
+}
+
+// ---------------------------------------------------------------------------
+// Снимок и пакеты
+// ---------------------------------------------------------------------------
+
+int16_t s16(float v, float k) {
+  if (isnan(v)) return proto::NA16;
+  float x = roundf(v * k);
+  if (x > 32767) x = 32767;
+  if (x < -32767) x = -32767;
+  return (int16_t)x;
+}
+
+uint8_t hdop10(float h) { return (h >= 25.4f || isnan(h)) ? proto::HDOP_NA : (uint8_t)lroundf(h * 10); }
+
+int32_t c7(double v) { return (int32_t)llround(v * 1e7); }
+
+void updateSun() {
+  if (!N.haveLat) return;
+  uint32_t t;
+  N.sunsetUtc = sun::sunset(N.now, N.lat, N.lon, t) ? t : 0;
+}
+
+void updatePressureTrend() {
+  if (!N.env.ok) return;
+  // Раз в 15 мин кладём давление в историю (13 отсчётов = 3 ч)
+  if (P.pressHistN == 0 || N.now - P.pressHistAt >= 900) {
+    if (P.pressHistN < 13) P.pressHistN++;
+    for (int i = P.pressHistN - 1; i > 0; i--) P.pressHist[i] = P.pressHist[i - 1];
+    P.pressHist[0] = N.env.pressHpa;
+    P.pressHistAt = N.now;
+  }
+  N.trend3h = P.pressHistN >= 5 ? N.env.pressHpa - P.pressHist[P.pressHistN - 1] : NAN;
+}
+
+void readEnvAndPower() {
+  N.env = sensors::readEnv();
+  N.pwr = sensors::readPower();
+  updatePressureTrend();
+}
+
+proto::Status makeStatus() {
+  proto::Status m{};
+  m.time = N.now;
+  m.mode = P.power.state();
+  m.flags = (P.recording ? proto::F_RECORDING : 0) | (N.gpsOn ? proto::F_GPS_ON : 0) | (N.spoof ? proto::F_SPOOF : 0) |
+            (clockx::trusted() ? proto::F_TIME_OK : 0) | (storage::sdOk() ? proto::F_SD_OK : 0) |
+            (P.power.low() ? proto::F_LOW_BATT : 0) | (P.alerts.unacked() ? proto::F_ALERT : 0);
+  m.fix = !N.gpsOn ? 0 : (!N.fix ? 1 : (N.fixType >= 3 ? 3 : 2));
+  m.satsUsed = N.satsUsed;
+  m.satsView = N.satsView;
+  m.hdop10 = N.fix ? hdop10(N.hdop) : proto::HDOP_NA;
+  m.lat7 = N.haveLat ? c7(N.lat) : 0;
+  m.lon7 = N.haveLat ? c7(N.lon) : 0;
+  m.src = N.src;
+  m.spoofMask = N.spoofMask;
+  m.altGps10 = N.altValid ? s16(N.altGps, 10) : proto::NA16;
+  m.speed10 = (uint16_t)lroundf(N.speedKmh * 10);
+  m.course10 = (uint16_t)lroundf(N.courseDeg * 10);
+  m.tempRaw100 = s16(N.env.tempRaw, 100);
+  m.tempCorr100 = s16(N.env.tempCorr, 100);
+  m.hum100 = isnan(N.env.hum) ? 0 : (uint16_t)lroundf(N.env.hum * 100);
+  m.pressPa = isnan(N.env.pressHpa) ? 0 : (uint32_t)lroundf(N.env.pressHpa * 100);
+  m.altBaro10 = s16(N.env.altBaro, 10);
+  m.trend100 = s16(N.trend3h, 100);
+  m.battMv = isnan(N.pwr.voltage) ? 0 : (uint16_t)lroundf(N.pwr.voltage * 1000);
+  m.battMa10 = s16(N.pwr.currentMa, 10);
+  m.battPct = N.pwr.pct;
+  m.usedMah = (uint16_t)P.usedMah;
+  m.steps = P.stepDet.count();
+  m.heading10 = (uint16_t)lroundf(N.courseDeg * 10);
+  m.distM = (uint32_t)P.distM;
+  float left = BATT_CAPACITY_MAH * N.pwr.pct / 100.0f / fmaxf(P.avgMa, 1);
+  m.hoursLeft10 = (uint16_t)fminf(left * 10, 65535);
+  m.seq = P.seq++;
+  m.alerts = P.alerts.active();
+  return m;
+}
+
+proto::Beacon makeBeacon() {
+  proto::Beacon b{};
+  b.mode = P.power.state();
+  b.flags = (P.recording ? proto::B_RECORDING : 0) | (N.fix && !N.spoof ? proto::B_FIX : 0) |
+            (N.spoof ? proto::B_SPOOF : 0) | (clockx::trusted() ? proto::B_TIME_OK : 0) |
+            (storage::sdOk() ? proto::B_SD_OK : 0);
+  b.alerts = P.alerts.unacked();
+  b.tempCorr100 = s16(N.env.tempCorr, 100);
+  b.battPct = N.pwr.pct;
+  b.satsUsed = N.fix ? N.satsUsed : 0;
+  b.press10 = isnan(N.env.pressHpa) ? 0 : (uint16_t)lroundf(N.env.pressHpa * 10);
+  b.lastRecord = P.lastPointTime;
+  b.hikeId = P.hikeStart & 0xFFFF;
+  b.counter = P.beaconCounter++;
+  return b;
+}
+
+void sendPacketEvent(const uint8_t* b, size_t n) {
+  if (n) radio::sendEvent(b, n);
+}
+
+void sendInfo() {
+  proto::Info info{};
+  info.fwMajor = FW_MAJOR;
+  info.fwMinor = FW_MINOR;
+  info.fwPatch = FW_PATCH;
+  String chip = ESP.getChipModel();
+  info.chip = chip.indexOf("S3") >= 0 ? 1 : (chip.indexOf("C3") >= 0 ? 2 : 0);
+  info.uptime = N.now - g_powerOnUtc;
+  ensureStorage();
+  info.sdTotalMb = storage::totalMb();
+  info.sdFreeMb = storage::freeMb();
+  info.gnssMask = gps::parser().systemsSeen();
+  info.hikeStart = P.hikeStart;
+  info.gpsMode = S.gpsMode;
+  info.gpsPulseS = S.gpsPulseS;
+  info.beaconS = S.beaconS;
+  info.nChecks = buildChecks(info.checks);
+  uint8_t b[128];
+  sendPacketEvent(b, proto::encodeInfo(info, b, sizeof(b)));
+}
+
+void sendSats() {
+  const nmea::Parser& p = gps::parser();
+  proto::Sat sats[proto::MAX_SATS];
+  size_t n = p.satCount() > proto::MAX_SATS ? proto::MAX_SATS : p.satCount();
+  for (size_t i = 0; i < n; i++) {
+    const nmea::SatInfo& s = p.sat(i);
+    sats[i] = proto::Sat{s.system, s.prn, s.snr, (uint8_t)(s.used ? 1 : 0)};
+  }
+  uint8_t b[proto::MAX_PACKET];
+  size_t len = proto::encodeSats(sats, n, b, sizeof(b));
+  if (len) radio::sendStatus(b, len);
+}
+
+// ---------------------------------------------------------------------------
+// GPS, подмена, запись
+// ---------------------------------------------------------------------------
+
+void onFix() {
+  const nmea::Parser& p = gps::parser();
+  const nmea::Fix& f = p.fix();
+  uint8_t usedSnr[nmea::MAX_SATS];
+  size_t used = 0;
+  for (size_t i = 0; i < p.satCount(); i++) {
+    if (p.sat(i).used) usedSnr[used++] = p.sat(i).snr;
+  }
+  spoof::Input in{};
+  in.now = N.now;
+  in.timeTrusted = clockx::trusted();
+  in.lat = f.lat;
+  in.lon = f.lon;
+  in.altValid = f.altValid;
+  in.altGps = f.altM;
+  in.baroValid = S.baroCalibrated && N.env.ok;
+  in.altBaro = N.env.altBaro;
+  in.gpsTimeValid = f.timeValid;
+  in.gpsTime = f.utc;
+  in.usedSnr = usedSnr;
+  in.usedCount = used;
+  in.steps = P.stepDet.count();
+  spoof::Result r = P.spoof.check(in);
+
+  // Время от GPS — только если часы не проверены и нет подозрения
+  if (f.timeValid) clockx::offerGps(f.utc, r.spoof);
+
+  N.fix = true;
+  N.fixType = f.fixType;
+  N.satsUsed = f.satsUsed;
+  N.hdop = f.hdop;
+  N.spoof = r.spoof;
+  N.spoofMask = r.mask;
+  if (r.spoof) {
+    P.spoofMaskLast = r.mask;
+    P.spoofAlertUntil = N.now + 60;  // тревога держится минуту после последнего подозрительного фикса
+    // Позиция — последняя достоверная (счисление по шагам — следующий этап)
+    N.src = 0;
+    N.altValid = false;
+    N.speedKmh = 0;
+  } else {
+    // Дрожание стоящего приёмника в путь не засчитываем: точку сдвигаем, только если ушли дальше погрешности
+    bool moved = !P.haveGood;
+    if (P.haveGood) {
+      double d = spoof::distanceM(P.goodLat, P.goodLon, f.lat, f.lon);
+      if (d > fmaxf(5.0f, f.hdop * 3.0f)) {
+        P.distM += d;
+        moved = true;
+      }
+    }
+    if (moved) {
+      P.haveGood = true;
+      P.goodLat = f.lat;
+      P.goodLon = f.lon;
+    }
+    P.goodAlt = f.altM;
+    N.src = 1;
+    N.altValid = f.altValid;
+    N.altGps = f.altM;
+    N.speedKmh = f.speedKmh;
+    N.courseDeg = f.courseDeg;
+    N.lat = f.lat;
+    N.lon = f.lon;
+    N.haveLat = true;
+    if (!g_fixAnnounced) {
+      g_fixAnnounced = true;
+      ui::play(ui::Sound::FIX);
+      updateSun();
+    }
+  }
+}
+
+void flushCamp() {
+  if (!P.campN) return;
+  ensureStorage();
+  proto::Point p;
+  for (uint8_t i = 0; i < P.campN; i++) {
+    if (proto::decodePoint(P.campBuf[i], proto::POINT_SIZE, p)) {
+      if (!storage::appendPoint(p, storage::CsvExtra{0, NAN})) g_sdError = true;
+    }
+  }
+  P.campN = 0;
+  P.lastFlushAt = N.now;
+  g_prefs.putULong("last", P.lastPointTime);
+}
+
+void logPoint() {
+  proto::Point p{};
+  p.time = N.now;
+  bool haveGps = N.fix && !N.spoof && N.src == 1;
+  double lat = haveGps ? N.lat : (P.haveGood ? P.goodLat : 0);
+  double lon = haveGps ? N.lon : (P.haveGood ? P.goodLon : 0);
+  p.lat7 = (lat || lon) ? c7(lat) : 0;
+  p.lon7 = (lat || lon) ? c7(lon) : 0;
+  p.src = haveGps ? 1 : 0;
+  p.spoof = N.spoof;
+  p.spoofMask = N.spoofMask;
+  if (N.spoof) {
+    const nmea::Fix& f = gps::parser().fix();
+    p.spoofLat7 = c7(f.lat);
+    p.spoofLon7 = c7(f.lon);
+  }
+  p.tempRaw100 = s16(N.env.tempRaw, 100);
+  p.tempCorr100 = s16(N.env.tempCorr, 100);
+  p.hum100 = isnan(N.env.hum) ? 0 : (uint16_t)lroundf(N.env.hum * 100);
+  p.pressPa = isnan(N.env.pressHpa) ? 0 : (uint32_t)lroundf(N.env.pressHpa * 100);
+  p.altBaro10 = s16(N.env.altBaro, 10);
+  p.altGps10 = haveGps && N.altValid ? s16(N.altGps, 10) : proto::NA16;
+  p.battMv = isnan(N.pwr.voltage) ? 0 : (uint16_t)lroundf(N.pwr.voltage * 1000);
+  p.battPct = N.pwr.pct;
+  p.sats = N.fix ? N.satsUsed : 0;
+  p.hdop10 = N.fix ? hdop10(N.hdop) : proto::HDOP_NA;
+  p.steps = P.stepDet.count();
+  p.heading10 = (uint16_t)lroundf(N.courseDeg * 10);
+  p.speed10 = haveGps ? (uint16_t)lroundf(N.speedKmh * 10) : 0;
+  P.lastPointTime = p.time;
+
+  bool camp = P.power.state() == logic::CAMP || P.power.state() == logic::CRITICAL ||
+              (P.power.state() == logic::ECONOMY && !P.power.moving());
+  if (camp) {
+    // На стоянке копим в RTC-памяти — SD не трогаем на каждой записи
+    proto::encodePoint(p, P.campBuf[P.campN++], proto::POINT_SIZE);
+    if (P.campN >= CAMP_BUF || N.now - P.lastFlushAt >= SD_FLUSH_S) flushCamp();
+  } else {
+    flushCamp();
+    ensureStorage();
+    if (!storage::appendPoint(p, storage::CsvExtra{N.courseDeg, N.pwr.currentMa})) g_sdError = true;
+    // Время последней записи в NVS — раз в 30 записей (~5 мин): бережём флеш
+    static uint8_t sinceSave = 0;
+    if (++sinceSave >= 30) {
+      sinceSave = 0;
+      g_prefs.putULong("last", P.lastPointTime);
+    }
+  }
+  if (radio::live()) {
+    uint8_t b[proto::POINT_SIZE];
+    sendPacketEvent(b, proto::encodePoint(p, b, sizeof(b)));
+  }
+}
+
+void addMark(uint8_t type, const char* text, uint8_t textLen) {
+  proto::Mark m{};
+  ensureStorage();
+  m.id = storage::nextMarkId();
+  m.time = N.now;
+  m.type = type;
+  if (P.haveGood) {
+    m.lat7 = c7(P.goodLat);
+    m.lon7 = c7(P.goodLon);
+  }
+  m.textLen = (uint8_t)proto::utf8Limit(text, textLen, proto::MAX_TEXT);
+  memcpy(m.text, text, m.textLen);
+  m.text[m.textLen] = 0;
+  if (!storage::appendMark(m)) g_sdError = true;
+  // Метки — и в живом, и в тихом сеансе
+  uint8_t b[96];
+  sendPacketEvent(b, proto::encodeMark(m, b, sizeof(b)));
+}
+
+// ---------------------------------------------------------------------------
+// Синхронизация
+// ---------------------------------------------------------------------------
+
+void startSync(uint8_t what, uint32_t since) {
+  flushCamp();
+  ensureStorage();
+  SyncJob j;
+  j.active = true;
+  j.what = what;
+  if (what == proto::CMD_SYNC_TRACK) {
+    j.idx = storage::firstPointSince(since);
+    j.end = storage::pointCount();
+  } else {
+    j.idx = storage::firstMarkSince(since);
+    j.end = storage::markCount();
+  }
+  if (g_sync.active) g_syncNext = j;
+  else g_sync = j;
+}
+
+void pumpSync() {
+  if (!g_sync.active) return;
+  if (!radio::secured()) {
+    g_sync.active = g_syncNext.active = false;
+    return;
+  }
+  uint8_t b[96];
+  // Порция за итерацию: темп ограничен буферами BLE — подобрать на железе
+  for (int i = 0; i < 4 && g_sync.idx < g_sync.end; i++, g_sync.idx++) {
+    size_t n = 0;
+    if (g_sync.what == proto::CMD_SYNC_TRACK) {
+      proto::Point p;
+      if (storage::readPoint(g_sync.idx, p)) n = proto::encodePoint(p, b, sizeof(b));
+    } else {
+      proto::Mark m;
+      if (storage::readMark(g_sync.idx, m)) n = proto::encodeMark(m, b, sizeof(b));
+    }
+    if (n) {
+      radio::sendEvent(b, n);
+      g_sync.sent++;
+    }
+  }
+  if (g_sync.idx >= g_sync.end) {
+    sendPacketEvent(b, proto::encodeSyncDone(g_sync.what, g_sync.sent, b, sizeof(b)));
+    g_sync = g_syncNext;
+    g_syncNext.active = false;
+  } else {
+    delay(4);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Команды телефона
+// ---------------------------------------------------------------------------
+
+void handleCommand(const uint8_t* data, size_t len) {
+  radio::touch();
+  proto::Command c;
+  uint8_t res = proto::decodeCommand(data, len, c);
+  uint8_t code = proto::commandCode(data, len);
+  uint8_t b[64];
+  if (res != proto::ACK_OK) {
+    sendPacketEvent(b, proto::encodeAck(code, res, b, sizeof(b)));
+    return;
+  }
+  switch (c.code) {
+    case proto::CMD_SET_TIME:
+      clockx::setFromPhone(c.time);
+      N.now = c.time;
+      if (c.tzMin != S.tzMin) {
+        S.tzMin = c.tzMin;
+        saveSettings();
+      }
+      break;
+    case proto::CMD_PHONE_POS:
+      P.spoof.setPhone(c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM, N.now);
+      break;
+    case proto::CMD_RECORD:
+      if (c.flag && !P.recording && (P.hikeStart == 0 || N.now - P.lastPointTime > 6 * 3600)) newHike(N.now);
+      P.recording = c.flag;
+      break;
+    case proto::CMD_MARK:
+      addMark(c.markType, c.text, c.textLen);
+      ui::play(ui::Sound::MARK);
+      break;
+    case proto::CMD_CLAP:
+      ui::play(ui::Sound::CLAP);
+      addMark(5, "", 0);
+      break;
+    case proto::CMD_FIND:
+      ui::play(ui::Sound::FIND);
+      break;
+    case proto::CMD_SET_INTERVALS:
+      S.logMovingS = c.a;
+      S.logCampS = c.b;
+      saveSettings();
+      applySettings();
+      break;
+    case proto::CMD_CALIB_ALT:
+      sensors::calibrateAltitude(c.altDm / 10.0f);
+      S.seaLevelHpa = sensors::seaLevel();
+      S.baroCalibrated = true;
+      saveSettings();
+      break;
+    case proto::CMD_CALIB_COMPASS:
+      res = proto::ACK_UNSUPPORTED;  // компас и счисление по шагам — следующий этап
+      break;
+    case proto::CMD_BLACKLIST: {
+      double la[proto::MAX_BLACKLIST], lo[proto::MAX_BLACKLIST];
+      uint16_t r[proto::MAX_BLACKLIST];
+      for (uint8_t i = 0; i < c.blCount; i++) {
+        la[i] = c.bl[i].lat7 / 1e7;
+        lo[i] = c.bl[i].lon7 / 1e7;
+        r[i] = c.bl[i].radiusM;
+      }
+      P.spoof.setBlacklist(la, lo, r, c.blCount);
+      ensureStorage();
+      storage::saveBlacklist(c.bl, c.blCount);
+      break;
+    }
+    case proto::CMD_GET_INFO:
+      break;  // ответ после ACK
+    case proto::CMD_SESSION:
+      radio::setLive(c.flag);
+      break;
+    case proto::CMD_BYE:
+      break;  // рвём после ACK
+    case proto::CMD_SET_GPS_MODE:
+      S.gpsMode = c.flag;
+      S.gpsPulseS = c.a;
+      saveSettings();
+      applySettings();
+      break;
+    case proto::CMD_SET_RADIO:
+      S.beaconS = c.a;
+      saveSettings();
+      break;
+    case proto::CMD_SYNC_TRACK:
+    case proto::CMD_SYNC_MARKS:
+      startSync(c.code, c.time);
+      break;
+    case proto::CMD_ACK_ALERT:
+      P.alerts.ack(c.flag);
+      break;
+  }
+  sendPacketEvent(b, proto::encodeAck(code, res, b, sizeof(b)));
+  if (c.code == proto::CMD_GET_INFO) sendInfo();
+  if (c.code == proto::CMD_BYE) radio::disconnect();
+}
+
+// ---------------------------------------------------------------------------
+// Кнопки
+// ---------------------------------------------------------------------------
+
+void handleButton(ui::Button e) {
+  switch (e) {
+    case ui::Button::A_SHORT:  // метка
+      addMark(0, "", 0);
+      ui::play(ui::Sound::MARK);
+      break;
+    case ui::Button::A_LONG:  // хлопушка
+      ui::play(ui::Sound::CLAP);
+      addMark(5, "", 0);
+      break;
+    case ui::Button::B_SHORT:  // экран / листать
+      ui::nextPage();
+      break;
+    case ui::Button::B_LONG:  // окно подключения + сопряжение нового телефона
+      radio::openWindow(makeBeacon(), true);
+      ui::play(ui::Sound::WINDOW);
+      break;
+    default:
+      break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Раз в секунду
+// ---------------------------------------------------------------------------
+
+void secondTick() {
+  g_tick++;
+  uint32_t ms = millis();
+  N.now = clockx::now();
+
+  // Датчики: в пути раз в 5 с, иначе каждое пробуждение
+  bool moving = P.power.state() == logic::MOVING;
+  if (!moving || ms - g_lastEnvMs >= 5000 || g_lastEnvMs == 0) {
+    g_lastEnvMs = ms;
+    readEnvAndPower();
+    if (N.pwr.ok && !isnan(N.pwr.currentMa)) {
+      P.avgMa += 0.01f * (N.pwr.currentMa - P.avgMa);
+    }
+  }
+  if (N.pwr.ok && !isnan(N.pwr.currentMa)) P.usedMah += N.pwr.currentMa / 3600.0f;
+
+  // Состояние питания и GPS
+  logic::Power before = P.power.state();
+  P.power.update(N.now, N.pwr.pct, P.stepDet.count());
+  if (before != P.power.state()) {
+    Serial.printf("[power] %u -> %u\n", before, P.power.state());
+    if (before == logic::CAMP) flushCamp();
+  }
+  bool newFixThisSecond = gps::takeNewFix();
+  if (newFixThisSecond) onFix();
+  bool wantGps = P.recording && (P.power.gpsContinuous((logic::GpsMode)S.gpsMode) ||
+                                 (P.power.gpsPulsed((logic::GpsMode)S.gpsMode) &&
+                                  P.pulse.update(N.now, N.fix, newFixThisSecond)));
+  if (!wantGps) P.pulse.stop();
+  gps::power(wantGps);
+  N.gpsOn = gps::isOn();
+  if (!N.gpsOn || !gps::parser().fix().valid) {
+    N.fix = false;
+    N.spoof = false;  // тревога сама держится ещё минуту (spoofAlertUntil)
+    N.spoofMask = 0;
+  }
+  N.satsView = gps::parser().satCount();
+  if (!N.fix) {
+    N.satsUsed = 0;
+    N.src = 0;
+  }
+  if (!N.haveLat && P.haveGood) {
+    N.lat = P.goodLat;
+    N.lon = P.goodLon;
+    N.haveLat = true;
+    updateSun();
+  }
+  if (g_tick % 600 == 0) updateSun();
+
+  // Запись
+  if (P.recording && P.hikeStart && (int32_t)(N.now - P.nextLogAt) >= 0) {
+    logPoint();
+    P.nextLogAt = N.now + P.power.logIntervalS();
+  }
+
+  // Тревоги
+  uint8_t active = 0;
+  if (N.spoof || (int32_t)(P.spoofAlertUntil - N.now) > 0) active |= proto::AL_SPOOF;
+  if (P.power.low()) active |= proto::AL_LOW_BATT;
+  if (P.power.critical()) active |= proto::AL_CRIT_BATT;
+  if (g_sdError && storage::sdOk() == false) active |= proto::AL_SD_ERROR;
+  logic::Alerts::Decision d = P.alerts.update(N.now, active);
+  if (d.openWindow) {
+    if (!radio::connected()) radio::openWindow(makeBeacon(), false);
+    uint8_t snd = d.fresh ? d.fresh : P.alerts.unacked();
+    if (snd & proto::AL_SPOOF) ui::play(ui::Sound::ALERT_SPOOF);
+    else if (snd & (proto::AL_LOW_BATT | proto::AL_CRIT_BATT)) ui::play(ui::Sound::ALERT_BATT);
+    uint8_t b[16];
+    sendPacketEvent(b, proto::encodeAlert(N.now, P.alerts.active(), d.fresh, N.pwr.pct, P.spoofMaskLast, b, sizeof(b)));
+  }
+
+  // Маячок по расписанию
+  uint16_t beaconEvery = P.power.beaconIntervalS(S.beaconS);
+  if (beaconEvery && radio::state() == radio::State::OFF && (int32_t)(N.now - P.nextBeaconAt) >= 0) {
+    radio::beacon(makeBeacon());
+    P.nextBeaconAt = N.now + beaconEvery;
+  } else if (radio::state() == radio::State::WINDOW && g_tick % 5 == 0) {
+    radio::updateBeacon(makeBeacon());
+  }
+
+  // Живой сеанс
+  if (radio::live()) {
+    proto::Status st = makeStatus();
+    uint8_t b[proto::STATUS_SIZE];
+    radio::sendStatus(b, proto::encodeStatus(st, b, sizeof(b)));
+    if (N.gpsOn && g_tick % 5 == 0) sendSats();
+  }
+
+  // Самопроверка раз в минуту, часы — раз в 10 мин
+  if (ms - g_lastSelftestMs >= 60000) {
+    g_lastSelftestMs = ms;
+    sensors::rescan();
+  }
+  if (ms - g_lastResyncMs >= 600000) {
+    g_lastResyncMs = ms;
+    clockx::resync();
+  }
+
+  ui::draw();
+}
+
+// ---------------------------------------------------------------------------
+// Сон
+// ---------------------------------------------------------------------------
+
+bool canSleep(uint32_t ms) {
+#ifdef FAKE_SENSORS
+  (void)ms;
+  return false;  // плата на USB, записи в PSRAM — не спим
+#else
+  bool resting = P.power.state() == logic::CAMP || P.power.state() == logic::CRITICAL ||
+                 (P.power.state() == logic::ECONOMY && !P.power.moving());
+  return resting && radio::state() == radio::State::OFF && !gps::isOn() && !ui::busy() && !ui::screenActive() &&
+         !ui::anyHeld() && !g_sync.active && (int32_t)(ms - g_motionCheckUntil) >= 0 &&
+         (int32_t)(ms - g_awakeUntil) >= 0;
+#endif
+}
+
+void goToSleep() {
+  N.now = clockx::now();
+  if (P.campN && N.now - P.lastFlushAt >= SD_FLUSH_S) flushCamp();
+  // Будим на ближайшее: запись (если идёт) или маячок (если не невидимка); иначе через час
+  uint32_t wakeAt = N.now + 3600;
+  if (P.recording && P.hikeStart && (int32_t)(P.nextLogAt - wakeAt) < 0) wakeAt = P.nextLogAt;
+  uint16_t beaconEvery = P.power.beaconIntervalS(S.beaconS);
+  if (beaconEvery && (int32_t)(P.nextBeaconAt - wakeAt) < 0) wakeAt = P.nextBeaconAt;
+  int32_t sleepS = (int32_t)(wakeAt - N.now);
+  if (sleepS < 1) sleepS = 1;
+  if (sleepS > 3600) sleepS = 3600;
+
+  memcpy(g_rtcBlob, &P, sizeof(P));
+  sensors::prepareSleep();
+  gps::power(false);
+  radio::shutdown();
+  ui::sleep();
+  Serial.printf("[sleep] %ld с\n", (long)sleepS);
+  Serial.flush();
+
+  esp_sleep_enable_timer_wakeup((uint64_t)sleepS * 1000000ULL);
+  // Кнопки (замыкают на GND) и прерывание движения MPU6050 (активный HIGH)
+  rtc_gpio_pullup_en((gpio_num_t)PIN_BTN_A);
+  rtc_gpio_pullup_en((gpio_num_t)PIN_BTN_B);
+  rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_A);
+  rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_B);
+  esp_sleep_enable_ext1_wakeup((1ULL << PIN_BTN_A) | (1ULL << PIN_BTN_B), ESP_EXT1_WAKEUP_ANY_LOW);
+  if (sensors::presence().mpu) esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_MPU_INT, 1);
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);  // держать подтяжки кнопок
+  esp_deep_sleep_start();
+}
+
+// ---------------------------------------------------------------------------
+// Консоль отладки (USB): help
+// ---------------------------------------------------------------------------
+
+void console() {
+  static char line[96];
+  static size_t n = 0;
+  while (Serial.available()) {
+    char ch = Serial.read();
+    if (ch != '\n' && ch != '\r') {
+      if (n < sizeof(line) - 1) line[n++] = ch;
+      continue;
+    }
+    if (!n) continue;
+    line[n] = 0;
+    n = 0;
+    if (!strcmp(line, "help")) {
+      Serial.println("st — состояние; i2c — сканер шины; gps on|off|echo — GPS; pcas <тело> — команда модулю;"
+                     " win — окно BLE; info — чип и SD");
+    } else if (!strcmp(line, "st")) {
+      Serial.printf("t=%lu доверие=%d режим=%u запись=%d T=%.2f/%.2f P=%.1f H=%.0f U=%.3fВ I=%.1fмА %u%% шаги=%lu\n",
+                    (unsigned long)N.now, clockx::trusted(), P.power.state(), P.recording, N.env.tempRaw,
+                    N.env.tempCorr, N.env.pressHpa, N.env.hum, N.pwr.voltage, N.pwr.currentMa, N.pwr.pct,
+                    (unsigned long)P.stepDet.count());
+      Serial.printf("GPS вкл=%d фикс=%d %.6f,%.6f спутн=%u/%u HDOP=%.1f подмена=%d маска=0x%02X NMEA=%lu ошибок=%lu\n",
+                    N.gpsOn, N.fix, N.lat, N.lon, N.satsUsed, N.satsView, N.hdop, N.spoof, N.spoofMask,
+                    (unsigned long)gps::parser().sentences(), (unsigned long)gps::parser().checksumErrors());
+    } else if (!strcmp(line, "i2c")) {
+      for (uint8_t a = 1; a < 127; a++) {
+        if (sensors::i2cProbe(a)) Serial.printf("I2C 0x%02X\n", a);
+      }
+    } else if (!strcmp(line, "gps on")) {
+      gps::power(true);
+    } else if (!strcmp(line, "gps off")) {
+      gps::power(false);
+    } else if (!strcmp(line, "gps echo")) {
+      static bool echo = false;
+      echo = !echo;
+      gps::setEcho(echo);
+    } else if (!strncmp(line, "pcas ", 5)) {
+      gps::sendCommand(line + 5);
+    } else if (!strcmp(line, "win")) {
+      radio::openWindow(makeBeacon(), true);
+    } else if (!strcmp(line, "info")) {
+      Serial.printf("Чип: %s, ядер %d, PSRAM %u, SD %d (%lu/%lu МБ)\n", ESP.getChipModel(), ESP.getChipCores(),
+                    ESP.getPsramSize(), storage::sdOk(), (unsigned long)storage::freeMb(),
+                    (unsigned long)storage::totalMb());
+    } else {
+      Serial.println("? help");
+    }
+  }
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// Самопроверка (ТЗ, раздел 13) — общая для INFO и экрана
+// ---------------------------------------------------------------------------
+
+uint8_t buildChecks(proto::Check* c) {
+  const sensors::Presence& pr = sensors::presence();
+  uint8_t n = 0;
+  c[n++] = {1, (uint8_t)(pr.oled ? 0 : 2), (uint8_t)(pr.oled ? 0 : 1), 0x3C};
+  c[n++] = {2, (uint8_t)(pr.ina ? 0 : 2), (uint8_t)(pr.ina ? 0 : 1), 0x40};
+  c[n++] = {3, (uint8_t)(pr.mpu ? 0 : 2), (uint8_t)(pr.mpu ? 0 : 1), 0x68};
+  // Компас пока не калибруется (следующий этап) — честно «не откалиброван»
+  c[n++] = {4, (uint8_t)(pr.compass ? 1 : 2), (uint8_t)(pr.compass ? 3 : 1), pr.compass ? pr.compassAddr : (uint8_t)0x0D};
+  if (!pr.bme) c[n++] = {5, 2, 1, 0x76};
+  else if (!pr.bmeIdOk) c[n++] = {5, 2, 2, pr.bmeAddr};
+  else c[n++] = {5, 0, 0, pr.bmeAddr};
+  if (!storage::sdOk()) c[n++] = {6, 2, 9, 0};
+  else if (storage::freeMb() < 100) c[n++] = {6, 1, 10, 0};
+  else c[n++] = {6, 0, 0, 0};
+  if (!gps::isOn()) c[n++] = {7, 0, 7, 0};
+  else if (gps::onSeconds() > 5 && !gps::alive()) c[n++] = {7, 2, 4, 0};
+  else if (N.spoof) c[n++] = {7, 1, 5, 0};
+  else if (!N.fix) c[n++] = {7, 1, 6, 0};
+  else c[n++] = {7, 0, 0, 0};
+  if (P.power.critical()) c[n++] = {8, 2, 8, 0};
+  else if (P.power.low()) c[n++] = {8, 1, 8, 0};
+  else c[n++] = {8, 0, 0, 0};
+  if (!clockx::rtcPresent()) c[n++] = {9, 2, 1, 0};
+  else if (!clockx::trusted()) c[n++] = {9, 1, 11, 0};
+  else c[n++] = {9, 0, 0, 0};
+  return n;
+}
+
+// ---------------------------------------------------------------------------
+
+void setup() {
+  setCpuFrequencyMhz(80);  // BLE и датчикам хватает, ток меньше
+  Serial.begin(115200);
+  g_bootMs = millis();
+
+  esp_sleep_wakeup_cause_t wake = esp_sleep_get_wakeup_cause();
+  bool cold = wake == ESP_SLEEP_WAKEUP_UNDEFINED;
+
+  memcpy(&P, g_rtcBlob, sizeof(P));
+  if (P.magic != PERSIST_MAGIC) initPersist();
+  P.bootCount++;
+
+  loadSettings();
+  applySettings();
+  clockx::begin();
+  N.now = clockx::now();
+  sensors::begin(cold);
+  if (wake == ESP_SLEEP_WAKEUP_EXT0) {
+    sensors::clearMotion();
+    g_motionCheckUntil = millis() + 30000;  // считаем шаги 30 с: вдруг пошли
+  }
+  gps::begin();
+  int wakePin = -1;
+  if (wake == ESP_SLEEP_WAKEUP_EXT1) {
+    uint64_t st = esp_sleep_get_ext1_wakeup_status();
+    wakePin = (st & (1ULL << PIN_BTN_A)) ? PIN_BTN_A : ((st & (1ULL << PIN_BTN_B)) ? PIN_BTN_B : -1);
+  }
+  ui::begin(cold, wakePin);
+
+  if (cold) {
+    delay(300);
+    Serial.printf("\nvabuGEOde %u.%u.%u, чип %s%s\n", FW_MAJOR, FW_MINOR, FW_PATCH, ESP.getChipModel(),
+#ifdef FAKE_SENSORS
+                  " [FAKE_SENSORS]"
+#else
+                  ""
+#endif
+    );
+    ui::splash(ESP.getChipModel());
+    g_powerOnUtc = N.now;
+    ensureStorage();
+    loadBlacklist();
+    // Продолжить поход, если последняя запись свежее 6 ч; иначе новый
+    uint32_t hike = g_prefs.getULong("hike", 0);
+    uint32_t last = g_prefs.getULong("last", 0);
+    if (hike && last && N.now >= last && N.now - last < 6 * 3600) {
+      P.hikeStart = hike;
+      P.lastPointTime = last;
+      storage::openHike(hike);
+    } else {
+      newHike(N.now);
+    }
+    P.nextLogAt = N.now;
+    P.nextBeaconAt = N.now;
+    // После включения 2 мин окно подключения (без сопряжения новых) и не спим
+    g_awakeUntil = millis() + 120000;
+    radio::openWindow(makeBeacon(), false);
+  } else if (wake == ESP_SLEEP_WAKEUP_EXT1) {
+    g_awakeUntil = millis() + 3000;  // дать кнопке отработать
+  }
+  readEnvAndPower();
+  g_lastSecondMs = millis() - 1000;  // первый тик — сразу, не ждать секунду
+}
+
+void loop() {
+  uint32_t ms = millis();
+
+  handleButton(ui::poll());
+
+  // Акселерометр 25 Гц — шаги
+  if (ms - g_lastAccelMs >= 40) {
+    g_lastAccelMs = ms;
+    float ax, ay, az;
+    if (sensors::readAccel(ax, ay, az)) P.stepDet.feed(ax, ay, az, ms);
+  }
+
+  gps::poll();
+
+  if (ms - g_lastSecondMs >= 1000) {
+    g_lastSecondMs = ms;
+    secondTick();
+  }
+
+  uint8_t cmd[247];
+  size_t len;
+  while (radio::popCommand(cmd, len)) handleCommand(cmd, len);
+  pumpSync();
+  radio::poll();
+  console();
+
+  if (canSleep(millis())) goToSleep();
+  delay(2);
+}

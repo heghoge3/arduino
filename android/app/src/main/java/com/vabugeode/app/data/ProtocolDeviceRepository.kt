@@ -17,6 +17,7 @@ import com.vabugeode.app.model.Satellite
 import com.vabugeode.app.model.SelfCheck
 import com.vabugeode.app.model.TrackPoint
 import com.vabugeode.app.protocol.AckMsg
+import com.vabugeode.app.protocol.AlertMsg
 import com.vabugeode.app.protocol.CheckMsg
 import com.vabugeode.app.protocol.Cmd
 import com.vabugeode.app.protocol.Codec
@@ -113,6 +114,13 @@ class ProtocolDeviceRepository(
                 if (link.value == LinkState.CONNECTED) send(Cmd.GetInfo)
             }
         }
+        // «Телефон тут»: без команд 60 с устройство само рвёт связь (gadget-logic.md, 1.3)
+        scope.launch {
+            while (isActive) {
+                delay(20_000)
+                if (link.value == LinkState.CONNECTED && !stats.value.syncing) send(Cmd.Session(live = true))
+            }
+        }
         scope.launch {
             while (isActive) {
                 delay(150)
@@ -197,6 +205,7 @@ class ProtocolDeviceRepository(
             is SyncDoneMsg -> {
                 if (msg.what == Proto.CMD_SYNC_MARKS) stats.value = stats.value.copy(syncing = false)
             }
+            is AlertMsg -> if (msg.fresh != 0) _notices.tryEmit("Тревога: ${alertText(msg.fresh)}")
             is AckMsg -> if (msg.result != Proto.ACK_OK) {
                 _notices.tryEmit("Устройство отклонило ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
             }
@@ -222,6 +231,8 @@ class ProtocolDeviceRepository(
             stats.value = stats.value.copy(syncing = true)
             send(Cmd.SyncTrack(sincePoint))
             send(Cmd.SyncMarks(sinceMark))
+            // Живой сеанс: устройство начнёт слать STATUS раз в секунду (protocol.md, порядок подключения)
+            send(Cmd.Session(live = true))
         }
         info.value = buildInfo(m, status.value)
     }
@@ -252,7 +263,7 @@ class ProtocolDeviceRepository(
         } else emptyList()
         return DeviceStatus(
             timeUtcMs = timeUtc * 1000,
-            mode = PowerMode.entries.getOrElse(mode) { PowerMode.IDLE_LOG },
+            mode = PowerMode.entries.getOrElse(mode) { PowerMode.CAMP },
             recording = has(Proto.F_RECORDING),
             gps = GpsState(
                 fix = fixE, satsUsed = satsUsed, satsInView = satsView, hdop = hdop ?: 99.9,
@@ -363,6 +374,7 @@ class ProtocolDeviceRepository(
             is PointMsg -> "POINT"
             is SyncDoneMsg -> "SYNC_DONE ${if (m.what == Proto.CMD_SYNC_TRACK) "трек" else "метки"}: ${m.count}"
             is AckMsg -> "ACK ${cmdNameByCode(m.cmd)} → ${ackText(m.result)}"
+            is AlertMsg -> "ALERT ${alertText(m.alerts)}"
             else -> "?"
         }
 
@@ -382,8 +394,20 @@ class ProtocolDeviceRepository(
             Proto.CMD_GET_INFO -> "GET_INFO"
             Proto.CMD_SYNC_TRACK -> "SYNC_TRACK"
             Proto.CMD_SYNC_MARKS -> "SYNC_MARKS"
+            Proto.CMD_ACK_ALERT -> "ACK_ALERT"
+            Proto.CMD_SET_RADIO -> "SET_RADIO"
+            Proto.CMD_SET_GPS_MODE -> "SET_GPS_MODE"
+            Proto.CMD_BYE -> "BYE"
+            Proto.CMD_SESSION -> "SESSION"
             else -> "0x%02X".format(code)
         }
+
+        fun alertText(mask: Int) = buildList {
+            if (mask and Proto.AL_SPOOF != 0) add("подмена GPS")
+            if (mask and Proto.AL_LOW_BATT != 0) add("низкий заряд")
+            if (mask and Proto.AL_CRIT_BATT != 0) add("критический заряд")
+            if (mask and Proto.AL_SD_ERROR != 0) add("ошибка SD")
+        }.joinToString(", ").ifEmpty { "нет" }
 
         fun ackText(r: Int) = when (r) {
             Proto.ACK_OK -> "OK"

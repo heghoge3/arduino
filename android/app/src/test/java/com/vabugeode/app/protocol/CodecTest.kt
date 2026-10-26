@@ -15,7 +15,7 @@ class CodecTest {
         altGps = 71.3, speedKmh = 4.3, courseDeg = 123.4,
         tempRaw = 7.85, tempCorr = -1.25, humidity = 81.5, pressureHpa = 1012.37,
         altBaro = 68.2, trend3h = -3.4, battMv = 3987, battMa = 47.3, battPct = 83, usedMah = 512,
-        steps = 12345, headingDeg = 359.9, distanceM = 6789, hoursLeft = 41.5, seq = 65535,
+        steps = 12345, headingDeg = 359.9, distanceM = 6789, hoursLeft = 41.5, seq = 65535, alerts = 0b1010,
     )
 
     @Test
@@ -35,7 +35,7 @@ class CodecTest {
     @Test
     fun statusHeaderAndLittleEndian() {
         val b = Codec.encode(status)
-        assertEquals(1, b[0].toInt())                    // версия
+        assertEquals(2, b[0].toInt())                    // версия
         assertEquals(Proto.MSG_STATUS, b[1].toInt())     // тип
         // time_utc = 1 793 000 000 = 0x6ADF0240 → 40 02 DF 6A
         assertArrayEquals(byteArrayOf(0x40, 0x02, 0xDF.toByte(), 0x6A), b.copyOfRange(2, 6))
@@ -66,6 +66,8 @@ class CodecTest {
             MarkMsg(8, 1_793_000_200, 5, null, null, ""),
             SyncDoneMsg(Proto.CMD_SYNC_TRACK, 1234),
             AckMsg(Proto.CMD_MARK, Proto.ACK_BAD_ARGS),
+            AlertMsg(1_793_000_300, 3, 1, 14, 5),
+            InfoMsg(0, 1, 0, 1, 10, 0, 0, 0, null, emptyList(), gpsMode = 1, gpsPulseS = 60, beaconS = 0),
         )
         msgs.forEach { assertEquals(it, Codec.decodeMsg(Codec.encode(it))) }
     }
@@ -84,6 +86,7 @@ class CodecTest {
             Cmd.Blacklist(listOf(Cmd.Blacklist.Entry(60.0346, 30.5693, 1000), Cmd.Blacklist.Entry(60.1161, 31.3864, 1000))),
             Cmd.GetInfo,
             Cmd.SyncTrack(1_793_000_000), Cmd.SyncMarks(0),
+            Cmd.Session(true), Cmd.Session(false), Cmd.Bye, Cmd.SetGpsMode(true, 45), Cmd.SetRadio(0), Cmd.AckAlert(3),
         )
         cmds.forEach { assertEquals(it, Codec.decodeCmd(Codec.encode(it))) }
     }
@@ -107,9 +110,19 @@ class CodecTest {
         assertEquals("я".repeat(30), d.text)
     }
 
+    @Test
+    fun beaconRoundTrip() {
+        val m = BeaconMsg(1, 0b101, 2, -3.5, 14, 0, null, 1_793_000_000, 0xFFFF, 255)
+        val b = Codec.encodeBeacon(m)
+        assertEquals(Proto.BEACON_SIZE, b.size)
+        assertEquals(m, Codec.decodeBeacon(b))
+        b[1] = 0x00
+        assertNull("чужой маячок", Codec.decodeBeacon(b))
+    }
+
     @Test(expected = ProtocolException::class)
     fun wrongVersionRejected() {
-        val b = Codec.encode(status); b[0] = 2
+        val b = Codec.encode(status); b[0] = 1
         Codec.decodeMsg(b)
     }
 

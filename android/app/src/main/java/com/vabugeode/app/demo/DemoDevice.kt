@@ -394,7 +394,7 @@ class DemoDevice(private val scope: CoroutineScope) {
         }
         current = DeviceStatus(
             timeUtcMs = simMs,
-            mode = if (resting) PowerMode.IDLE_LOG else PowerMode.MOVING,
+            mode = if (resting) PowerMode.CAMP else PowerMode.MOVING,
             recording = recording,
             gps = gps, env = env, power = powerNow(),
             steps = steps, headingDeg = norm360(heading),
@@ -531,6 +531,8 @@ class DemoDevice(private val scope: CoroutineScope) {
             is Cmd.CalibCompass -> {}
             is Cmd.Blacklist -> blacklist = cmd.points
             Cmd.GetInfo, is Cmd.SyncTrack, is Cmd.SyncMarks -> {} // ответы шлёт транспорт
+            is Cmd.Session, Cmd.Bye -> {} // режим сеанса ведёт транспорт
+            is Cmd.SetGpsMode, is Cmd.SetRadio, is Cmd.AckAlert -> {}
         }
         publish()
         return Proto.ACK_OK

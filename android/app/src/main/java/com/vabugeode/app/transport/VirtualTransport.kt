@@ -34,6 +34,8 @@ class VirtualTransport(
     override val incoming = MutableSharedFlow<Packet>(extraBufferCapacity = 8192)
 
     private var session: Job? = null
+    /** Живой сеанс: STATUS и SATS шлются только после SESSION live — как в прошивке. */
+    private var live = false
     private var seq = 0
     private var sentPoints = 0
     private var sentMarks = 0
@@ -59,11 +61,14 @@ class VirtualTransport(
             // Новые записи шлём только после подключения; старое телефон заберёт синхронизацией
             sentPoints = device.pointCount
             sentMarks = device.markCount
+            live = false
             state.value = LinkState.CONNECTED
             var tick = 0
             while (isActive) {
-                emit(Channel.STATUS, device.statusMsg(seq++))
-                if (tick % 5 == 0) emit(Channel.STATUS, device.satsMsg())
+                if (live) {
+                    emit(Channel.STATUS, device.statusMsg(seq++))
+                    if (tick % 5 == 0) emit(Channel.STATUS, device.satsMsg())
+                }
                 pushNew()
                 tick++
                 delay(1000)
@@ -105,6 +110,8 @@ class VirtualTransport(
                 emit(Channel.EVENT, SyncDoneMsg(Proto.CMD_SYNC_MARKS, (to - from).toLong()))
                 sentMarks = maxOf(sentMarks, to)
             }
+            is Cmd.Session -> live = cmd.live
+            Cmd.Bye -> disconnect()
             else -> pushNew() // метка по команде появится сразу
         }
         return true

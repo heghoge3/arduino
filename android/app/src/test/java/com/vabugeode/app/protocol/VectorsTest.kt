@@ -21,6 +21,7 @@ class VectorsTest {
                 altGps = 71.3, speedKmh = 4.3, courseDeg = 123.4, tempRaw = 7.85, tempCorr = -1.25,
                 humidity = 81.5, pressureHpa = 1012.37, altBaro = 68.2, trend3h = -3.4, battMv = 3987, battMa = 47.3,
                 battPct = 83, usedMah = 512, steps = 12345, headingDeg = 359.9, distanceM = 6789, hoursLeft = 41.5, seq = 7,
+                alerts = Proto.AL_SPOOF,
             )
         ),
         "status_no_data" to Codec.encode(
@@ -33,7 +34,7 @@ class VectorsTest {
             )
         ),
         "sats" to Codec.encode(SatsMsg(listOf(SatMsg(0, 5, 41, true), SatMsg(1, 33, 18, false)))),
-        "info" to Codec.encode(InfoMsg(0, 1, 0, 1, 3600, 7580, 7400, 0b11, 1_793_000_000, listOf(CheckMsg(4, 1, 3, 0x0D), CheckMsg(7, 0, 0, 0)))),
+        "info" to Codec.encode(InfoMsg(0, 1, 0, 1, 3600, 7580, 7400, 0b11, 1_793_000_000, listOf(CheckMsg(4, 1, 3, 0x0D), CheckMsg(7, 0, 0, 0)), gpsMode = 1, gpsPulseS = 45, beaconS = 30)),
         "mark" to Codec.encode(MarkMsg(7, 1_793_000_100, 2, 60.1, 30.5, "Граффити")),
         "point_spoof" to Codec.encode(
             PointMsg(
@@ -45,6 +46,13 @@ class VectorsTest {
         ),
         "sync_done" to Codec.encode(SyncDoneMsg(Proto.CMD_SYNC_TRACK, 1234)),
         "ack" to Codec.encode(AckMsg(Proto.CMD_MARK, Proto.ACK_BAD_ARGS)),
+        "alert" to Codec.encode(AlertMsg(1_793_000_300, Proto.AL_SPOOF or Proto.AL_LOW_BATT, Proto.AL_SPOOF, 14, 0b1000101)),
+        "beacon" to Codec.encodeBeacon(
+            BeaconMsg(
+                mode = 1, flags = Proto.B_RECORDING or Proto.B_FIX or Proto.B_SD_OK, alerts = 0, tempCorr = -1.25,
+                battPct = 83, satsUsed = 9, pressureHpa = 1012.4, lastRecordUtc = 1_793_000_000, hikeId = 0x0240, counter = 200,
+            )
+        ),
         "cmd_set_time" to Codec.encode(Cmd.SetTime(1_793_000_000, 180)),
         "cmd_phone_pos" to Codec.encode(Cmd.PhonePos(59.9386, 30.3141, 25)),
         "cmd_record_on" to Codec.encode(Cmd.Record(true)),
@@ -54,6 +62,11 @@ class VectorsTest {
         "cmd_calib_alt" to Codec.encode(Cmd.CalibAlt(45.5)),
         "cmd_blacklist" to Codec.encode(Cmd.Blacklist(listOf(Cmd.Blacklist.Entry(60.0346, 30.5693, 1000)))),
         "cmd_get_info" to Codec.encode(Cmd.GetInfo),
+        "cmd_session_live" to Codec.encode(Cmd.Session(true)),
+        "cmd_bye" to Codec.encode(Cmd.Bye),
+        "cmd_set_gps_mode" to Codec.encode(Cmd.SetGpsMode(true, 45)),
+        "cmd_set_radio" to Codec.encode(Cmd.SetRadio(30)),
+        "cmd_ack_alert" to Codec.encode(Cmd.AckAlert(Proto.AL_SPOOF)),
         "cmd_sync_track" to Codec.encode(Cmd.SyncTrack(1_793_000_000)),
     )
 
