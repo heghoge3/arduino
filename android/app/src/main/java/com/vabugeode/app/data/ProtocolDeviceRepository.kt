@@ -321,6 +321,7 @@ class ProtocolDeviceRepository(
                 6 -> "Карта SD"
                 7 -> "GPS ATGM336H"
                 8 -> "Аккумулятор"
+                9 -> "Часы DS1302"
                 else -> "Узел #${c.id}"
             }
             val okDetail = when (c.id) {
@@ -332,6 +333,7 @@ class ProtocolDeviceRepository(
                 6 -> f("FAT32, свободно %.1f ГБ", info.sdFreeMb / 1024.0)
                 7 -> st?.let { f("NMEA идёт, %d спутн., HDOP %.1f", it.gps.satsUsed, it.gps.hdop) }
                 8 -> st?.let { f("%d %%, хватит на ~%.0f ч", it.power.percent, it.power.hoursLeft) }
+                9 -> "Идут, время сверено"
                 else -> null
             } ?: "Отвечает"
             val detail = when (c.code) {
@@ -346,9 +348,10 @@ class ProtocolDeviceRepository(
                 8 -> "Низкий заряд${st?.let { " — ${it.power.percent} %" } ?: ""}"
                 9 -> "Карта не вставлена или не читается"
                 10 -> "Мало места на карте"
+                11 -> "Часы стояли (села батарейка?) — время не проверено, ждём телефон или GPS"
                 else -> "Код ${c.code}"
             }
-            val addr = if (c.addr != 0) "0x%02X".format(c.addr) else when (c.id) { 6 -> "SPI"; 7 -> "UART"; else -> null }
+            val addr = if (c.addr != 0) "0x%02X".format(c.addr) else when (c.id) { 6 -> "SPI"; 7 -> "UART"; 9 -> "3-wire"; else -> null }
             return SelfCheck(name, detail, level, addr)
         }
 

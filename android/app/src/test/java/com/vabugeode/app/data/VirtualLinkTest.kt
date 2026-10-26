@@ -46,7 +46,7 @@ class VirtualLinkTest {
         assertEquals(r.dev.markCount, r.repo.marks.value.size)
         assertEquals(r.dev.hikeStartUtcSec * 1000, r.repo.hikeStartMs.value)
         assertTrue(r.repo.status.value != null)
-        assertTrue(r.repo.info.value!!.checks.size == 8)
+        assertEquals(9, r.repo.info.value!!.checks.size)
         assertEquals(0L, r.repo.stats.value.errors)
     }
 

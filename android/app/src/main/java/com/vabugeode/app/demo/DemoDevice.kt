@@ -467,6 +467,8 @@ class DemoDevice(private val scope: CoroutineScope) {
                 CheckMsg(6, 0, 0, 0),
                 gpsCheck,
                 CheckMsg(8, if (st.power.percent < 20) 1 else 0, if (st.power.percent < 20) 8 else 0, 0),
+                // Часы DS1302: до первой сверки с телефоном время считается непроверенным
+                if (timeSynced) CheckMsg(9, 0, 0, 0) else CheckMsg(9, 1, 11, 0),
             ),
         )
     }
