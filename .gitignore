@@ -1,0 +1,11 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+captures/
+# PlatformIO
+.pio/
+.vscode/
