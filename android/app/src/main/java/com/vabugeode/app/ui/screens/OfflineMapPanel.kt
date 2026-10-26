@@ -56,7 +56,7 @@ fun OfflineMapPanel() {
             }
             else -> Text(
                 "Не загружена — карта показывается только с интернетом. " +
-                    "Выберите файл региона .pmtiles (Ленобласть ≈ 570 МБ).",
+                    "Выберите файл региона .pmtiles (СПб и Ленобласть ≈ 390 МБ).",
                 style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
             )
         }
