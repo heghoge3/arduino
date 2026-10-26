@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -23,58 +24,69 @@ import com.vabugeode.app.data.OfflineMap
 import com.vabugeode.app.ui.Fmt
 import com.vabugeode.app.ui.components.Meter
 import com.vabugeode.app.ui.components.Panel
+import com.vabugeode.app.ui.components.Pill
 import com.vabugeode.app.ui.components.TermButton
 import com.vabugeode.app.ui.theme.Palette
 import kotlinx.coroutines.launch
 
-/** Настройки → офлайн-карта: загрузить файл .pmtiles из памяти телефона или удалить. */
+/** Настройки → офлайн-карты: схема и спутник. */
 @Composable
-fun OfflineMapPanel() {
+fun OfflineMapsPanel() {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { OfflineMap.refresh(context) }
+    Panel(accent = Palette.Geo, title = "Офлайн-карты") {
+        MapSlot(
+            OfflineMap.Kind.SCHEME,
+            "Векторный .pmtiles (OpenStreetMap). СПб и Ленобласть ≈ 390 МБ.",
+        )
+        Spacer(Modifier.height(14.dp))
+        MapSlot(
+            OfflineMap.Kind.SATELLITE,
+            "Растровый .mbtiles или .pmtiles (JPEG/PNG/WebP). Подписи берутся из схемы, если она загружена.",
+        )
+        Spacer(Modifier.height(10.dp))
+        Text("Без файлов карта показывается только с интернетом.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+    }
+}
+
+@Composable
+private fun MapSlot(kind: OfflineMap.Kind, hint: String) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val state by OfflineMap.state.collectAsStateWithLifecycle()
+    val state by OfflineMap.state(kind).collectAsStateWithLifecycle()
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { OfflineMap.refresh(context) }
-
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
-            error = OfflineMap.import(context, uri).exceptionOrNull()?.message
+            error = OfflineMap.import(context, kind, uri).exceptionOrNull()?.message
         }
     }
-
     val s = state
-    Panel(accent = if (s is OfflineMap.State.Ready) Palette.Good else Palette.Warn, title = "Офлайн-карта") {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(kind.title.uppercase(), style = MaterialTheme.typography.labelLarge, color = Palette.Text, modifier = Modifier.weight(1f))
         when (s) {
-            is OfflineMap.State.Ready -> Text(
-                "Загружена · ${Fmt.num(s.bytes / 1_048_576.0, 0)} МБ. Карта работает без интернета.",
-                style = MaterialTheme.typography.bodyMedium, color = Palette.Text,
-            )
-            is OfflineMap.State.Copying -> {
-                Text("Копируем файл… ${(s.fraction * 100).toInt()} %", style = MaterialTheme.typography.bodyMedium, color = Palette.Text)
-                Spacer(Modifier.height(8.dp))
-                Meter(s.fraction, Palette.Geo)
-            }
-            else -> Text(
-                "Не загружена — карта показывается только с интернетом. " +
-                    "Выберите файл региона .pmtiles (СПб и Ленобласть ≈ 390 МБ).",
-                style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
-            )
+            is OfflineMap.State.Ready -> Pill("${Fmt.num(s.bytes / 1_048_576.0, 0)} МБ", Palette.Good)
+            is OfflineMap.State.Copying -> Pill("${(s.fraction * 100).toInt()} %", Palette.Geo)
+            else -> Pill("нет", Palette.TextDim)
         }
-        error?.let {
-            Spacer(Modifier.height(6.dp))
-            Text(it, style = MaterialTheme.typography.labelMedium, color = Palette.Bad)
-        }
-        if (s !is OfflineMap.State.Copying) {
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TermButton(if (s is OfflineMap.State.Ready) "Заменить файл" else "Загрузить файл", Palette.Geo) {
-                    error = null
-                    pick.launch(arrayOf("*/*"))
-                }
-                if (s is OfflineMap.State.Ready) TermButton("Удалить", Palette.Bad) { OfflineMap.delete(context) }
-            }
-        }
+    }
+    if (s is OfflineMap.State.Copying) {
         Spacer(Modifier.height(6.dp))
-        Text("Карта открывается заново при переходе на вкладку.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+        Meter(s.fraction, Palette.Geo)
+    } else {
+        Text(hint, style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+    }
+    error?.let {
+        Spacer(Modifier.height(4.dp))
+        Text(it, style = MaterialTheme.typography.labelMedium, color = Palette.Bad)
+    }
+    if (s !is OfflineMap.State.Copying) {
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TermButton(if (s is OfflineMap.State.Ready) "Заменить" else "Загрузить файл", Palette.Geo) {
+                error = null
+                pick.launch(arrayOf("*/*"))
+            }
+            if (s is OfflineMap.State.Ready) TermButton("Удалить", Palette.Bad) { OfflineMap.delete(context, kind) }
+        }
     }
 }

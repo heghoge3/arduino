@@ -79,7 +79,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             )
         }
         WatchPanel(vm) { guide = true }
-        OfflineMapPanel()
+        OfflineMapsPanel()
         Panel(accent = Palette.Geo) {
             SectionLabel("Виртуальное устройство", color = Palette.Geo)
             Spacer(Modifier.height(6.dp))
@@ -142,7 +142,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         Panel {
             Logo(size = 28.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Версия 0.7.0 · на железе не проверено", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+            Text("Версия 0.7.1 · на железе не проверено", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             Text("Карта: © OpenStreetMap, Protomaps, OpenFreeMap", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             Text("Шрифты: VT323, IBM Plex Mono (OFL)", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
         }

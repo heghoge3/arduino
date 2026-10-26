@@ -1,6 +1,8 @@
 package com.vabugeode.app.ui.screens
 
 import android.os.Build
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.Satellite
 import com.vabugeode.app.data.OfflineMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.border
@@ -183,19 +185,26 @@ fun TrackMap(
             map = m
             m.uiSettings.isRotateGesturesEnabled = false
             m.uiSettings.isLogoEnabled = false
-            // Есть файл региона — карта без интернета; нет — онлайн-стиль
-            val offline = OfflineMap.styleJson(context)
-            val builder = if (offline != null) Style.Builder().fromJson(offline) else Style.Builder().fromUri(STYLE_URL)
-            m.setStyle(builder) { s ->
-                setupLayers(s)
-                style = s
-            }
         }
         onDispose {
             lifecycle.removeObserver(observer)
             mapView.onPause()
             mapView.onStop()
             mapView.onDestroy()
+        }
+    }
+
+    // Подложка: спутник или схема (офлайн-файлы), без файлов — онлайн-схема
+    val hasSat = remember { OfflineMap.available(context, OfflineMap.Kind.SATELLITE) }
+    var satellite by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(map, satellite) {
+        val m = map ?: return@LaunchedEffect
+        style = null
+        val json = if (satellite && hasSat) OfflineMap.satelliteStyleJson(context) else OfflineMap.styleJson(context)
+        val builder = if (json != null) Style.Builder().fromJson(json) else Style.Builder().fromUri(STYLE_URL)
+        m.setStyle(builder) { s ->
+            setupLayers(s)
+            style = s
         }
     }
 
@@ -221,6 +230,13 @@ fun TrackMap(
             Modifier.align(Alignment.BottomEnd).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            if (hasSat) {
+                SmallFloatingActionButton(
+                    onClick = { satellite = !satellite },
+                    containerColor = if (satellite) Palette.Geo else Palette.SurfaceHigh,
+                    contentColor = if (satellite) Palette.Bg else Palette.Text,
+                ) { Icon(Icons.Filled.Satellite, if (satellite) "Схема" else "Спутник") }
+            }
             if (track.any { it.spoofLat != null }) {
                 SmallFloatingActionButton(
                     onClick = { follow = false; fitSpoof(map, track, topPx) },
@@ -240,7 +256,11 @@ fun TrackMap(
             }
         }
         Text(
-            if (OfflineMap.available(context)) "© OpenStreetMap · офлайн" else "© OpenStreetMap · онлайн",
+            when {
+                satellite && hasSat -> "Спутник · офлайн"
+                OfflineMap.available(context) -> "© OpenStreetMap · офлайн"
+                else -> "© OpenStreetMap · онлайн"
+            },
             fontSize = 10.sp, color = Palette.TextDim,
             modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 6.dp),
         )

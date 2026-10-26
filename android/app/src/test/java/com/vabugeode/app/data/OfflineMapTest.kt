@@ -52,4 +52,32 @@ class OfflineMapTest {
             is JSONArray -> for (i in 0 until v.length()) collectStrings(v.get(i), out)
         }
     }
+
+    @Test
+    fun satelliteMbtilesWithSchemeLabels() {
+        val dir = File(ctx.filesDir, "maps").apply { deleteRecursively(); mkdirs() }
+        assertNull(OfflineMap.satelliteStyleJson(ctx))
+        File(dir, "satellite").writeBytes("SQLite format 3\u0000".toByteArray() + ByteArray(100))
+        var style = JSONObject(OfflineMap.satelliteStyleJson(ctx)!!)
+        val sat = style.getJSONObject("sources").getJSONObject("sat")
+        assertEquals("raster", sat.getString("type"))
+        assertEquals("mbtiles://" + File(dir, "satellite").absolutePath, sat.getString("url"))
+        assertEquals(2, style.getJSONArray("layers").length())
+
+        // Есть схема — поверх снимка подписи
+        File(dir, "region.pmtiles").writeBytes(ByteArray(8))
+        style = JSONObject(OfflineMap.satelliteStyleJson(ctx)!!)
+        assertTrue(style.getJSONArray("layers").length() > 5)
+        assertTrue(style.getJSONObject("sources").has("protomaps"))
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun detectFormats() {
+        fun pm(type: Int) = ("PMTiles".toByteArray() + byteArrayOf(3) + ByteArray(119)).also { it[99] = type.toByte() }
+        assertEquals(OfflineMap.Format.PMTILES_VECTOR, OfflineMap.detect(pm(1)))
+        assertEquals(OfflineMap.Format.PMTILES_RASTER, OfflineMap.detect(pm(3)))
+        assertEquals(OfflineMap.Format.MBTILES, OfflineMap.detect("SQLite format 3\u0000".toByteArray() + ByteArray(50)))
+        assertNull(OfflineMap.detect("hello".toByteArray()))
+    }
 }
