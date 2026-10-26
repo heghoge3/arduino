@@ -17,6 +17,7 @@ import com.vabugeode.app.protocol.BeaconMsg
 import com.vabugeode.app.protocol.CheckMsg
 import com.vabugeode.app.protocol.Cmd
 import com.vabugeode.app.protocol.InfoMsg
+import com.vabugeode.app.protocol.LogMsg
 import com.vabugeode.app.protocol.MarkMsg
 import com.vabugeode.app.protocol.PointMsg
 import com.vabugeode.app.protocol.Proto
@@ -100,6 +101,15 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     private var restartCount = ((System.currentTimeMillis() / 1000) % 60).toInt()
     private var current: DeviceStatus? = null
     private var timeSynced = false
+
+    // Журнал гаджета (как в прошивке): номер растёт всё время жизни, перезапуск сценария его не сбрасывает
+    private val logs = ArrayList<LogMsg>()
+    private var logSeq = 0L
+    private var debug = true
+    private var lastBeatMs = 0L
+    private var logResting = false
+    private var logSpoof = false
+    private var logIndoor = false
     private var movingIntervalMs = 10_000L
     private var idleIntervalMs = 60_000L
     private val scriptedDone = mutableSetOf<Int>()
@@ -131,6 +141,11 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
         timeSynced = false
 
         // История: первые 2 часа похода считаем сразу
+        logLine(2, 0, "включение: питание, прошивка 0.1.0 (эмулятор)")
+        logLine(2, 5, "SD 7580 МБ, свободно 7400 МБ")
+        logLine(1, 6, "часы не проверены — ждём телефон или GPS")
+        logLine(2, 0, "новый поход ${startMs / 1000}")
+        logResting = false; logSpoof = false; logIndoor = false; lastBeatMs = startMs
         addMarkInternal(MarkType.MARK, "Старт похода")
         val historyEnd = startMs + historyMin * 60_000L
         while (simMs < historyEnd) {
@@ -200,6 +215,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
         val resting = isResting()
         val spoof = spoofTarget()
         val indoor = isIndoor()
+        logEvents(resting, spoof, indoor)
 
         // Движение
         if (!resting) {
@@ -537,8 +553,12 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     // ---- Команды (как обработчик в прошивке). Возвращает код ACK ----
 
     fun handle(cmd: Cmd): Int {
+        logLine(3, 9, "команда ${cmd::class.simpleName}")
         when (cmd) {
-            is Cmd.SetTime -> timeSynced = true // время в демо ускорено — телефонное не применяем
+            is Cmd.SetTime -> {
+                if (!timeSynced) logLine(2, 6, "время с телефона, часы проверены")
+                timeSynced = true // время в демо ускорено — телефонное не применяем
+            }
             is Cmd.PhonePos -> {}
             is Cmd.Record -> recording = cmd.on
             is Cmd.Mark -> {
@@ -555,7 +575,8 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             is Cmd.CalibAlt -> {}
             is Cmd.CalibCompass -> {}
             is Cmd.Blacklist -> blacklist = cmd.points
-            Cmd.GetInfo, is Cmd.SyncTrack, is Cmd.SyncMarks -> {} // ответы шлёт транспорт
+            Cmd.GetInfo, is Cmd.SyncTrack, is Cmd.SyncMarks, is Cmd.SyncLog -> {} // ответы шлёт транспорт
+            is Cmd.SetDebug -> debug = cmd.on
             is Cmd.Session, Cmd.Bye -> {} // режим сеанса ведёт транспорт
             is Cmd.SetGpsMode, is Cmd.SetRadio, is Cmd.AckAlert -> {}
         }
@@ -566,7 +587,49 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     private fun addMarkInternal(type: MarkType, text: String) {
         val p = points.lastOrNull { !it.spoof }
         markList.add(Mark(++markSeq, simMs, type, text, p?.lat ?: lat, p?.lon ?: lon))
+        logLine(2, 8, "метка #$markSeq ${type.title}")
     }
+
+    // ---- Журнал ----
+
+    private fun logLine(level: Int, module: Int, text: String) {
+        if (level == 3 && !debug) return
+        logs.add(LogMsg(++logSeq, simMs / 1000, (simMs - startMs) / 1000, level, timeSynced, module, text))
+    }
+
+    /** Переходы состояний и снимок раз в 10 мин (в отладке — раз в минуту), как в прошивке */
+    private fun logEvents(resting: Boolean, spoof: Pair<Double, Double>?, indoor: Boolean) {
+        if (resting != logResting) {
+            logLine(2, 1, if (resting) "режим в пути -> стоянка" else "режим стоянка -> в пути")
+            logLine(2, 2, if (resting) "GPS выкл (стоянка)" else "GPS вкл")
+            logResting = resting
+        }
+        val sp = spoof != null
+        if (sp != logSpoof) {
+            if (sp) logLine(1, 3, "подмена: маска 0x2B (чёрный список, телефон, SNR, шаги) %.4f,%.4f".format(java.util.Locale.US, spoof!!.first, spoof.second))
+            else logLine(2, 3, "подмена закончилась")
+            logSpoof = sp
+        }
+        if (indoor != logIndoor) {
+            logLine(if (indoor) 1 else 2, 2, if (indoor) "фикс потерян, спутн 3 — в здании?" else "фикс за 35 с: 9 спутн, HDOP 0.9")
+            logIndoor = indoor
+        }
+        val every = if (debug) 60_000L else 600_000L
+        if (simMs - lastBeatMs >= every) {
+            lastBeatMs = simMs
+            current?.let { st ->
+                logLine(3, 0, "ST mode=${st.mode.ordinal} rec=${if (recording) 1 else 0} gps=${if (st.gps.fix == GpsFix.OFF) 0 else 1} sats=${st.gps.satsUsed}/${st.gps.satsInView} bt=0")
+                logLine(3, 4, "ENV T=%.1f P=%.1f H=%.0f U=%.2f I=%.0f %d%%".format(java.util.Locale.US, st.env.tempCorr, st.env.pressureHpa, st.env.humidity, st.power.voltage, st.power.currentMa, st.power.percent))
+            }
+        }
+    }
+
+    val logCount: Int get() = logs.size
+    fun logMsg(i: Int): LogMsg = logs[i]
+
+    /** Индекс первой строки с номером больше since; since = 0 — последние 500 */
+    fun firstLogAfter(since: Long): Int =
+        if (since == 0L) maxOf(0, logs.size - 500) else logs.indexOfFirst { it.seq > since }.let { if (it < 0) logs.size else it }
 
     // ---- Утилиты ----
 

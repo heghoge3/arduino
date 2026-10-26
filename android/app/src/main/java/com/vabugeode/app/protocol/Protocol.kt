@@ -30,6 +30,7 @@ object Proto {
     const val MSG_SYNC_DONE = 0x06
     const val MSG_ACK = 0x07
     const val MSG_ALERT = 0x08
+    const val MSG_LOG = 0x09
 
     // Команды телефона
     const val CMD_SET_TIME = 0x01
@@ -50,6 +51,8 @@ object Proto {
     const val CMD_SYNC_TRACK = 0x10
     const val CMD_SYNC_MARKS = 0x11
     const val CMD_ACK_ALERT = 0x12
+    const val CMD_SYNC_LOG = 0x13
+    const val CMD_SET_DEBUG = 0x14
 
     // Результаты ACK
     const val ACK_OK = 0
@@ -88,6 +91,7 @@ object Proto {
     const val NA16: Int = -32768
     const val HDOP_NA = 255
     const val MAX_TEXT = 60
+    const val MAX_LOG_TEXT = 80
     const val MAX_SATS = 24
     const val MAX_BLACKLIST = 24
 
@@ -197,6 +201,17 @@ data class SyncDoneMsg(val what: Int, val count: Long) : DeviceMsg
 data class AckMsg(val cmd: Int, val result: Int) : DeviceMsg
 data class AlertMsg(val timeUtc: Long, val alerts: Int, val fresh: Int, val battPct: Int, val spoofMask: Int) : DeviceMsg
 
+/** Строка журнала гаджета. level: 0 ошибка, 1 внимание, 2 инфо, 3 отладка; timeUtc 0 — время неизвестно */
+data class LogMsg(
+    val seq: Long,
+    val timeUtc: Long,
+    val uptimeSec: Long,
+    val level: Int,
+    val timeOk: Boolean,
+    val module: Int,
+    val text: String,
+) : DeviceMsg
+
 /** Сводка маячка (данные производителя в рекламе, без company id). Координат нет намеренно. */
 data class BeaconMsg(
     val mode: Int,
@@ -236,6 +251,8 @@ sealed interface Cmd {
     data class AckAlert(val mask: Int) : Cmd
     data class SyncTrack(val sinceUtc: Long) : Cmd
     data class SyncMarks(val sinceUtc: Long) : Cmd
+    data class SyncLog(val sinceSeq: Long) : Cmd
+    data class SetDebug(val on: Boolean) : Cmd
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +291,8 @@ object Codec {
         is Cmd.AckAlert -> packet(Proto.CMD_ACK_ALERT, 1) { u8(cmd.mask) }
         is Cmd.SyncTrack -> packet(Proto.CMD_SYNC_TRACK, 4) { u32(cmd.sinceUtc) }
         is Cmd.SyncMarks -> packet(Proto.CMD_SYNC_MARKS, 4) { u32(cmd.sinceUtc) }
+        is Cmd.SyncLog -> packet(Proto.CMD_SYNC_LOG, 4) { u32(cmd.sinceSeq) }
+        is Cmd.SetDebug -> packet(Proto.CMD_SET_DEBUG, 1) { u8(if (cmd.on) 1 else 0) }
     }
 
     // ---- Устройство: байты → команда ----
@@ -308,6 +327,8 @@ object Codec {
             Proto.CMD_ACK_ALERT -> Cmd.AckAlert(r.u8())
             Proto.CMD_SYNC_TRACK -> Cmd.SyncTrack(r.u32())
             Proto.CMD_SYNC_MARKS -> Cmd.SyncMarks(r.u32())
+            Proto.CMD_SYNC_LOG -> Cmd.SyncLog(r.u32())
+            Proto.CMD_SET_DEBUG -> Cmd.SetDebug(r.u8() != 0)
             else -> throw ProtocolException("Неизвестная команда 0x%02X".format(code))
         }.also { r.expectEnd() }
     }
@@ -367,6 +388,13 @@ object Codec {
         is SyncDoneMsg -> packet(Proto.MSG_SYNC_DONE, 5) { u8(m.what); u32(m.count) }
         is AckMsg -> packet(Proto.MSG_ACK, 2) { u8(m.cmd); u8(m.result) }
         is AlertMsg -> packet(Proto.MSG_ALERT, 8) { u32(m.timeUtc); u8(m.alerts); u8(m.fresh); u8(m.battPct); u8(m.spoofMask) }
+        is LogMsg -> {
+            val t = utf8Limited(m.text, Proto.MAX_LOG_TEXT)
+            packet(Proto.MSG_LOG, 15 + t.size) {
+                u32(m.seq); u32(m.timeUtc); u32(m.uptimeSec)
+                u8((m.level and 0x03) or (if (m.timeOk) 0x80 else 0)); u8(m.module); u8(t.size); bytes(t)
+            }
+        }
     }
 
     // ---- Телефон: байты → сообщение ----
@@ -424,6 +452,12 @@ object Codec {
             Proto.MSG_SYNC_DONE -> SyncDoneMsg(r.u8(), r.u32())
             Proto.MSG_ACK -> AckMsg(r.u8(), r.u8())
             Proto.MSG_ALERT -> AlertMsg(r.u32(), r.u8(), r.u8(), r.u8(), r.u8())
+            Proto.MSG_LOG -> {
+                val seq = r.u32(); val t = r.u32(); val up = r.u32(); val lv = r.u8(); val mod = r.u8()
+                val len = r.u8()
+                if (len > Proto.MAX_LOG_TEXT) throw ProtocolException("Строка журнала длиннее ${Proto.MAX_LOG_TEXT} байт")
+                LogMsg(seq, t, up, lv and 0x03, lv and 0x80 != 0, mod, r.string(len))
+            }
             else -> throw ProtocolException("Неизвестный тип сообщения 0x%02X".format(type))
         }.also { r.expectEnd() }
     }
@@ -513,11 +547,11 @@ object Codec {
         if (v == null) Proto.NA16 else (v * k).roundToInt().coerceIn(-32767, 32767)
     private fun hdop(v: Double?): Int = if (v == null) Proto.HDOP_NA else (v * 10).roundToInt().coerceIn(0, 254)
 
-    /** UTF-8 не длиннее MAX_TEXT байт, не разрезая символы. */
-    fun utf8Limited(s: String): ByteArray {
+    /** UTF-8 не длиннее max байт, не разрезая символы. */
+    fun utf8Limited(s: String, max: Int = Proto.MAX_TEXT): ByteArray {
         var b = s.toByteArray(Charsets.UTF_8)
         var cut = s
-        while (b.size > Proto.MAX_TEXT) {
+        while (b.size > max) {
             cut = cut.dropLast(1)
             b = cut.toByteArray(Charsets.UTF_8)
         }

@@ -28,6 +28,29 @@ class MarkRow(val device: String, val hike: Long, val id: Int, val data: ByteArr
 @Entity(tableName = "hikes", primaryKeys = ["device", "hike"])
 class HikeRow(val device: String, val hike: Long, val name: String)
 
+/** Строка журнала гаджета (пакет LOG как есть, разобранные поля — для фильтров) */
+@Entity(tableName = "gadget_log", primaryKeys = ["device", "seq"])
+class GadgetLogRow(
+    val device: String,
+    val seq: Long,
+    val timeMs: Long,      // 0 — время неизвестно
+    val uptimeSec: Long,
+    val level: Int,
+    val timeOk: Boolean,
+    val module: Int,
+    val text: String,
+)
+
+/** Строка журнала приложения: подключения, обрывы, ошибки Bluetooth, работа в фоне */
+@Entity(tableName = "app_log")
+class AppLogRow(
+    @androidx.room.PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val timeMs: Long,
+    val level: Int,
+    val tag: String,
+    val text: String,
+)
+
 /** Поход в базе: сколько точек и за какое время (ts — Unix-с) */
 data class HikeKey(val device: String, val hike: Long, val n: Int, val first: Long, val last: Long)
 
@@ -86,6 +109,36 @@ interface StoreDao {
         deleteHikeName(device, hike)
     }
 
+    // ---- Журналы ----
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun putGadgetLog(rows: List<GadgetLogRow>)
+
+    @Query("SELECT MAX(seq) FROM gadget_log WHERE device = :device")
+    suspend fun maxLogSeq(device: String): Long?
+
+    @Insert
+    suspend fun putAppLog(rows: List<AppLogRow>)
+
+    @Query("SELECT * FROM gadget_log ORDER BY timeMs DESC, seq DESC LIMIT :limit")
+    fun gadgetLogFlow(limit: Int): kotlinx.coroutines.flow.Flow<List<GadgetLogRow>>
+
+    @Query("SELECT * FROM app_log ORDER BY id DESC LIMIT :limit")
+    fun appLogFlow(limit: Int): kotlinx.coroutines.flow.Flow<List<AppLogRow>>
+
+    @Query("SELECT * FROM gadget_log ORDER BY timeMs, seq")
+    suspend fun allGadgetLog(): List<GadgetLogRow>
+
+    @Query("SELECT * FROM app_log ORDER BY id")
+    suspend fun allAppLog(): List<AppLogRow>
+
+    /** Держим журналы в разумных размерах: старые строки удаляем */
+    @Query("DELETE FROM gadget_log WHERE rowid IN (SELECT rowid FROM gadget_log ORDER BY timeMs DESC, seq DESC LIMIT -1 OFFSET :keep)")
+    suspend fun trimGadgetLog(keep: Int)
+
+    @Query("DELETE FROM app_log WHERE id IN (SELECT id FROM app_log ORDER BY id DESC LIMIT -1 OFFSET :keep)")
+    suspend fun trimAppLog(keep: Int)
+
     @Query("SELECT * FROM points WHERE device = :device AND hike = :hike ORDER BY ts")
     suspend fun points(device: String, hike: Long): List<PointRow>
 
@@ -130,7 +183,26 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-@Database(entities = [PointRow::class, MarkRow::class, GadgetRow::class, HikeRow::class], version = 2, exportSchema = false)
+/** v3: журналы гаджета и приложения */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `gadget_log` (`device` TEXT NOT NULL, `seq` INTEGER NOT NULL, `timeMs` INTEGER NOT NULL, " +
+                "`uptimeSec` INTEGER NOT NULL, `level` INTEGER NOT NULL, `timeOk` INTEGER NOT NULL, `module` INTEGER NOT NULL, " +
+                "`text` TEXT NOT NULL, PRIMARY KEY(`device`, `seq`))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `app_log` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timeMs` INTEGER NOT NULL, " +
+                "`level` INTEGER NOT NULL, `tag` TEXT NOT NULL, `text` TEXT NOT NULL)",
+        )
+    }
+}
+
+@Database(
+    entities = [PointRow::class, MarkRow::class, GadgetRow::class, HikeRow::class, GadgetLogRow::class, AppLogRow::class],
+    version = 3,
+    exportSchema = false,
+)
 abstract class StoreDb : RoomDatabase() {
     abstract fun dao(): StoreDao
 
@@ -140,7 +212,7 @@ abstract class StoreDb : RoomDatabase() {
         /** Одна база на процесс: её пишут и экраны, и фоновое наблюдение */
         fun get(context: Context): StoreDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, StoreDb::class.java, "vabugeode.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
     }

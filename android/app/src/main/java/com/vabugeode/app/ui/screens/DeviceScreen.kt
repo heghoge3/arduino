@@ -1,5 +1,9 @@
 package com.vabugeode.app.ui.screens
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -57,6 +61,12 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     val status by vm.repo.status.collectAsStateWithLifecycle()
     val i = info
     val st = status
+    var logOpen by rememberSaveable { mutableStateOf(false) }
+    if (logOpen) {
+        BackHandler { logOpen = false }
+        LogScreen(vm, contentPadding) { logOpen = false }
+        return
+    }
 
     Column(
         Modifier
@@ -67,6 +77,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
+        LogEntryPanel(vm) { logOpen = true }
         LinkPanel(vm)
         WherePanel(vm)
         if (i == null || st == null) {

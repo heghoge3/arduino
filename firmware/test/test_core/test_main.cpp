@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "logbuf.h"
 #include "logic.h"
 #include "nmea.h"
 #include "proto.h"
@@ -203,6 +204,92 @@ void test_commands_from_phone() {
     n = vec(name, b, sizeof(b));
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(proto::ACK_OK, proto::decodeCommand(b, n, c), name);
   }
+
+  n = vec("cmd_sync_log", b, sizeof(b));
+  TEST_ASSERT_EQUAL_UINT8(proto::ACK_OK, proto::decodeCommand(b, n, c));
+  TEST_ASSERT_EQUAL_UINT8(proto::CMD_SYNC_LOG, c.code);
+  TEST_ASSERT_EQUAL_UINT32(4241, c.time);
+  n = vec("cmd_set_debug", b, sizeof(b));
+  TEST_ASSERT_EQUAL_UINT8(proto::ACK_OK, proto::decodeCommand(b, n, c));
+  TEST_ASSERT_EQUAL_UINT8(1, c.flag);
+}
+
+// ---------------------------------------------------------------------------
+// Журнал: LOG по протоколу, кольцевой буфер, строки файла
+// ---------------------------------------------------------------------------
+
+void test_log_vector() {
+  proto::LogLine l{};
+  l.seq = 4242; l.time = 1793000020; l.uptime = 3605;
+  l.level = logbuf::WARN | logbuf::TIME_OK; l.module = logbuf::M_GPS;
+  const char* t = "Фикс потерян, спутн 3";
+  l.textLen = (uint8_t)strlen(t);
+  memcpy(l.text, t, l.textLen);
+  uint8_t b[128];
+  size_t n = proto::encodeLog(l, b, sizeof(b));
+  assertVector("log", b, n);
+  proto::LogLine back{};
+  TEST_ASSERT_TRUE(proto::decodeLog(b, n, back));
+  TEST_ASSERT_EQUAL_UINT32(4242, back.seq);
+  TEST_ASSERT_EQUAL_STRING(t, back.text);
+  // Длинный текст обрезается по границе символа и влезает в пакет
+  char longText[200];
+  for (int i = 0; i < 50; i++) memcpy(longText + i * 2, "ж", 2);
+  l.textLen = 100;
+  memcpy(l.text, longText, proto::MAX_LOG_TEXT);
+  n = proto::encodeLog(l, b, sizeof(b));
+  TEST_ASSERT_TRUE(n > 0 && n <= proto::MAX_PACKET);
+}
+
+void test_log_ring() {
+  static logbuf::Ring r;
+  r.init();
+  TEST_ASSERT_TRUE(r.valid());
+  // Номер ещё не известен — строки ждут его
+  r.push(0, 1, logbuf::INFO, logbuf::M_SYS, "старт", 10);
+  r.push(0, 2, logbuf::ERR, logbuf::M_SD, "SD нет", 7);
+  TEST_ASSERT_EQUAL_UINT32(logbuf::NO_SEQ, r.pendingAt(0).seq);
+  r.assignSeq(100);
+  TEST_ASSERT_EQUAL_UINT32(100, r.pendingAt(0).seq);
+  TEST_ASSERT_EQUAL_UINT32(101, r.pendingAt(1).seq);
+  r.push(0, 3, logbuf::DBG, logbuf::M_BLE, "x", 1);
+  TEST_ASSERT_EQUAL_UINT32(102, r.pendingAt(2).seq);
+  r.markFlushed(3);
+  TEST_ASSERT_EQUAL_UINT32(0, r.pending());
+  // Переполнение без SD: теряются самые старые, потери считаются
+  for (int i = 0; i < logbuf::RING_N + 5; i++) r.push(0, i, logbuf::INFO, logbuf::M_SYS, "a", 1);
+  TEST_ASSERT_EQUAL_UINT32(logbuf::RING_N, r.pending());
+  TEST_ASSERT_EQUAL_UINT32(5, r.dropped);
+  TEST_ASSERT_EQUAL_UINT32(103 + 5, r.pendingAt(0).seq);
+  TEST_ASSERT_TRUE(r.valid());
+  // Мусор в RTC-памяти после включения питания — не принимается за журнал
+  r.check ^= 1;
+  TEST_ASSERT_FALSE(r.valid());
+}
+
+void test_log_format_and_days() {
+  proto::LogLine l{};
+  l.time = nmea::toUnix(2026, 10, 31, 14, 3, 22);
+  l.uptime = 125;
+  l.level = logbuf::INFO | logbuf::TIME_OK;
+  l.module = logbuf::M_PWR;
+  strcpy(l.text, "стоянка -> в пути");
+  char out[160];
+  logbuf::formatLine(l, out, sizeof(out));
+  TEST_ASSERT_EQUAL_STRING("2026-10-31 14:03:22 +125 I PWR стоянка -> в пути", out);
+  l.level = logbuf::ERR;  // время не проверено
+  logbuf::formatLine(l, out, sizeof(out));
+  TEST_ASSERT_EQUAL_STRING("2026-10-31 14:03:22? +125 E PWR стоянка -> в пути", out);
+  l.time = 0;
+  logbuf::formatLine(l, out, sizeof(out));
+  TEST_ASSERT_EQUAL_STRING("---- +125 E PWR стоянка -> в пути", out);
+
+  char day[12];
+  logbuf::dayName(nmea::toUnix(2026, 10, 31, 23, 59, 0), day, sizeof(day));
+  TEST_ASSERT_EQUAL_STRING("20261031", day);
+  TEST_ASSERT_EQUAL_INT32((int32_t)(nmea::toUnix(2026, 10, 31, 0, 0, 0) / 86400), (int32_t)logbuf::dayNumber("20261031"));
+  TEST_ASSERT_EQUAL_INT32(30, (int32_t)(logbuf::dayNumber("20261031") - logbuf::dayNumber("20261001")));
+  TEST_ASSERT_EQUAL_INT32(-1, (int32_t)logbuf::dayNumber("all.bin."));
 }
 
 void test_bad_commands() {
@@ -566,5 +653,8 @@ int main(int, char**) {
   RUN_TEST(test_steps_walking);
   RUN_TEST(test_steps_noise_and_bumps);
   RUN_TEST(test_sunset);
+  RUN_TEST(test_log_vector);
+  RUN_TEST(test_log_ring);
+  RUN_TEST(test_log_format_and_days);
   return UNITY_END();
 }

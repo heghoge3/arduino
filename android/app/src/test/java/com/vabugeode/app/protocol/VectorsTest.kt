@@ -68,6 +68,9 @@ class VectorsTest {
         "cmd_set_radio" to Codec.encode(Cmd.SetRadio(30)),
         "cmd_ack_alert" to Codec.encode(Cmd.AckAlert(Proto.AL_SPOOF)),
         "cmd_sync_track" to Codec.encode(Cmd.SyncTrack(1_793_000_000)),
+        "log" to Codec.encode(LogMsg(4242, 1_793_000_020, 3605, 1, true, 2, "Фикс потерян, спутн 3")),
+        "cmd_sync_log" to Codec.encode(Cmd.SyncLog(4241)),
+        "cmd_set_debug" to Codec.encode(Cmd.SetDebug(true)),
     )
 
     private fun render(): String = buildString {

@@ -12,6 +12,7 @@ import android.content.Context
 import android.os.Build
 import com.vabugeode.app.model.LinkState
 import com.vabugeode.app.protocol.Proto
+import com.vabugeode.app.log.AppLog
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -57,6 +58,8 @@ class BleTransport(
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            // Коды Android: 0 ок, 8 потеря связи, 19 гаджет отключился сам, 22 отключил телефон, 133 общая ошибка стека
+            AppLog.log(if (status == BluetoothGatt.GATT_SUCCESS) AppLog.DBG else AppLog.WARN, "GATT", "состояние $newState, код $status")
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                 setupJob = scope.launch { setup(g) }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -67,7 +70,10 @@ class BleTransport(
             }
         }
 
-        override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) = complete(status)
+        override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+            AppLog.d("GATT", "MTU $mtu, код $status")
+            complete(status)
+        }
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = complete(status)
         override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) = complete(status)
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) = complete(status)
@@ -155,6 +161,7 @@ class BleTransport(
     }
 
     private fun fail(g: BluetoothGatt, why: String) {
+        AppLog.e("GATT", why)
         lastError.value = why
         g.disconnect()
     }
@@ -192,6 +199,7 @@ class BleTransport(
         scope.launch {
             delay(15_000)
             if (state.value == LinkState.CONNECTING) {
+                AppLog.w("GATT", "гаджет не ответил за 15 с")
                 lastError.value = "Гаджет не ответил за 15 с"
                 gatt?.disconnect()
                 cleanup()
@@ -214,6 +222,7 @@ class BleTransport(
         val g = gatt ?: return false
         val c = cmdChar ?: return false
         var st = write(g, c, data)
+        if (st != BluetoothGatt.GATT_SUCCESS) AppLog.w("GATT", "запись команды: код $st")
         if (st in AUTH_ERRORS) {
             // Команды — только по шифрованной связи: ждём, пока Android проведёт сопряжение, и пробуем снова
             lastError.value = "Подтвердите сопряжение на телефоне (на гаджете — долгое нажатие B)"
@@ -221,7 +230,10 @@ class BleTransport(
                 while (g.device.bondState != BluetoothDevice.BOND_BONDED) delay(500)
                 true
             } ?: false
-            if (!bonded) return false
+            if (!bonded) {
+                AppLog.w("GATT", "сопряжение не состоялось за 30 с")
+                return false
+            }
             lastError.value = null
             st = write(g, c, data)
         }

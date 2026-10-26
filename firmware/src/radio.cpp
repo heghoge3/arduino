@@ -1,5 +1,7 @@
 #include "radio.h"
 
+#include "dlog.h"
+
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <freertos/queue.h>
@@ -44,11 +46,14 @@ class ServerCB : public NimBLEServerCallbacks {
     g_secured = desc->sec_state.encrypted && desc->sec_state.bonded;
     g_bondsAtConnect = NimBLEDevice::getNumBonds();
     g_lastRxMs = millis();
+    dlog::counters().bleConnects++;
+    LOGI(M_BLE, "телефон подключился, шифрование %d, сопряжён %d", desc->sec_state.encrypted, desc->sec_state.bonded);
     // Сразу просим шифрование: сопряжённый телефон восстановит его без вопросов
     NimBLEDevice::startSecurity(desc->conn_handle);
   }
 
   void onDisconnect(NimBLEServer*, ble_gap_conn_desc*) override {
+    LOGI(M_BLE, "телефон отключился");
     g_conn = 0xFFFF;
     g_live = false;
     g_secured = false;
@@ -59,11 +64,14 @@ class ServerCB : public NimBLEServerCallbacks {
     bool newBond = NimBLEDevice::getNumBonds() > g_bondsAtConnect;
     if (!desc->sec_state.encrypted || (newBond && !g_pairing)) {
       // Чужой телефон: сопряжение только в окне после долгого нажатия B (ТЗ, раздел 11)
+      dlog::counters().bleRejects++;
+      LOGW(M_BLE, "отказ: %s", !desc->sec_state.encrypted ? "шифрование не удалось" : "чужой телефон вне окна сопряжения");
       if (newBond) NimBLEDevice::deleteBond(NimBLEAddress(desc->peer_id_addr));
       g_server->disconnect(desc->conn_handle);
       return;
     }
     g_secured = desc->sec_state.bonded;
+    if (newBond) LOGI(M_BLE, "новый телефон сопряжён");
   }
 };
 
@@ -193,7 +201,11 @@ void poll() {
       break;
     case State::CONNECTED:
       // Телефон молчит (приложение шлёт SESSION каждые 20 с) — рвём, чтобы не жечь батарею
-      if (now - g_lastRxMs > SESSION_TIMEOUT_MS) disconnect();
+      if (now - g_lastRxMs > SESSION_TIMEOUT_MS) {
+        LOGW(M_BLE, "телефон молчит %lu с — рву связь", (unsigned long)((now - g_lastRxMs) / 1000));
+        g_lastRxMs = now;  // не повторять строку, пока стек рвёт связь
+        disconnect();
+      }
       break;
     default:
       break;

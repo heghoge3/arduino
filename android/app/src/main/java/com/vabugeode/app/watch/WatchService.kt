@@ -22,6 +22,7 @@ import com.vabugeode.app.data.Source
 import com.vabugeode.app.protocol.BeaconMsg
 import com.vabugeode.app.protocol.Codec
 import com.vabugeode.app.protocol.Proto
+import com.vabugeode.app.log.AppLog
 import com.vabugeode.app.store.StoreDb
 import com.vabugeode.app.store.saveBeacon
 import com.vabugeode.app.transport.BleScanner
@@ -53,7 +54,14 @@ class WatchService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onCreate() {
+        super.onCreate()
+        AppLog.start(StoreDb.get(this).dao())
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // intent == null — система сама перезапустила службу после того, как убила процесс
+        if (intent == null) AppLog.w("WATCH", "служба перезапущена системой — телефон её убивал")
         if (intent?.action == ACTION_STOP) {
             WatchPrefs(this).enabled = false
             stopSelf()
@@ -70,12 +78,29 @@ class WatchService : Service() {
             return START_NOT_STICKY
         }
         if (scanner == null || gadgetId != id) {
+            val prevBeat = getSharedPreferences("watch_diag", 0).getLong("beat", 0)
+            if (prevBeat > 0 && System.currentTimeMillis() - prevBeat > 20 * 60_000) {
+                AppLog.w("WATCH", "наблюдение не работало ${Fmt.duration(System.currentTimeMillis() - prevBeat)} (с ${Fmt.time(prevBeat)})")
+            }
+            AppLog.i("WATCH", "фоновое наблюдение запущено")
             scanner?.stop()
             gadgetId = id
             scanner = BleScanner(this, scope, ScanSettings.SCAN_MODE_BALANCED).also { s ->
                 s.start()
                 scope.launch { s.found.collect { all -> all[id]?.let { onBeacon(id, it.beacon, it.seenAtMs) } } }
                 scope.launch { s.error.collect { e -> if (e != null) updateWatch("Поиск не работает: $e") } }
+            }
+            // Отметка «служба жива» раз в 5 мин: дыры в них — телефон усыплял или убивал приложение
+            scope.launch {
+                var last = System.currentTimeMillis()
+                while (isActive) {
+                    getSharedPreferences("watch_diag", 0).edit().putLong("beat", System.currentTimeMillis()).apply()
+                    delay(5 * 60_000)
+                    val gap = System.currentTimeMillis() - last
+                    if (gap > 15 * 60_000) AppLog.w("WATCH", "служба простаивала ${Fmt.duration(gap)} — телефон её усыплял")
+                    else AppLog.d("WATCH", "жива; маячок ${if (lastHeardMs > 0) "был в ${Fmt.timeSec(lastHeardMs)}" else "не слышен"}")
+                    last = System.currentTimeMillis()
+                }
             }
             // Давно не слышно — сказать об этом в уведомлении (забыли рюкзак?)
             scope.launch {
@@ -92,6 +117,11 @@ class WatchService : Service() {
 
     private fun onBeacon(id: String, b: BeaconMsg, seenMs: Long) {
         if (seenMs == lastHeardMs) return
+        if (lastHeardMs > 0 && seenMs - lastHeardMs > 5 * 60_000) {
+            AppLog.i("WATCH", "маячок снова слышен после ${Fmt.duration(seenMs - lastHeardMs)} тишины")
+        } else if (lastHeardMs == 0L) {
+            AppLog.i("WATCH", "первый маячок: заряд ${b.battPct}%, режим ${b.mode}")
+        }
         lastHeardMs = seenMs
         lastBeacon = b
         updateWatch(beaconSummary(b))
@@ -109,6 +139,7 @@ class WatchService : Service() {
         val fresh = alerts and p.notifiedAlerts.inv()
         p.notifiedAlerts = alerts
         if (fresh == 0) return
+        AppLog.w("WATCH", "тревога по маячку: 0x%02X".format(fresh))
         val text = buildList {
             if (fresh and Proto.AL_SPOOF != 0) add("Подозрение на подмену GPS — точки не идут в трек")
             if (fresh and Proto.AL_CRIT_BATT != 0) add("Критический заряд гаджета — запись почти остановлена")
@@ -155,6 +186,7 @@ class WatchService : Service() {
             .build()
 
     override fun onDestroy() {
+        AppLog.i("WATCH", "фоновое наблюдение остановлено")
         scanner?.stop()
         scope.cancel()
         super.onDestroy()

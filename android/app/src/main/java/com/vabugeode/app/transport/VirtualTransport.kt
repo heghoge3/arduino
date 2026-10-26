@@ -111,6 +111,12 @@ class VirtualTransport(
                 emit(Channel.EVENT, SyncDoneMsg(Proto.CMD_SYNC_MARKS, (to - from).toLong()))
                 sentMarks = maxOf(sentMarks, to)
             }
+            is Cmd.SyncLog -> {
+                val from = device.firstLogAfter(cmd.sinceSeq)
+                val to = device.logCount
+                for (i in from until to) emit(Channel.EVENT, device.logMsg(i))
+                emit(Channel.EVENT, SyncDoneMsg(Proto.CMD_SYNC_LOG, (to - from).toLong()))
+            }
             is Cmd.Session -> live = cmd.live
             Cmd.Bye -> disconnect()
             else -> pushNew() // метка по команде появится сразу

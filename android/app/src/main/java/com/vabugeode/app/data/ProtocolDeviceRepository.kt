@@ -31,6 +31,9 @@ import com.vabugeode.app.protocol.StatusMsg
 import com.vabugeode.app.protocol.SyncDoneMsg
 import com.vabugeode.app.protocol.toHex
 import com.vabugeode.app.store.MarkRow
+import com.vabugeode.app.store.GadgetLogRow
+import com.vabugeode.app.log.AppLog
+import com.vabugeode.app.protocol.LogMsg
 import com.vabugeode.app.store.PointRow
 import com.vabugeode.app.store.StoreDao
 import com.vabugeode.app.store.saveState
@@ -106,6 +109,16 @@ class ProtocolDeviceRepository(
     private var savedWithStatus = false
     private val pendingPoints = ArrayList<PointRow>()
     private val pendingMarks = ArrayList<MarkRow>()
+    private val pendingLogs = ArrayList<GadgetLogRow>()
+    /** Последняя полученная строка журнала гаджета — догружаем только новые */
+    private var logSeq = 0L
+
+    /** Подробный журнал на гаджете (отладка). Отправляется при каждом подключении */
+    var debugLog: Boolean = true
+        set(v) {
+            field = v
+            if (link.value == LinkState.CONNECTED) send(Cmd.SetDebug(v))
+        }
 
     /** Позиция телефона для проверки подмены (lat, lon, точность м). null — нет разрешения или данных. */
     var phonePosition: (() -> Triple<Double, Double, Int>?)? = null
@@ -224,6 +237,7 @@ class ProtocolDeviceRepository(
         val dao = store ?: return
         val g = dao.gadget(key) ?: return
         lastSeenMs.value = g.lastSeenMs
+        logSeq = dao.maxLogSeq(key) ?: 0
         g.hike?.let { hike ->
             hikeStartSec = hike
             hikeStartMs.value = hike * 1000
@@ -254,12 +268,18 @@ class ProtocolDeviceRepository(
         if (key == "none") return
         val pts: List<PointRow>
         val mks: List<MarkRow>
+        val lgs: List<GadgetLogRow>
         synchronized(pendingPoints) {
             pts = ArrayList(pendingPoints); pendingPoints.clear()
             mks = ArrayList(pendingMarks); pendingMarks.clear()
+            lgs = ArrayList(pendingLogs); pendingLogs.clear()
         }
         if (pts.isNotEmpty()) dao.putPoints(pts)
         if (mks.isNotEmpty()) dao.putMarks(mks)
+        if (lgs.isNotEmpty()) {
+            dao.putGadgetLog(lgs)
+            if (lgs.size > 50) dao.trimGadgetLog(50_000)
+        }
         val seen = lastSeenMs.value ?: return
         // Состояние — раз в 30 с; сразу — при первом STATUS, при отключении и смене источника
         val firstStatus = !savedWithStatus && lastStatusBytes != null
@@ -279,6 +299,7 @@ class ProtocolDeviceRepository(
                 t.state.collect { st ->
                     val was = link.value
                     link.value = st
+                    if (st != was) AppLog.i("BLE", "${t.deviceName}: ${was.title} → ${st.title}")
                     if (st == LinkState.CONNECTED) onConnected()
                     if (st == LinkState.DISCONNECTED && was != LinkState.DISCONNECTED) persist(force = true)
                 }
@@ -298,6 +319,7 @@ class ProtocolDeviceRepository(
                 addLog(LogEntry(System.currentTimeMillis(), true, cmdName(bytes), bytes.size, bytes.toHex()))
                 stats.value = stats.value.copy(packetsOut = stats.value.packetsOut + 1)
             } else {
+                AppLog.w("BLE", "команда ${cmdName(bytes)} не ушла: нет связи")
                 _notices.tryEmit("Устройство не подключено")
             }
         }
@@ -333,6 +355,7 @@ class ProtocolDeviceRepository(
         val msg = try {
             Codec.decodeMsg(p.data)
         } catch (e: ProtocolException) {
+            AppLog.e("PROTO", "не разобран пакет ${p.data.size} Б: ${e.message} · ${p.data.toHex().take(60)}")
             addLog(LogEntry(System.currentTimeMillis(), false, e.message ?: "ошибка", p.data.size, p.data.toHex(), error = true))
             stats.value = stats.value.copy(errors = stats.value.errors + 1)
             return
@@ -340,8 +363,8 @@ class ProtocolDeviceRepository(
         val s = stats.value
         stats.value = s.copy(packetsIn = s.packetsIn + 1, bytesIn = s.bytesIn + p.data.size)
         lastSeenMs.value = System.currentTimeMillis()
-        // STATUS и POINT идут потоком — в журнал пишем не каждый, иначе он забьётся
-        val noisy = msg is PointMsg || (msg is StatusMsg && msg.seq % 10 != 0)
+        // STATUS, POINT и LOG идут потоком — в журнал пишем не каждый, иначе он забьётся
+        val noisy = msg is PointMsg || msg is LogMsg || (msg is StatusMsg && msg.seq % 10 != 0)
         if (!noisy) addLog(LogEntry(System.currentTimeMillis(), false, msgName(msg), p.data.size, p.data.toHex()))
 
         when (msg) {
@@ -368,10 +391,23 @@ class ProtocolDeviceRepository(
                 hikeStartSec?.let { h -> synchronized(pendingPoints) { pendingPoints += PointRow(transport.key, h, msg.timeUtc, p.data) } }
             }
             is SyncDoneMsg -> {
+                if (msg.what != Proto.CMD_SYNC_LOG || msg.count > 0) AppLog.d("SYNC", "${cmdNameByCode(msg.what)}: ${msg.count} записей")
                 if (msg.what == Proto.CMD_SYNC_MARKS) stats.value = stats.value.copy(syncing = false)
             }
-            is AlertMsg -> if (msg.fresh != 0) _notices.tryEmit("Тревога: ${alertText(msg.fresh)}")
+            is AlertMsg -> if (msg.fresh != 0) {
+                AppLog.w("ALERT", "тревога: ${alertText(msg.fresh)}, заряд ${msg.battPct}%")
+                _notices.tryEmit("Тревога: ${alertText(msg.fresh)}")
+            }
+            is LogMsg -> {
+                if (msg.seq > logSeq) logSeq = msg.seq
+                synchronized(pendingPoints) {
+                    pendingLogs += GadgetLogRow(
+                        transport.key, msg.seq, msg.timeUtc * 1000, msg.uptimeSec, msg.level, msg.timeOk, msg.module, msg.text,
+                    )
+                }
+            }
             is AckMsg -> if (msg.result != Proto.ACK_OK) {
+                AppLog.w("BLE", "гаджет отклонил ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
                 _notices.tryEmit("Устройство отклонило ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
             }
         }
@@ -396,9 +432,12 @@ class ProtocolDeviceRepository(
             stats.value = stats.value.copy(syncing = true)
             send(Cmd.SyncTrack(sincePoint))
             send(Cmd.SyncMarks(sinceMark))
+            send(Cmd.SetDebug(debugLog))
             // Живой сеанс: устройство начнёт слать STATUS раз в секунду (protocol.md, порядок подключения)
             send(Cmd.Session(live = liveWanted))
         }
+        // Журнал гаджета — при каждом INFO (раз в 30 с): только новые строки
+        send(Cmd.SyncLog(logSeq))
         info.value = buildInfo(m, status.value)
     }
 
@@ -527,7 +566,8 @@ class ProtocolDeviceRepository(
             is InfoMsg -> "INFO"
             is MarkMsg -> "MARK #${m.id}"
             is PointMsg -> "POINT"
-            is SyncDoneMsg -> "SYNC_DONE ${if (m.what == Proto.CMD_SYNC_TRACK) "трек" else "метки"}: ${m.count}"
+            is SyncDoneMsg -> "SYNC_DONE ${when (m.what) { Proto.CMD_SYNC_TRACK -> "трек"; Proto.CMD_SYNC_LOG -> "журнал"; else -> "метки" }}: ${m.count}"
+            is LogMsg -> "LOG #${m.seq}"
             is AckMsg -> "ACK ${cmdNameByCode(m.cmd)} → ${ackText(m.result)}"
             is AlertMsg -> "ALERT ${alertText(m.alerts)}"
             else -> "?"
@@ -554,6 +594,8 @@ class ProtocolDeviceRepository(
             Proto.CMD_SET_GPS_MODE -> "SET_GPS_MODE"
             Proto.CMD_BYE -> "BYE"
             Proto.CMD_SESSION -> "SESSION"
+            Proto.CMD_SYNC_LOG -> "SYNC_LOG"
+            Proto.CMD_SET_DEBUG -> "SET_DEBUG"
             else -> "0x%02X".format(code)
         }
 

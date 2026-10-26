@@ -27,6 +27,7 @@ enum Msg : uint8_t {
   MSG_SYNC_DONE = 0x06,
   MSG_ACK = 0x07,
   MSG_ALERT = 0x08,
+  MSG_LOG = 0x09,
 };
 
 // Команды телефона
@@ -49,6 +50,8 @@ enum CmdCode : uint8_t {
   CMD_SYNC_TRACK = 0x10,
   CMD_SYNC_MARKS = 0x11,
   CMD_ACK_ALERT = 0x12,
+  CMD_SYNC_LOG = 0x13,
+  CMD_SET_DEBUG = 0x14,
 };
 
 enum AckResult : uint8_t {
@@ -95,6 +98,7 @@ constexpr size_t MAX_TEXT = 60;
 constexpr size_t MAX_SATS = 24;
 constexpr size_t MAX_BLACKLIST = 24;
 constexpr size_t MAX_CHECKS = 12;
+constexpr size_t MAX_LOG_TEXT = 80;
 
 constexpr size_t STATUS_SIZE = 64;
 constexpr size_t POINT_SIZE = 51;
@@ -171,6 +175,13 @@ struct Point {
   uint16_t heading10, speed10;
 };
 
+// Строка журнала: level — биты 0–1 уровень, бит 7 «время проверено»
+struct LogLine {
+  uint32_t seq, time, uptime;
+  uint8_t level, module, textLen;
+  char text[MAX_LOG_TEXT + 1];
+};
+
 struct Beacon {
   uint8_t mode, flags, alerts;
   int16_t tempCorr100;
@@ -190,12 +201,14 @@ size_t encodePoint(const Point& m, uint8_t* out, size_t cap);
 size_t encodeSyncDone(uint8_t what, uint32_t count, uint8_t* out, size_t cap);
 size_t encodeAck(uint8_t cmd, uint8_t result, uint8_t* out, size_t cap);
 size_t encodeAlert(uint32_t time, uint8_t alerts, uint8_t fresh, uint8_t battPct, uint8_t spoofMask, uint8_t* out, size_t cap);
+size_t encodeLog(const LogLine& m, uint8_t* out, size_t cap);
 // Сводка маячка — 18 байт (без company id)
 size_t encodeBeacon(const Beacon& m, uint8_t* out, size_t cap);
 
 // Разбор POINT/MARK (нужен при синхронизации из двоичных файлов на SD и в тестах)
 bool decodePoint(const uint8_t* in, size_t len, Point& m);
 bool decodeMark(const uint8_t* in, size_t len, Mark& m);
+bool decodeLog(const uint8_t* in, size_t len, LogLine& m);
 
 // ---- Команды ----
 
@@ -206,11 +219,11 @@ struct BlEntry {
 
 struct Command {
   uint8_t code;
-  uint32_t time;          // SET_TIME, SYNC_*
+  uint32_t time;          // SET_TIME, SYNC_TRACK/MARKS; SYNC_LOG — номер строки
   int16_t tzMin;          // SET_TIME
   int32_t lat7, lon7;     // PHONE_POS
   uint16_t accuracyM;     // PHONE_POS
-  uint8_t flag;           // RECORD, CALIB_COMPASS, SESSION, SET_GPS_MODE (режим), ACK_ALERT (биты)
+  uint8_t flag;           // RECORD, CALIB_COMPASS, SESSION, SET_GPS_MODE (режим), ACK_ALERT (биты), SET_DEBUG
   uint8_t markType;       // MARK
   uint8_t textLen;
   char text[MAX_TEXT + 1];

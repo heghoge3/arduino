@@ -24,5 +24,8 @@
   "cmd_set_gps_mode": "020e012d00",
   "cmd_set_radio": "020f1e00",
   "cmd_ack_alert": "021201",
-  "cmd_sync_track": "02104002df6a"
+  "cmd_sync_track": "02104002df6a",
+  "log": "0209921000005402df6a150e0000810225d0a4d0b8d0bad18120d0bfd0bed182d0b5d180d18fd0bd2c20d181d0bfd183d182d0bd2033",
+  "cmd_sync_log": "021391100000",
+  "cmd_set_debug": "021401"
 }

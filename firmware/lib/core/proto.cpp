@@ -152,6 +152,16 @@ size_t encodeAlert(uint32_t time, uint8_t alerts, uint8_t fresh, uint8_t battPct
   return w.done();
 }
 
+size_t encodeLog(const LogLine& m, uint8_t* out, size_t cap) {
+  size_t tl = utf8Limit(m.text, m.textLen, MAX_LOG_TEXT);
+  Writer w(out, cap);
+  w.header(MSG_LOG);
+  w.u32(m.seq); w.u32(m.time); w.u32(m.uptime); w.u8(m.level); w.u8(m.module);
+  w.u8(static_cast<uint8_t>(tl));
+  w.bytes(m.text, tl);
+  return w.done();
+}
+
 size_t encodeBeacon(const Beacon& m, uint8_t* out, size_t cap) {
   Writer w(out, cap);
   w.u8(VERSION); w.u8(BEACON_TAG);
@@ -188,6 +198,17 @@ bool decodeMark(const uint8_t* in, size_t len, Mark& m) {
   return true;
 }
 
+bool decodeLog(const uint8_t* in, size_t len, LogLine& m) {
+  Reader r(in, len);
+  if (r.u8() != VERSION || r.u8() != MSG_LOG) return false;
+  m.seq = r.u32(); m.time = r.u32(); m.uptime = r.u32(); m.level = r.u8(); m.module = r.u8();
+  m.textLen = r.u8();
+  if (!r.ok || m.textLen > MAX_LOG_TEXT || r.pos + m.textLen != len) return false;
+  memcpy(m.text, in + r.pos, m.textLen);
+  m.text[m.textLen] = 0;
+  return true;
+}
+
 uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
   memset(&c, 0, sizeof(c));
   if (len < 2 || in[0] != VERSION) return ACK_UNSUPPORTED;
@@ -200,7 +221,8 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
     case CMD_RECORD:
     case CMD_CALIB_COMPASS:
     case CMD_SESSION:
-    case CMD_ACK_ALERT: c.flag = r.u8(); break;
+    case CMD_ACK_ALERT:
+    case CMD_SET_DEBUG: c.flag = r.u8(); break;
     case CMD_MARK: {
       c.markType = r.u8();
       c.textLen = r.u8();
@@ -234,7 +256,8 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
       if (r.atEnd() && c.a != 0 && (c.a < 10 || c.a > 600)) return ACK_BAD_ARGS;
       break;
     case CMD_SYNC_TRACK:
-    case CMD_SYNC_MARKS: c.time = r.u32(); break;
+    case CMD_SYNC_MARKS:
+    case CMD_SYNC_LOG: c.time = r.u32(); break;
     default: return ACK_UNSUPPORTED;
   }
   return r.atEnd() ? ACK_OK : ACK_BAD_ARGS;

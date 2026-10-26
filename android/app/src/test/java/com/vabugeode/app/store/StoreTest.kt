@@ -53,6 +53,9 @@ class StoreTest {
         advanceTimeBy(1_500)  // дать записаться в базу
         val stored = db.dao().points("virtual", repo1.hikeStartMs.value!! / 1000).size
         assertTrue("в базе $stored из $synced", stored >= synced)
+        // Журнал гаджета тоже в базе
+        val logSeq = db.dao().maxLogSeq("virtual") ?: 0
+        assertTrue("журнал гаджета не сохранился: $logSeq", logSeq >= 20)
 
         // «Перезапуск приложения»: новый репозиторий, связи нет — всё видно из базы
         val t2 = VirtualTransport(backgroundScope, dev)
@@ -69,7 +72,11 @@ class StoreTest {
         repo2.connect()
         advanceTimeBy(6_000)
         val received = repo2.stats.value.packetsIn
-        assertTrue("пришло $received пакетов — это почти вся история заново", received < 200)
+        val newLogs = dev.logCount - dev.firstLogAfter(logSeq)
+        assertTrue("пришло $received пакетов — это почти вся история заново", received < 200 + newLogs)
+        assertTrue("журнал пришёл заново: новых строк $newLogs", newLogs < 60)
+        val all = db.dao().allGadgetLog().map { it.seq }
+        assertEquals("дубли в журнале", all.size, all.toSet().size)
         val times = repo2.track.value.map { it.tsUtcMs }
         assertEquals("дубли", times.size, times.toSet().size)
         assertTrue(dev.pointCount - times.size in 0..1)

@@ -9,6 +9,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import com.vabugeode.app.protocol.Codec
 import com.vabugeode.app.protocol.Proto
+import com.vabugeode.app.log.AppLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -41,6 +42,8 @@ class BleScanner(
         override fun onBatchScanResults(results: MutableList<ScanResult>) = results.forEach(::onResult)
 
         override fun onScanFailed(errorCode: Int) {
+            // 1 уже идёт, 2 стек не смог, 4 нет функции, 6 слишком частые запуски (Android режет > 5 за 30 с)
+            AppLog.e("SCAN", "поиск не запустился, код $errorCode")
             scanning.value = false
             error.value = "Поиск не запустился (код $errorCode)"
         }
@@ -87,6 +90,7 @@ class BleScanner(
         }
         error.value = null
         scanning.value = true
+        AppLog.d("SCAN", "поиск запущен, режим $scanMode")
         // Не слышно дольше 2 мин — убираем из списка
         cleaner = scope.launch {
             while (isActive) {

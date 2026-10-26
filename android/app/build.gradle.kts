@@ -13,8 +13,8 @@ android {
         applicationId = "com.vabugeode.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.7.4"
+        versionCode = 12
+        versionName = "0.8.0"
         // Только ARM: телефоны (Infinix Note 30 — arm64). Уменьшает APK из-за нативной карты
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -28,6 +28,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         // Скриншот-тесты экранов на JVM (Robolectric), без телефона

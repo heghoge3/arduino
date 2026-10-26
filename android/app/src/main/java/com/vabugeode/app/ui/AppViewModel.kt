@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vabugeode.app.astro.SunCalc
 import com.vabugeode.app.data.LinkManager
+import com.vabugeode.app.log.AppLog
+import com.vabugeode.app.log.LogText
 import com.vabugeode.app.data.PhoneLocation
 import com.vabugeode.app.data.Source
 import com.vabugeode.app.protocol.Codec
@@ -63,7 +65,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val demo = DemoDevice(viewModelScope)
     private val virtualTransport = VirtualTransport(viewModelScope, demo)
 
-    private val dao = StoreDb.get(app).dao()
+    private val dao = StoreDb.get(app).dao().also { AppLog.start(it) }
 
     val repo = ProtocolDeviceRepository(
         viewModelScope, virtualTransport,
@@ -95,7 +97,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Фоновое наблюдение включено */
     val watchEnabled = MutableStateFlow(WatchPrefs(app).enabled)
 
+    /** Подробный журнал (отладка): гаджет пишет больше и чаще, приложение — тоже */
+    val debugLog = MutableStateFlow(app.getSharedPreferences("diag", 0).getBoolean("debug", true))
+
+    fun setDebugLog(on: Boolean) {
+        getApplication<Application>().getSharedPreferences("diag", 0).edit().putBoolean("debug", on).apply()
+        debugLog.value = on
+        AppLog.debug = on
+        repo.debugLog = on
+        AppLog.i("APP", if (on) "подробный журнал включён" else "подробный журнал выключен")
+    }
+
+    /** Журналы для экрана: последние строки гаджета и телефона */
+    val gadgetLog = dao.gadgetLogFlow(3000).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val appLog = dao.appLogFlow(3000).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Оба журнала целиком одним текстом — чтобы поделиться */
+    suspend fun exportLogs(): String = withContext(Dispatchers.IO) { LogText.export(dao.allGadgetLog(), dao.allAppLog()) }
+
     init {
+        AppLog.debug = debugLog.value
+        repo.debugLog = debugLog.value
+        AppLog.i("APP", "запуск приложения ${com.vabugeode.app.BuildConfig.VERSION_NAME}")
         // Позиция телефона — гаджету для проверки подмены (сверка с телефоном)
         repo.phonePosition = { PhoneLocation.last(app)?.let { Triple(it.lat, it.lon, it.accuracyM) } }
         // Маячки, услышанные с открытым приложением, тоже запоминаем для «где гаджет»

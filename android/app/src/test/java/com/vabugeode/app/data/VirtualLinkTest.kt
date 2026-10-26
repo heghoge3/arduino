@@ -56,6 +56,8 @@ class VirtualLinkTest {
         r.repo.connect()
         advanceTimeBy(5_000)
         val inBefore = r.repo.stats.value.packetsIn
+        val logsBefore = r.dev.logCount
+        assertTrue("журнал гаджета не пришёл", logsBefore > 3)
 
         r.repo.disconnect()
         advanceTimeBy(20_000) // 10 минут похода без связи
@@ -65,9 +67,11 @@ class VirtualLinkTest {
         r.repo.connect()
         advanceTimeBy(5_000)
         r.assertTrackInSync()
-        // Догрузили только пропущенное, а не всю историю заново
+        // Догрузили только пропущенное, а не всю историю заново — и точки, и журнал
         val received = r.repo.stats.value.packetsIn - inBefore
-        assertTrue("пакетов $received, пропущено $missed", received < missed + 40)
+        val newLogs = r.dev.logCount - logsBefore
+        assertTrue("пакетов $received, пропущено $missed, новых строк журнала $newLogs", received < missed + newLogs + 40)
+        assertTrue("журнал пришёл заново целиком", newLogs < logsBefore + 40)
     }
 
     @Test

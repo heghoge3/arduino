@@ -1,5 +1,6 @@
 package com.vabugeode.app.data
 
+import com.vabugeode.app.log.AppLog
 import android.content.Context
 import com.vabugeode.app.model.LinkState
 import com.vabugeode.app.transport.FoundGadget
@@ -91,6 +92,7 @@ class LinkManager(
      * Свернули: через 30 с — тихий сеанс, через 2 мин — BYE (gadget-logic.md, раздел 5).
      */
     fun setForeground(on: Boolean) {
+        AppLog.d("APP", if (on) "приложение на экране" else "приложение свёрнуто")
         foreground = on
         repo.foreground = on
         backgroundJob?.cancel()
@@ -103,8 +105,10 @@ class LinkManager(
             _scanner.value.stop()
             backgroundJob = scope.launch {
                 kotlinx.coroutines.delay(QUIET_AFTER_MS)
+                AppLog.d("LINK", "тихий сеанс (свёрнуто 30 с)")
                 repo.setLive(false)
                 kotlinx.coroutines.delay(BYE_AFTER_MS - QUIET_AFTER_MS)
+                AppLog.d("LINK", "BYE (свёрнуто 2 мин)")
                 repo.bye()
             }
         }
@@ -118,6 +122,7 @@ class LinkManager(
 
     fun setSource(s: Source) {
         if (s == source.value) return
+        AppLog.i("LINK", "источник: ${if (s == Source.EMULATOR) "эмулятор" else "гаджет"}")
         _scanner.value.stop()
         prefs.source = s
         source.value = s
@@ -139,6 +144,7 @@ class LinkManager(
 
     /** Выбрать гаджет из найденных и подключиться */
     fun choose(g: FoundGadget) {
+        AppLog.i("LINK", "выбран гаджет ${g.name} ${g.id}, сигнал ${g.rssi} дБм")
         prefs.gadgetId = g.id
         prefs.gadgetName = g.name
         selectedId.value = g.id
@@ -150,6 +156,7 @@ class LinkManager(
     }
 
     fun forget() {
+        AppLog.i("LINK", "гаджет забыт")
         prefs.gadgetId = null
         prefs.gadgetName = null
         selectedId.value = null
@@ -166,6 +173,7 @@ class LinkManager(
     }
 
     fun disconnectByUser() {
+        AppLog.i("LINK", "отключено пользователем")
         userDisconnected = true
         repo.disconnect()
     }
