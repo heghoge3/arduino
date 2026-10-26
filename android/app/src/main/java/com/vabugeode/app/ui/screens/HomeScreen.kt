@@ -276,16 +276,18 @@ private fun Actions(st: DeviceStatus, onMark: () -> Unit, onClap: () -> Unit, on
 
 @Composable
 private fun ActionButton(icon: ImageVector, label: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
+    // Кнопка терминала: рамка в цвет действия, подпись «[ МЕТКА ]»
     Button(
         onClick = onClick,
         modifier = modifier.height(64.dp),
-        shape = RoundedCornerShape(18.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.16f), contentColor = color),
+        shape = RoundedCornerShape(2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color),
+        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.08f), contentColor = color),
         contentPadding = PaddingValues(4.dp),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, modifier = Modifier.size(22.dp))
-            Text(label, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Icon(icon, null, modifier = Modifier.size(20.dp))
+            Text("[ ${label.uppercase()} ]", fontWeight = FontWeight.Medium, fontSize = 11.sp, maxLines = 1)
         }
     }
 }
@@ -330,7 +332,7 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
                 LinkState.CONNECTING -> Text("Подключение…", color = Palette.Warn)
                 LinkState.CONNECTED -> Text("Подключено, загружаем данные…", color = Palette.Good)
                 else -> if (name != null) {
-                    Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(14.dp)) { Text("Подключить") }
+                    Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(2.dp)) { Text("Подключить") }
                 }
             }
         }
@@ -357,7 +359,7 @@ private fun OfflineBanner(vm: AppViewModel) {
                 )
             }
             if (link == LinkState.DISCONNECTED) {
-                Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(14.dp)) { Text("Обновить") }
+                Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(2.dp)) { Text("Обновить") }
             }
         }
     }

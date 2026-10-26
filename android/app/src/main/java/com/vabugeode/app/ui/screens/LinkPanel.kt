@@ -81,9 +81,9 @@ private fun LinkContent(vm: AppViewModel) {
             }
             if (selectedId != null) {
                 if (link == LinkState.DISCONNECTED) {
-                    Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(14.dp)) { Text("Подключить") }
+                    Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(2.dp)) { Text("Подключить") }
                 } else {
-                    OutlinedButton(onClick = { vm.link.disconnectByUser() }, shape = RoundedCornerShape(14.dp)) { Text("Отключить") }
+                    OutlinedButton(onClick = { vm.link.disconnectByUser() }, shape = RoundedCornerShape(2.dp)) { Text("Отключить") }
                 }
             }
         }
@@ -143,7 +143,7 @@ private fun FoundRow(g: FoundGadget, selected: Boolean, onChoose: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(2.dp))
             .background(Palette.SurfaceHigh)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -157,7 +157,7 @@ private fun FoundRow(g: FoundGadget, selected: Boolean, onChoose: () -> Unit) {
             )
         }
         if (selected) Text("выбран", color = Palette.Good, style = MaterialTheme.typography.labelMedium)
-        else Button(onClick = onChoose, shape = RoundedCornerShape(12.dp)) { Text("Выбрать") }
+        else Button(onClick = onChoose, shape = RoundedCornerShape(2.dp)) { Text("Выбрать") }
     }
 }
 

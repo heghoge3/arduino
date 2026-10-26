@@ -93,7 +93,7 @@ internal fun WatchPanel(vm: AppViewModel, onGuide: () -> Unit) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onGuide, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        OutlinedButton(onClick = onGuide, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(2.dp)) {
             Text("Настроить телефон, чтобы фон не убивался")
         }
     }
@@ -198,7 +198,7 @@ private fun GuideStep(n: Int, done: Boolean?, title: String, text: String, butto
         Text(text, style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim)
         if (button != null && done != true) {
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onClick, shape = RoundedCornerShape(14.dp)) { Text(button) }
+            OutlinedButton(onClick = onClick, shape = RoundedCornerShape(2.dp)) { Text(button) }
         }
     }
 }

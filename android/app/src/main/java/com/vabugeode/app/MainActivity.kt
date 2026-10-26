@@ -7,6 +7,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -155,17 +157,23 @@ internal fun App(vm: AppViewModel = viewModel()) {
         },
         bottomBar = {
             if (!settings) {
-                NavigationBar(containerColor = Palette.Surface, tonalElevation = 0.dp) {
+                NavigationBar(
+                    containerColor = Palette.Bg, tonalElevation = 0.dp,
+                    modifier = Modifier.drawBehind {
+                        drawLine(Palette.Outline, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), 2f)
+                    },
+                ) {
                     Tab.entries.forEach { t ->
                         NavigationBarItem(
                             selected = tab == t,
                             onClick = { tab = t },
                             icon = { Icon(t.icon, t.title) },
-                            label = { Text(t.title, maxLines = 1) },
+                            label = { Text(t.title, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                            // Выбранная вкладка — инверсный блок, как выделение в терминале
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Palette.Geo,
+                                selectedIconColor = Palette.Bg,
                                 selectedTextColor = Palette.Geo,
-                                indicatorColor = Palette.Geo.copy(alpha = 0.16f),
+                                indicatorColor = Palette.Geo,
                                 unselectedIconColor = Palette.TextDim,
                                 unselectedTextColor = Palette.TextDim,
                             ),
@@ -174,7 +182,7 @@ internal fun App(vm: AppViewModel = viewModel()) {
                 }
             }
         },
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().scanlines(),
     ) { padding ->
         if (settings) {
             SettingsScreen(vm, padding)
@@ -189,5 +197,16 @@ internal fun App(vm: AppViewModel = viewModel()) {
             Tab.MARKS -> MarksScreen(vm, padding, onAdded = ::toast)
             Tab.DEVICE -> DeviceScreen(vm, padding)
         }
+    }
+}
+
+/** Сканлайны поверх всего экрана: тонкие полосы через 3 dp, едва заметные. */
+private fun Modifier.scanlines() = drawWithContent {
+    drawContent()
+    val step = 3.dp.toPx()
+    var y = 0f
+    while (y < size.height) {
+        drawLine(Palette.Scan, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 1f)
+        y += step
     }
 }

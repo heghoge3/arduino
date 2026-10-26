@@ -129,7 +129,10 @@ fun LineChart(
             var v = ceil(vMin / step) * step
             while (v <= vMax) {
                 val yy = y(v)
-                drawLine(Palette.Outline, Offset(left, yy), Offset(left + w, yy), strokeWidth = 1f)
+                drawLine(
+                    Palette.Outline, Offset(left, yy), Offset(left + w, yy), strokeWidth = 1f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 6f)),
+                )
                 val label = Fmt.num(v, if (step < 1) 1 else 0)
                 val tl = measurer.measure(label, axisStyle)
                 drawText(tl, topLeft = Offset(left - tl.size.width - 6.dp.toPx(), yy - tl.size.height / 2))

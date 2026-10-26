@@ -110,7 +110,7 @@ fun MarksScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (Strin
                         }
                         context.startActivity(Intent.createChooser(send, "Метки для монтажа"))
                     },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(2.dp),
                 ) {
                     Icon(Icons.Filled.Share, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -147,13 +147,13 @@ private fun MarkRow(m: Mark, start: Long?) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(2.dp))
             .background(Palette.Surface)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.16f)),
+            Modifier.size(42.dp).clip(RoundedCornerShape(2.dp)).background(color.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
         ) { Text(m.type.emoji, fontSize = 20.sp) }
         Spacer(Modifier.width(12.dp))

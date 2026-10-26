@@ -48,6 +48,7 @@ import com.vabugeode.app.ui.components.Pill
 import com.vabugeode.app.ui.components.SectionLabel
 import com.vabugeode.app.ui.components.SnrBars
 import com.vabugeode.app.ui.theme.Palette
+import com.vabugeode.app.ui.theme.Fonts
 
 /** Отчёт о работе устройства: самопроверка, питание, GPS, SD (ТЗ, раздел 13). */
 @Composable
@@ -110,7 +111,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             SectionLabel("Питание · INA219")
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.Bottom) {
-                Text("${pw.percent}%", fontSize = 32.sp, color = Palette.Battery)
+                Text("${pw.percent}%", fontFamily = Fonts.Pixel, fontSize = 52.sp, lineHeight = 48.sp, color = Palette.Battery)
                 Spacer(Modifier.width(10.dp))
                 Text("~${Fmt.num(pw.hoursLeft, 0)} ч до разряда", color = Palette.TextDim, modifier = Modifier.padding(bottom = 6.dp))
             }
@@ -232,7 +233,7 @@ private fun WherePanel(vm: AppViewModel) {
                     val uri = android.net.Uri.parse("geo:$lat,$lon?q=$lat,$lon(vabuGEOde)")
                     runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
                 },
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
             ) { Text("Показать на карте") }
         } else {
             Text("Позиция телефона неизвестна (нет разрешения на геолокацию)", style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint)

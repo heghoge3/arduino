@@ -68,7 +68,7 @@ fun BluetoothGate(onReady: () -> Unit, content: @Composable () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium, color = Palette.Text,
             )
             Spacer(Modifier.height(10.dp))
-            Button(onClick = { permLauncher.launch(blePermissions()) }, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { permLauncher.launch(blePermissions()) }, shape = RoundedCornerShape(2.dp), modifier = Modifier.fillMaxWidth()) {
                 Text("Разрешить")
             }
         }
@@ -77,7 +77,7 @@ fun BluetoothGate(onReady: () -> Unit, content: @Composable () -> Unit) {
             Spacer(Modifier.height(10.dp))
             Button(
                 onClick = { btLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
-                shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(2.dp), modifier = Modifier.fillMaxWidth(),
             ) { Text("Включить Bluetooth") }
         }
         else -> content()

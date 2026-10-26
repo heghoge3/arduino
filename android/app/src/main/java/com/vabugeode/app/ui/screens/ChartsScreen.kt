@@ -46,6 +46,7 @@ import com.vabugeode.app.ui.components.Panel
 import com.vabugeode.app.ui.components.SectionLabel
 import com.vabugeode.app.ui.components.Waiting
 import com.vabugeode.app.ui.theme.Palette
+import com.vabugeode.app.ui.theme.Fonts
 import kotlin.math.abs
 
 /** Показатели для графиков. */
@@ -153,9 +154,9 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: Lo
             add(ChartSeries(seriesOf(track) { it.tempRaw }, Palette.TextDim, "датчик", dashed = true, fill = false))
         }
     }
-    Panel(padding = PaddingValues(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 12.dp)) {
+    Panel(accent = m.color, title = m.title, padding = PaddingValues(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(start = 4.dp)) {
-            Text(Fmt.num(values.last(), m.digits), fontSize = 34.sp, fontWeight = FontWeight.SemiBold, color = m.color)
+            Text(Fmt.num(values.last(), m.digits), fontFamily = Fonts.Pixel, fontSize = 52.sp, lineHeight = 48.sp, color = m.color)
             Spacer(Modifier.width(4.dp))
             Text(m.unit, color = Palette.TextDim, modifier = Modifier.padding(bottom = 6.dp))
             Spacer(Modifier.weight(1f))
@@ -191,12 +192,12 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: Lo
 
 @Composable
 private fun SmallChart(m: Metric, track: List<TrackPoint>, sunset: Long?, dusk: Long?, onClick: () -> Unit) {
-    Panel(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick), padding = PaddingValues(14.dp)) {
+    Panel(Modifier.fillMaxWidth().clip(RoundedCornerShape(2.dp)).clickable(onClick = onClick), padding = PaddingValues(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.width(110.dp)) {
-                Text(m.title, style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+                Text(m.title.uppercase(), style = MaterialTheme.typography.labelSmall, color = Palette.TextDim)
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(Fmt.num(m.value(track.last()), m.digits), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
+                    Text(Fmt.num(m.value(track.last()), m.digits), fontFamily = Fonts.Pixel, fontSize = 34.sp, lineHeight = 32.sp, color = m.color)
                     Spacer(Modifier.width(3.dp))
                     Text(m.unit, fontSize = 12.sp, color = Palette.TextDim, modifier = Modifier.padding(bottom = 3.dp))
                 }
