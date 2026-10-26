@@ -67,6 +67,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     ) {
         Spacer(Modifier.height(4.dp))
         LinkPanel(vm)
+        WherePanel(vm)
         if (i == null || st == null) {
             ExchangeLog(vm)
             return@Column
@@ -205,5 +206,40 @@ private fun CheckRow(c: SelfCheck) {
         if (c.address != null) {
             Text(c.address, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Palette.TextFaint)
         }
+    }
+}
+
+/** «Где гаджет»: время последнего маячка и где в этот момент был телефон (радиус приёма ~10–30 м). */
+@Composable
+private fun WherePanel(vm: AppViewModel) {
+    val row by vm.where.collectAsStateWithLifecycle()
+    val r = row ?: return
+    if (r.beaconMs <= 0) return
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val beacon = r.beacon?.let { com.vabugeode.app.protocol.Codec.decodeBeacon(it) }
+    Panel {
+        SectionLabel("Где гаджет")
+        Spacer(Modifier.height(6.dp))
+        KeyValue("Последний маячок", "${Fmt.time(r.beaconMs)} · ${Fmt.duration(System.currentTimeMillis() - r.beaconMs)} назад")
+        beacon?.let { Text(beaconSummary(it), style = MaterialTheme.typography.labelMedium, color = Palette.TextDim) }
+        val lat = r.phoneLat
+        val lon = r.phoneLon
+        if (lat != null && lon != null) {
+            KeyValue("Телефон был здесь", "${Fmt.coord(lat, lon)}${r.phoneAcc?.let { " ±$it м" } ?: ""}")
+            Spacer(Modifier.height(6.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    val uri = android.net.Uri.parse("geo:$lat,$lon?q=$lat,$lon(vabuGEOde)")
+                    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
+                },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+            ) { Text("Показать на карте") }
+        } else {
+            Text("Позиция телефона неизвестна (нет разрешения на геолокацию)", style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint)
+        }
+        Text(
+            "Маячок слышно в радиусе ~10–30 м — гаджет был рядом с этой точкой.",
+            style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint,
+        )
     }
 }

@@ -46,6 +46,7 @@ class LinkManagerTest {
 
     /** Гаджет, который только считает попытки подключения */
     private class FakeTransport(override val deviceName: String) : Transport {
+        override val key = deviceName
         override val state = MutableStateFlow(LinkState.DISCONNECTED)
         override val incoming = MutableSharedFlow<Packet>()
         var connects = 0
@@ -90,6 +91,31 @@ class LinkManagerTest {
         r.link.connectNow()
         advanceTimeBy(5000)
         assertEquals(LinkState.CONNECTED, r.repo.link.value)
+    }
+
+    @Test
+    fun backgroundGoesQuietThenBye() = runTest {
+        val r = Rig(this, MemPrefs())
+        r.link.setForeground(true)
+        advanceTimeBy(5000)
+        assertEquals(LinkState.CONNECTED, r.repo.link.value)
+        r.link.setForeground(false)
+        advanceTimeBy(LinkManager.QUIET_AFTER_MS + 2000)
+        // Тихий сеанс: STATUS больше не идут
+        val seq = r.repo.stats.value.lastSeq
+        advanceTimeBy(10_000)
+        assertEquals("в тихом сеансе STATUS не должен идти", seq, r.repo.stats.value.lastSeq)
+        assertEquals(LinkState.CONNECTED, r.repo.link.value)
+        // Через 2 мин — BYE и отключение; маячки не слушаем — само не переподключается
+        advanceTimeBy(LinkManager.BYE_AFTER_MS)
+        assertEquals(LinkState.DISCONNECTED, r.repo.link.value)
+        // Вернулись — снова подключились и живой сеанс
+        r.link.setForeground(true)
+        advanceTimeBy(8000)
+        assertEquals(LinkState.CONNECTED, r.repo.link.value)
+        val s1 = r.repo.stats.value.lastSeq
+        advanceTimeBy(3000)
+        assertTrue("живой сеанс не возобновился", (r.repo.stats.value.lastSeq ?: 0) > (s1 ?: 0))
     }
 
     @Test

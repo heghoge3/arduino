@@ -87,6 +87,7 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
+        OfflineBanner(vm)
         StatusRow(st, start)
         TempHero(st, track, sun?.sunsetUtcMs, sun?.civilDuskUtcMs)
         GpsCard(st)
@@ -331,6 +332,32 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
                 else -> if (name != null) {
                     Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(14.dp)) { Text("Подключить") }
                 }
+            }
+        }
+    }
+}
+
+/** Связи нет, но данные из базы есть — честно показать, насколько они старые. */
+@Composable
+private fun OfflineBanner(vm: AppViewModel) {
+    val link by vm.repo.link.collectAsStateWithLifecycle()
+    val seen by vm.repo.lastSeenMs.collectAsStateWithLifecycle()
+    if (link == LinkState.CONNECTED) return
+    val s = seen ?: return
+    Panel(accent = Palette.Warn, padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (link == LinkState.CONNECTING) "Подключение…" else "Нет связи с гаджетом",
+                    style = MaterialTheme.typography.titleMedium, color = Palette.Warn,
+                )
+                Text(
+                    "Данные на ${Fmt.time(s)} (${Fmt.duration(System.currentTimeMillis() - s)} назад)",
+                    style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
+                )
+            }
+            if (link == LinkState.DISCONNECTED) {
+                Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(14.dp)) { Text("Обновить") }
             }
         }
     }

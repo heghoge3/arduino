@@ -96,7 +96,8 @@ class DemoDevice(private val scope: CoroutineScope) {
     private var prevSpoof = false
 
     private var job: Job? = null
-    private var restartCount = 0
+    // Свой hike_start у каждого запуска приложения (секунды внутри минуты): иначе база склеит старый и новый демо-походы
+    private var restartCount = ((System.currentTimeMillis() / 1000) % 60).toInt()
     private var current: DeviceStatus? = null
     private var timeSynced = false
     private var movingIntervalMs = 10_000L

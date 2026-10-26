@@ -19,6 +19,9 @@ interface Transport {
     /** Имя устройства (для BLE — рекламируемое имя). */
     val deviceName: String
 
+    /** Ключ для локальной базы: MAC гаджета или «virtual» */
+    val key: String
+
     val state: StateFlow<LinkState>
 
     /** Уведомления от устройства (Status и Event). */
@@ -34,6 +37,7 @@ interface Transport {
 /** Гаджет ещё не выбран: ни подключиться, ни отправить. */
 object NoTransport : Transport {
     override val deviceName = "Гаджет не выбран"
+    override val key = "none"
     override val state: StateFlow<LinkState> = MutableStateFlow(LinkState.DISCONNECTED)
     override val incoming: SharedFlow<Packet> = MutableSharedFlow()
     override fun connect() {}

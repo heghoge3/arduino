@@ -40,6 +40,7 @@ class BleTransport(
     override val deviceName: String,
 ) : Transport {
 
+    override val key = address
     override val state = MutableStateFlow(LinkState.DISCONNECTED)
     override val incoming = MutableSharedFlow<Packet>(extraBufferCapacity = 8192)
 

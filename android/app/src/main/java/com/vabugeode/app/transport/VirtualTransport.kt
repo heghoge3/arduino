@@ -30,6 +30,7 @@ class VirtualTransport(
 ) : Transport {
 
     override val deviceName = "vabuGEOde-01 (виртуальное)"
+    override val key = VIRTUAL_ID
     override val state = MutableStateFlow(LinkState.DISCONNECTED)
     override val incoming = MutableSharedFlow<Packet>(extraBufferCapacity = 8192)
 

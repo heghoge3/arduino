@@ -21,6 +21,9 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -40,6 +43,11 @@ import com.vabugeode.app.ui.theme.Palette
 fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     val speed by vm.demo.speed.collectAsStateWithLifecycle()
     val blacklist by vm.repo.blacklist.collectAsStateWithLifecycle()
+    var guide by rememberSaveable { mutableStateOf(false) }
+    if (guide) {
+        XosGuide(contentPadding) { guide = false }
+        return
+    }
 
     Column(
         Modifier
@@ -70,6 +78,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
                 style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
             )
         }
+        WatchPanel(vm) { guide = true }
         Panel(accent = Palette.Geo) {
             SectionLabel("Виртуальное устройство", color = Palette.Geo)
             Spacer(Modifier.height(6.dp))
@@ -132,7 +141,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         Panel {
             Logo(size = 20.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Версия 0.1.0 · макет с демо-данными", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+            Text("Версия 0.4.0 · на железе не проверено", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             Text("Карта: © OpenStreetMap, OpenFreeMap", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
         }
         Spacer(Modifier.height(8.dp))

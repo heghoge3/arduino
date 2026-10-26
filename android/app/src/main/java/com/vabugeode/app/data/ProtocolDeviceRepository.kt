@@ -30,6 +30,10 @@ import com.vabugeode.app.protocol.SatsMsg
 import com.vabugeode.app.protocol.StatusMsg
 import com.vabugeode.app.protocol.SyncDoneMsg
 import com.vabugeode.app.protocol.toHex
+import com.vabugeode.app.store.MarkRow
+import com.vabugeode.app.store.PointRow
+import com.vabugeode.app.store.StoreDao
+import com.vabugeode.app.store.saveState
 import com.vabugeode.app.transport.Packet
 import com.vabugeode.app.transport.Transport
 import kotlinx.coroutines.CoroutineScope
@@ -75,12 +79,33 @@ class ProtocolDeviceRepository(
     private val scope: CoroutineScope,
     initialTransport: Transport,
     private val initialBlacklist: List<BlacklistPoint>,
+    private val store: StoreDao? = null,
 ) : DeviceRepository {
 
     private var transport: Transport = initialTransport
     private var transportJobs: List<Job> = emptyList()
 
     override val link = MutableStateFlow(LinkState.DISCONNECTED)
+
+    /** Когда последний раз что-то приходило от гаджета (или сохранено в базе) */
+    val lastSeenMs = MutableStateFlow<Long?>(null)
+
+    /** Приложение на экране: тревоги видны человеку — можно подтверждать их гаджету */
+    var foreground = true
+
+    /** Живой сеанс (STATUS раз в секунду) или тихий (только метки и тревоги) */
+    private var liveWanted = true
+    private var ackedAlerts = 0
+    private var restoreJob: Job? = null
+
+    // Последние сырые пакеты — для сохранения в базу
+    private var lastStatusBytes: ByteArray? = null
+    private var lastSatsBytes: ByteArray? = null
+    private var lastInfoBytes: ByteArray? = null
+    private var lastSavedMs = 0L
+    private var savedWithStatus = false
+    private val pendingPoints = ArrayList<PointRow>()
+    private val pendingMarks = ArrayList<MarkRow>()
 
     /** Позиция телефона для проверки подмены (lat, lon, точность м). null — нет разрешения или данных. */
     var phonePosition: (() -> Triple<Double, Double, Int>?)? = null
@@ -123,7 +148,14 @@ class ProtocolDeviceRepository(
         scope.launch {
             while (isActive) {
                 delay(20_000)
-                if (link.value == LinkState.CONNECTED && !stats.value.syncing) send(Cmd.Session(live = true))
+                if (link.value == LinkState.CONNECTED && !stats.value.syncing) send(Cmd.Session(live = liveWanted))
+            }
+        }
+        // Запись в базу пачками раз в секунду
+        if (store != null) scope.launch {
+            while (isActive) {
+                delay(1000)
+                persist()
             }
         }
         scope.launch {
@@ -145,6 +177,7 @@ class ProtocolDeviceRepository(
     /** Сменить источник байтов: старый отключается, данные очищаются (это другое устройство). */
     fun use(t: Transport) {
         if (t === transport) return
+        scope.launch { persist(force = true) }
         transport.disconnect()
         transportJobs.forEach { it.cancel() }
         points.clear()
@@ -159,17 +192,95 @@ class ProtocolDeviceRepository(
         marks.value = emptyList()
         stats.value = LinkStats()
         log.value = emptyList()
+        lastSeenMs.value = null
+        lastStatusBytes = null
+        lastSatsBytes = null
+        lastInfoBytes = null
+        ackedAlerts = 0
+        savedWithStatus = false
         attach(t)
+    }
+
+    /** Живой или тихий сеанс (приложение на экране или свёрнуто) */
+    fun setLive(on: Boolean) {
+        if (liveWanted == on) return
+        liveWanted = on
+        if (link.value == LinkState.CONNECTED) send(Cmd.Session(live = on))
+    }
+
+    /** Попрощаться: гаджет сразу вернётся к маячку и не будет ждать 60 с */
+    fun bye() {
+        if (link.value != LinkState.CONNECTED) return
+        scope.launch {
+            sendLock.withLock { transport.send(Codec.encode(Cmd.Bye)) }
+            delay(300)
+            transport.disconnect()
+        }
+    }
+
+    // ---- Локальная база ----
+
+    private suspend fun restore(key: String) {
+        val dao = store ?: return
+        val g = dao.gadget(key) ?: return
+        lastSeenMs.value = g.lastSeenMs
+        g.hike?.let { hike ->
+            hikeStartSec = hike
+            hikeStartMs.value = hike * 1000
+            dao.points(key, hike).forEach { row ->
+                (runCatching { Codec.decodeMsg(row.data) }.getOrNull() as? PointMsg)?.let { points[it.timeUtc * 1000] = it.toTrackPoint() }
+            }
+            dao.marks(key, hike).forEach { row ->
+                (runCatching { Codec.decodeMsg(row.data) }.getOrNull() as? MarkMsg)?.let { markMap[it.id] = it.toMark() }
+            }
+            dirty = true
+        }
+        lastSatsBytes = g.sats
+        lastSats = g.sats?.let { runCatching { Codec.decodeMsg(it) }.getOrNull() as? SatsMsg }
+        lastStatusBytes = g.status
+        g.status?.let { b -> (runCatching { Codec.decodeMsg(b) }.getOrNull() as? StatusMsg)?.let { status.value = it.toStatus(lastSats) } }
+        lastInfoBytes = g.info
+        g.info?.let { b ->
+            (runCatching { Codec.decodeMsg(b) }.getOrNull() as? InfoMsg)?.let {
+                lastInfo = it
+                info.value = buildInfo(it, status.value)
+            }
+        }
+    }
+
+    private suspend fun persist(force: Boolean = false) {
+        val dao = store ?: return
+        val key = transport.key
+        if (key == "none") return
+        val pts: List<PointRow>
+        val mks: List<MarkRow>
+        synchronized(pendingPoints) {
+            pts = ArrayList(pendingPoints); pendingPoints.clear()
+            mks = ArrayList(pendingMarks); pendingMarks.clear()
+        }
+        if (pts.isNotEmpty()) dao.putPoints(pts)
+        if (mks.isNotEmpty()) dao.putMarks(mks)
+        val seen = lastSeenMs.value ?: return
+        // Состояние — раз в 30 с; сразу — при первом STATUS, при отключении и смене источника
+        val firstStatus = !savedWithStatus && lastStatusBytes != null
+        if (force || firstStatus || System.currentTimeMillis() - lastSavedMs > 30_000) {
+            lastSavedMs = System.currentTimeMillis()
+            savedWithStatus = lastStatusBytes != null
+            dao.saveState(key, hikeStartSec, lastStatusBytes, lastSatsBytes, lastInfoBytes, seen)
+        }
     }
 
     private fun attach(t: Transport) {
         transport = t
+        restoreJob = if (store != null) scope.launch { restore(t.key) } else null
         transportJobs = listOf(
             scope.launch { t.incoming.collect { onPacket(it) } },
             scope.launch {
                 t.state.collect { st ->
+                    val was = link.value
                     link.value = st
                     if (st == LinkState.CONNECTED) onConnected()
+                    if (st == LinkState.DISCONNECTED && was != LinkState.DISCONNECTED) persist(force = true)
                 }
             },
         )
@@ -202,7 +313,9 @@ class ProtocolDeviceRepository(
 
     fun refreshInfo() = send(Cmd.GetInfo)
 
-    private fun onConnected() {
+    private fun onConnected() = scope.launch {
+        // Сначала дочитать базу: тогда догрузим только то, чего в телефоне ещё нет
+        restoreJob?.join()
         syncAfterInfo = true
         stats.value = stats.value.copy(lastSeq = null, syncing = false)
         val now = System.currentTimeMillis()
@@ -226,21 +339,33 @@ class ProtocolDeviceRepository(
         }
         val s = stats.value
         stats.value = s.copy(packetsIn = s.packetsIn + 1, bytesIn = s.bytesIn + p.data.size)
+        lastSeenMs.value = System.currentTimeMillis()
         // STATUS и POINT идут потоком — в журнал пишем не каждый, иначе он забьётся
         val noisy = msg is PointMsg || (msg is StatusMsg && msg.seq % 10 != 0)
         if (!noisy) addLog(LogEntry(System.currentTimeMillis(), false, msgName(msg), p.data.size, p.data.toHex()))
 
         when (msg) {
-            is StatusMsg -> onStatus(msg)
-            is SatsMsg -> lastSats = msg
-            is InfoMsg -> onInfo(msg)
+            is StatusMsg -> {
+                lastStatusBytes = p.data
+                onStatus(msg)
+            }
+            is SatsMsg -> {
+                lastSats = msg
+                lastSatsBytes = p.data
+            }
+            is InfoMsg -> {
+                lastInfoBytes = p.data
+                onInfo(msg)
+            }
             is MarkMsg -> {
                 markMap[msg.id] = msg.toMark()
                 dirty = true
+                hikeStartSec?.let { h -> synchronized(pendingPoints) { pendingMarks += MarkRow(transport.key, h, msg.id, p.data) } }
             }
             is PointMsg -> {
                 points[msg.timeUtc * 1000] = msg.toTrackPoint()
                 dirty = true
+                hikeStartSec?.let { h -> synchronized(pendingPoints) { pendingPoints += PointRow(transport.key, h, msg.timeUtc, p.data) } }
             }
             is SyncDoneMsg -> {
                 if (msg.what == Proto.CMD_SYNC_MARKS) stats.value = stats.value.copy(syncing = false)
@@ -272,7 +397,7 @@ class ProtocolDeviceRepository(
             send(Cmd.SyncTrack(sincePoint))
             send(Cmd.SyncMarks(sinceMark))
             // Живой сеанс: устройство начнёт слать STATUS раз в секунду (protocol.md, порядок подключения)
-            send(Cmd.Session(live = true))
+            send(Cmd.Session(live = liveWanted))
         }
         info.value = buildInfo(m, status.value)
     }
@@ -284,6 +409,12 @@ class ProtocolDeviceRepository(
             if (gap in 1..1000) stats.value = stats.value.copy(lostStatus = stats.value.lostStatus + gap)
         }
         stats.value = stats.value.copy(lastSeq = m.seq)
+        // Тревогу увидели на экране — сказать гаджету, чтобы не повторял окно
+        if (m.alerts == 0) ackedAlerts = 0
+        else if (foreground && m.alerts and ackedAlerts.inv() != 0) {
+            ackedAlerts = m.alerts
+            send(Cmd.AckAlert(m.alerts))
+        }
         val st = m.toStatus(lastSats)
         status.value = st
         lastInfo?.let { info.value = buildInfo(it, st) }

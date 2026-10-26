@@ -63,6 +63,7 @@ class LinkManager(
 
     private var foreground = false
     private var userDisconnected = false
+    private var backgroundJob: kotlinx.coroutines.Job? = null
 
     init {
         repo.use(
@@ -85,15 +86,27 @@ class LinkManager(
         }
     }
 
-    /** Приложение на экране (true) или свёрнуто (false) */
+    /**
+     * Приложение на экране (true) или свёрнуто (false).
+     * Свернули: через 30 с — тихий сеанс, через 2 мин — BYE (gadget-logic.md, раздел 5).
+     */
     fun setForeground(on: Boolean) {
         foreground = on
+        repo.foreground = on
+        backgroundJob?.cancel()
         if (on) {
             userDisconnected = false
+            repo.setLive(true)
             _scanner.value.start()
             maybeConnect()
         } else {
             _scanner.value.stop()
+            backgroundJob = scope.launch {
+                kotlinx.coroutines.delay(QUIET_AFTER_MS)
+                repo.setLive(false)
+                kotlinx.coroutines.delay(BYE_AFTER_MS - QUIET_AFTER_MS)
+                repo.bye()
+            }
         }
     }
 
@@ -161,5 +174,10 @@ class LinkManager(
     fun restartScan() {
         _scanner.value.stop()
         if (foreground) _scanner.value.start()
+    }
+
+    companion object {
+        const val QUIET_AFTER_MS = 30_000L
+        const val BYE_AFTER_MS = 120_000L
     }
 }

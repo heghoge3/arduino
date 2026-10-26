@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 class BleScanner(
     private val context: Context,
     private val scope: CoroutineScope,
+    // На экране — LOW_LATENCY (ловить короткие маячки 300 мс); в фоне — BALANCED (дешевле для телефона)
+    private val scanMode: Int = ScanSettings.SCAN_MODE_LOW_LATENCY,
 ) : GadgetScanner {
 
     override val found = MutableStateFlow<Map<String, FoundGadget>>(emptyMap())
@@ -75,8 +77,7 @@ class BleScanner(
             )
             .build()
         val settings = ScanSettings.Builder()
-            // На экране — быстро ловить короткие маячки (300 мс); фоновый режим — в сервисе наблюдения
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setScanMode(scanMode)
             .build()
         try {
             scanner.startScan(listOf(filter), settings, callback)
