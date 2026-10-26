@@ -776,6 +776,8 @@ void console() {
     if (!n) continue;
     line[n] = 0;
     n = 0;
+    // Кто-то сидит в мониторе порта — 10 мин не уходим в глубокий сон (иначе USB пропадёт)
+    if ((int32_t)(millis() + 600000 - g_awakeUntil) > 0) g_awakeUntil = millis() + 600000;
     if (!strcmp(line, "help")) {
       Serial.println("st — состояние; i2c — сканер шины; gps on|off|echo — GPS; pcas <тело> — команда модулю;"
                      " win — окно BLE; info — чип и SD");

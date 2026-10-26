@@ -1,0 +1,452 @@
+<title>Сборка vabuGEOde</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=VT323&display=swap">
+<style>
+/* Лист сборщика в стиле приложения «лёд»: тёмный экран, рамки с подписями, моно для пинов.
+   Одна тёмная тема намеренно — совпадает с приложением и не слепит за паяльником. */
+:root {
+  color-scheme: dark;
+  --bg: #060A12;
+  --panel: #0A111C;
+  --line: #1E2D44;
+  --text: #D7EEFF;
+  --dim: #8CA3BD;
+  --faint: #6A819E;
+  --geo: #9FD8FF;
+  --pwr: #FF7B6E;   /* +3,3 В и силовые линии */
+  --gnd: #8CA3BD;
+  --i2c: #7FE0E6;
+  --spi: #C2A8FF;
+  --gps: #7CE3B0;
+  --rtc: #FFBE5A;
+  --io: #FF9FCB;
+  --warn: #FFBE5A;
+  --bad: #FF6B5E;
+  --badbg: #1D0C10;
+  --good: #7CE3B0;
+  --f-pix: "VT323", "IBM Plex Mono", ui-monospace, monospace;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --f-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.55 var(--f-sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1 { font: 400 52px/1 var(--f-pix); margin: 0; color: var(--geo); letter-spacing: 1px; }
+h1 b { font-weight: 400; background: var(--geo); color: var(--bg); padding: 0 2px; }
+h2 { font: 500 13px/1.3 var(--f-mono); letter-spacing: 2px; text-transform: uppercase; color: var(--geo); margin: 0; text-wrap: balance; }
+h3 { font: 600 16px/1.35 var(--f-sans); margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lead { color: var(--dim); max-width: 62ch; }
+code, .mono { font-family: var(--f-mono); font-size: 0.92em; }
+code { color: var(--geo); }
+section { display: flex; flex-direction: column; gap: 14px; }
+.frame { border: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--bg); min-width: 0; }
+.frame.danger { border-color: var(--bad); background: var(--badbg); }
+.frame.danger h2 { color: var(--bad); }
+ol.rules { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+ol.rules li::marker { font-family: var(--f-mono); color: var(--bad); }
+ol.rules strong { color: #FFB8B0; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+nav.toc a { font: 500 12px var(--f-mono); color: var(--geo); text-decoration: none; border: 1px solid var(--line); padding: 6px 10px; }
+nav.toc a:hover, nav.toc a:focus-visible { border-color: var(--geo); outline: none; }
+.scroll { overflow-x: auto; }
+svg text { font-family: var(--f-mono); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 500 11px var(--f-mono); letter-spacing: 1px; text-transform: uppercase; color: var(--faint); }
+td.pin { font-family: var(--f-mono); white-space: nowrap; }
+.tag { font: 500 11px var(--f-mono); letter-spacing: 1px; padding: 1px 6px; border: 1px solid currentColor; white-space: nowrap; }
+.mod { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.mod-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.note { color: var(--dim); font-size: 14px; }
+.note b { color: var(--text); font-weight: 600; }
+.warn { color: var(--warn); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.steps { display: flex; flex-direction: column; gap: 12px; counter-reset: s; }
+.step { border: 1px solid var(--line); padding: 14px; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+.step input { width: 22px; height: 22px; accent-color: var(--good); margin: 2px 0 0; grid-row: span 4; }
+.step input:focus-visible { outline: 2px solid var(--geo); outline-offset: 2px; }
+.step.done { border-color: var(--good); }
+.step.done h3 { color: var(--good); }
+.step dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 14px; }
+.step dt { font: 500 11px/1.9 var(--f-mono); letter-spacing: 1px; text-transform: uppercase; color: var(--faint); }
+.step dd { margin: 0; min-width: 0; }
+.step dd.ok { color: var(--good); }
+.step dd.fail { color: var(--dim); }
+pre { margin: 0; font: 13px/1.5 var(--f-mono); color: var(--geo); background: var(--panel); border-left: 2px solid var(--line); padding: 8px 10px; overflow-x: auto; }
+ul.tight { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.progress { font: 400 28px var(--f-pix); color: var(--good); }
+footer { color: var(--faint); font-size: 13px; }
+@media (max-width: 480px) { h1 { font-size: 44px; } .step dl { grid-template-columns: 1fr; } .step dt { line-height: 1.4; } }
+@media (prefers-reduced-motion: no-preference) { .step { transition: border-color .2s; } }
+</style>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:10px">
+  <h1>vabu<b>GEO</b>de</h1>
+  <p class="lead">Схема и порядок сборки трекера: ESP32-S3-Zero, GPS ATGM336H, BME280, MPU6050, QMC5883L, INA219, OLED, SD, DS1302. Всё по <code>firmware/include/pins.h</code>. Ничего ещё не проверено на железе — перед пайкой сверяй номера пинов с шелкографией своей платы.</p>
+  <nav class="toc" aria-label="Разделы">
+    <a href="#rules">Правила</a><a href="#power">Питание</a><a href="#pins">Пины</a><a href="#wiring">Провода</a><a href="#prep">Доработки</a><a href="#bringup">Запуск</a><a href="#minimal">Макетка</a><a href="#check">Перед походом</a>
+  </nav>
+</header>
+
+<section class="frame danger" id="rules">
+  <h2>Четыре вещи, от которых что-то сгорит</h2>
+  <ol class="rules">
+    <li><strong>TPS63020 проверить мультиметром до подключения платы.</strong> На модуле перемычки 3V3 / 4V2 / 5V. Должно быть 3,25–3,40 В. 5 В на пине 3V3 сожгут ESP32 и все датчики.</li>
+    <li><strong>USB и аккумулятор вместе нельзя.</strong> Питание идёт на пин 3V3 мимо стабилизатора платы. Подключаешь USB — кнопка питания выключена. Всегда.</li>
+    <li><strong>Всё питается от 3,3 В.</strong> Пин 5V на плате не трогать: при USB на нём 5 В, а SD-модуль и датчики рассчитаны на 3,3 В.</li>
+    <li><strong>Полярность аккумулятора на TP4056:</strong> B+ к плюсу, B− к минусу. Переполюсовка убьёт плату заряда, а у 18650 ток короткого замыкания — десятки ампер.</li>
+  </ol>
+</section>
+
+<section id="power">
+  <h2>Питание</h2>
+  <p class="note">Силовая цепочка сверху вниз. Земля у всех модулей общая. Зарядка через Type-C на TP4056 работает и при выключенной кнопке.</p>
+  <div class="scroll">
+  <svg viewBox="0 0 360 520" width="360" role="img" aria-labelledby="pwrT" style="max-width:100%;height:auto;display:block">
+    <title id="pwrT">Цепочка питания: аккумулятор, TP4056, кнопка, INA219, TPS63020, шина 3,3 В</title>
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#FF7B6E"/></marker></defs>
+    <g fill="none" stroke-width="1.5">
+      <rect x="40" y="10" width="200" height="56" stroke="#FF7B6E"/>
+      <rect x="40" y="100" width="200" height="56" stroke="#FF7B6E"/>
+      <rect x="40" y="190" width="200" height="48" stroke="#FF9FCB"/>
+      <rect x="40" y="272" width="200" height="56" stroke="#FFBE5A"/>
+      <rect x="40" y="362" width="200" height="56" stroke="#FF7B6E"/>
+      <rect x="40" y="452" width="200" height="56" stroke="#9FD8FF"/>
+      <path d="M140 66V100M140 156V190M140 238V272M140 328V362M140 418V452" stroke="#FF7B6E" marker-end="url(#ar)"/>
+      <path d="M240 38H300V480H240M240 128H300M240 390H300" stroke="#8CA3BD" stroke-dasharray="4 4"/>
+    </g>
+    <g font-size="13" fill="#D7EEFF">
+      <text x="52" y="33">Аккумулятор</text>
+      <text x="52" y="53" font-size="11" fill="#8CA3BD">18650 на тестах, потом LiPo</text>
+      <text x="52" y="123">TP4056 (Type-C)</text>
+      <text x="52" y="143" font-size="11" fill="#8CA3BD">B+/B− ← акк · OUT+ → дальше</text>
+      <text x="52" y="219">Кнопка с фиксацией</text>
+      <text x="52" y="295">INA219</text>
+      <text x="52" y="315" font-size="11" fill="#8CA3BD">VIN+ ← кнопка · VIN− → TPS</text>
+      <text x="52" y="385">TPS63020 → 3,3 В</text>
+      <text x="52" y="405" font-size="11" fill="#8CA3BD">перемычка 3V3, PS на GND</text>
+      <text x="52" y="475">Шина +3,3 В</text>
+      <text x="52" y="495" font-size="11" fill="#8CA3BD">пин 3V3 платы + все модули</text>
+      <text x="306" y="262" font-size="11" fill="#8CA3BD" transform="rotate(90 306 262)" text-anchor="middle">общий GND</text>
+      <text x="150" y="88" font-size="11" fill="#FF7B6E">B+</text>
+      <text x="150" y="178" font-size="11" fill="#FF7B6E">OUT+</text>
+      <text x="150" y="350" font-size="11" fill="#FF7B6E">VIN−</text>
+    </g>
+  </svg>
+  </div>
+</section>
+
+<section id="pins">
+  <h2>Пины ESP32-S3-Zero</h2>
+  <p class="note">Раскладка как у Waveshare ESP32-S3-Zero, вид сверху, USB-C вверху. У клона TENSTAR может отличаться — <b>сверь каждую надпись на плате</b>. Цвет — к какому узлу идёт провод.</p>
+  <div class="scroll">
+  <svg viewBox="0 0 420 470" width="420" role="img" aria-labelledby="pinT" style="max-width:100%;height:auto;display:block">
+    <title id="pinT">Раскладка пинов ESP32-S3-Zero и куда подключён каждый</title>
+    <rect x="160" y="20" width="100" height="400" fill="#0A111C" stroke="#9FD8FF" stroke-width="1.5"/>
+    <rect x="190" y="8" width="40" height="22" fill="#060A12" stroke="#8CA3BD"/>
+    <text x="210" y="24" font-size="10" fill="#8CA3BD" text-anchor="middle">USB-C</text>
+    <text x="210" y="226" font-size="12" fill="#9FD8FF" text-anchor="middle">S3-Zero</text>
+    <text x="210" y="242" font-size="10" fill="#6A819E" text-anchor="middle">вид сверху</text>
+    <g font-size="12">
+      <!-- левый ряд: 5V GND 3V3 1 2 3 4 5 6 -->
+      <g fill="#D7EEFF" text-anchor="start">
+        <text x="166" y="54">5V</text><text x="166" y="94">GND</text><text x="166" y="134">3V3</text>
+        <text x="166" y="174">1</text><text x="166" y="214">2</text><text x="166" y="254">3</text>
+        <text x="166" y="294">4</text><text x="166" y="334">5</text><text x="166" y="374">6</text>
+      </g>
+      <g text-anchor="end">
+        <text x="150" y="54" fill="#6A819E">не подключать</text>
+        <text x="150" y="94" fill="#8CA3BD">GND шина</text>
+        <text x="150" y="134" fill="#FF7B6E">+3,3 В от TPS</text>
+        <text x="150" y="174" fill="#FF9FCB">кнопка A</text>
+        <text x="150" y="214" fill="#FF9FCB">кнопка B</text>
+        <text x="150" y="254" fill="#6A819E">не занимать</text>
+        <text x="150" y="294" fill="#7FE0E6">MPU INT</text>
+        <text x="150" y="334" fill="#FF9FCB">пищалка +</text>
+        <text x="150" y="374" fill="#7CE3B0">затвор AO3401</text>
+      </g>
+      <!-- правый ряд: TX43 RX44 13 12 11 10 9 8 7 -->
+      <g fill="#D7EEFF" text-anchor="end">
+        <text x="254" y="54">TX 43</text><text x="254" y="94">RX 44</text><text x="254" y="134">13</text>
+        <text x="254" y="174">12</text><text x="254" y="214">11</text><text x="254" y="254">10</text>
+        <text x="254" y="294">9</text><text x="254" y="334">8</text><text x="254" y="374">7</text>
+      </g>
+      <g text-anchor="start">
+        <text x="270" y="54" fill="#7CE3B0">→ RXD GPS</text>
+        <text x="270" y="94" fill="#7CE3B0">← TXD GPS</text>
+        <text x="270" y="134" fill="#C2A8FF">SD MISO</text>
+        <text x="270" y="174" fill="#C2A8FF">SD SCK</text>
+        <text x="270" y="214" fill="#C2A8FF">SD MOSI</text>
+        <text x="270" y="254" fill="#C2A8FF">SD CS</text>
+        <text x="270" y="294" fill="#7FE0E6">I²C SCL</text>
+        <text x="270" y="334" fill="#7FE0E6">I²C SDA</text>
+        <text x="270" y="374" fill="#FFBE5A">DS1302 RST</text>
+      </g>
+      <!-- нижние площадки 14 15 -->
+      <g fill="#D7EEFF" text-anchor="middle"><text x="190" y="412">14</text><text x="230" y="412">15</text></g>
+      <text x="190" y="446" fill="#FFBE5A" text-anchor="middle">DS1302 CLK</text>
+      <text x="230" y="462" fill="#FFBE5A" text-anchor="middle">DS1302 DAT</text>
+      <path d="M190 418V434M230 418V450" stroke="#FFBE5A"/>
+    </g>
+    <g fill="#9FD8FF"><circle cx="160" cy="50" r="3"/><circle cx="160" cy="90" r="3"/><circle cx="160" cy="130" r="3"/><circle cx="160" cy="170" r="3"/><circle cx="160" cy="210" r="3"/><circle cx="160" cy="250" r="3"/><circle cx="160" cy="290" r="3"/><circle cx="160" cy="330" r="3"/><circle cx="160" cy="370" r="3"/>
+      <circle cx="260" cy="50" r="3"/><circle cx="260" cy="90" r="3"/><circle cx="260" cy="130" r="3"/><circle cx="260" cy="170" r="3"/><circle cx="260" cy="210" r="3"/><circle cx="260" cy="250" r="3"/><circle cx="260" cy="290" r="3"/><circle cx="260" cy="330" r="3"/><circle cx="260" cy="370" r="3"/>
+      <circle cx="190" cy="420" r="3"/><circle cx="230" cy="420" r="3"/></g>
+  </svg>
+  </div>
+  <p class="note">Не использовать: <b>0, 3, 45, 46</b> (влияют на загрузку), <b>19, 20</b> (USB). Свободны на будущее: 16, 17, 18. Встроенный RGB-светодиод — GPIO21 у Waveshare, у клона проверить.</p>
+</section>
+
+<section id="wiring">
+  <h2>Провода по модулям</h2>
+  <p class="note">VCC каждого модуля — на шину <span style="color:var(--pwr)">+3,3 В</span>, GND — на общую землю. Пять модулей сидят на одной шине I²C: все SDA вместе на GPIO8, все SCL вместе на GPIO9. Подтяжки уже стоят на модулях, свои резисторы не нужны.</p>
+
+  <div class="grid2">
+    <div class="frame mod">
+      <div class="mod-head"><h3>GPS ATGM336H</h3><span class="tag" style="color:var(--gps)">UART</span></div>
+      <table><thead><tr><th>Модуль</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">VCC</td><td>сток (D) AO3401</td></tr>
+        <tr><td class="pin">GND</td><td>GND</td></tr>
+        <tr><td class="pin">TXD</td><td class="pin">GPIO44 (RX)</td></tr>
+        <tr><td class="pin">RXD</td><td class="pin">GPIO43 (TX)</td></tr>
+        <tr><td class="pin">PPS</td><td>не подключать</td></tr>
+      </tbody></table>
+      <p class="note">TX модуля — в RX платы, крест-накрест. Антенну вкрутить до включения. Батарейка горячего старта на модуле.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>Ключ GPS: AO3401</h3><span class="tag" style="color:var(--gps)">P-MOSFET</span></div>
+      <table><thead><tr><th>Вывод</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">S (исток, 2)</td><td>+3,3 В</td></tr>
+        <tr><td class="pin">D (сток, 3)</td><td>VCC модуля GPS</td></tr>
+        <tr><td class="pin">G (затвор, 1)</td><td class="pin">GPIO6</td></tr>
+        <tr><td class="pin">10 кОм</td><td>между G и S</td></tr>
+      </tbody></table>
+      <p class="note">LOW на GPIO6 — GPS включён. Номера 1-2-3 — у самого корпуса SOT-23; на переходнике прозвони, к какой ножке DIP идёт каждый.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>BME280 (6 контактов)</h3><span class="tag" style="color:var(--i2c)">I²C 0x76</span></div>
+      <table><thead><tr><th>Модуль</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">VCC / GND</td><td>+3,3 В / GND</td></tr>
+        <tr><td class="pin">SCL / SDA</td><td class="pin">GPIO9 / GPIO8</td></tr>
+        <tr><td class="pin">CSB</td><td>+3,3 В (включает I²C)</td></tr>
+        <tr><td class="pin">SDO</td><td>GND → адрес 0x76</td></tr>
+      </tbody></table>
+      <p class="note">В отдельный отсек с вентиляцией, подальше от платы и TPS — иначе меряет тепло электроники.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>MPU6050 (GY-521)</h3><span class="tag" style="color:var(--i2c)">I²C 0x68</span></div>
+      <table><thead><tr><th>Модуль</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">VCC / GND</td><td>+3,3 В / GND</td></tr>
+        <tr><td class="pin">SCL / SDA</td><td class="pin">GPIO9 / GPIO8</td></tr>
+        <tr><td class="pin">INT</td><td class="pin">GPIO4</td></tr>
+        <tr><td class="pin">AD0</td><td>GND (или не трогать)</td></tr>
+        <tr><td class="pin">XDA / XCL</td><td>не подключать</td></tr>
+      </tbody></table>
+      <p class="note">Крепить жёстко к корпусу: по нему считаются шаги и наклон компаса.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>Компас GY-271</h3><span class="tag" style="color:var(--i2c)">I²C 0x0D</span></div>
+      <table><thead><tr><th>Модуль</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">VCC / GND</td><td>+3,3 В / GND</td></tr>
+        <tr><td class="pin">SCL / SDA</td><td class="pin">GPIO9 / GPIO8</td></tr>
+        <tr><td class="pin">DRDY</td><td>не подключать</td></tr>
+      </tbody></table>
+      <p class="note">Как можно дальше от пищалки (магнит), аккумулятора и силовых проводов. Если сканер покажет 0x1E — пришёл HMC5883L, прошивка поддерживает оба.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>INA219</h3><span class="tag" style="color:var(--i2c)">I²C 0x40</span></div>
+      <table><thead><tr><th>Модуль</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">VIN+</td><td>от кнопки питания</td></tr>
+        <tr><td class="pin">VIN−</td><td>на VIN TPS63020</td></tr>
+        <tr><td class="pin">VCC / GND</td><td>+3,3 В / GND</td></tr>
+        <tr><td class="pin">SCL / SDA</td><td class="pin">GPIO9 / GPIO8</td></tr>
+      </tbody></table>
+      <p class="note">Стоит в разрыве плюса: через шунт идёт весь ток гаджета. GND модуля обязательно на общую землю.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>OLED SSD1306</h3><span class="tag" style="color:var(--i2c)">I²C 0x3C</span></div>
+      <table><thead><tr><th>Модуль</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">GND</td><td>GND</td></tr>
+        <tr><td class="pin">VCC</td><td>+3,3 В</td></tr>
+        <tr><td class="pin">SCL / SDA</td><td class="pin">GPIO9 / GPIO8</td></tr>
+      </tbody></table>
+      <p class="note warn">Порядок выводов именно GND-VCC-SCL-SDA — у других экранов бывает VCC первым.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>SD-модуль</h3><span class="tag" style="color:var(--spi)">SPI</span></div>
+      <table><thead><tr><th>Модуль</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">VCC / GND</td><td>+3,3 В / GND</td></tr>
+        <tr><td class="pin">CS</td><td class="pin">GPIO10</td></tr>
+        <tr><td class="pin">MOSI</td><td class="pin">GPIO11</td></tr>
+        <tr><td class="pin">SCK</td><td class="pin">GPIO12</td></tr>
+        <tr><td class="pin">MISO</td><td class="pin">GPIO13</td></tr>
+      </tbody></table>
+      <p class="note">Карта FAT32. Большой синий модуль часто рассчитан на 5 В (стабилизатор AMS1117): если у него есть пин <b>3V3</b> — питать через него, иначе может не завестись.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>Часы DS1302</h3><span class="tag" style="color:var(--rtc)">3 провода</span></div>
+      <table><thead><tr><th>Модуль</th><th>Куда</th></tr></thead><tbody>
+        <tr><td class="pin">VCC / GND</td><td>+3,3 В / GND</td></tr>
+        <tr><td class="pin">CLK</td><td class="pin">GPIO14</td></tr>
+        <tr><td class="pin">DAT</td><td class="pin">GPIO15</td></tr>
+        <tr><td class="pin">RST</td><td class="pin">GPIO7</td></tr>
+      </tbody></table>
+      <p class="note">Это не I²C. Батарейку CR2032 вставить. Подзаряд прошивка выключает сама.</p>
+    </div>
+
+    <div class="frame mod">
+      <div class="mod-head"><h3>Кнопки и пищалка</h3><span class="tag" style="color:var(--io)">GPIO</span></div>
+      <table><thead><tr><th>Что</th><th>Куда</th></tr></thead><tbody>
+        <tr><td>Кнопка A</td><td><span class="mono">GPIO1</span> ↔ GND</td></tr>
+        <tr><td>Кнопка B</td><td><span class="mono">GPIO2</span> ↔ GND</td></tr>
+        <tr><td>Пищалка +</td><td class="pin">GPIO5</td></tr>
+        <tr><td>Пищалка −</td><td>GND</td></tr>
+        <tr><td>Кнопка с фиксацией</td><td>в разрыв OUT+ TP4056 → VIN+ INA219</td></tr>
+      </tbody></table>
+      <p class="note">Подтяжка кнопок внутренняя, резисторы не нужны.</p>
+    </div>
+  </div>
+</section>
+
+<section id="prep">
+  <h2>Доработки до пайки</h2>
+  <div class="frame">
+    <ul class="tight">
+      <li><b>TPS63020:</b> выпаять резистор подтяжки PS (10 кОм), замкнуть PS на GND, выпаять светодиод питания. Перемычка на <b>3V3</b>. Подать аккумулятор, мультиметр на выход: 3,25–3,40 В.</li>
+      <li><b>GY-521:</b> отпаять светодиод питания (лишние ~1 мА круглые сутки).</li>
+      <li><b>BME280:</b> CSB к 3,3 В, SDO к GND — перемычками прямо на модуле.</li>
+      <li><b>AO3401:</b> запаять на переходник, прозвонить, где G, S и D.</li>
+      <li><b>Пищалка — определить тип.</b> Подать 3,3 В через мультиметр в режиме мА: пищит сама — активная, запомни ток. Только щёлкает — пассивная, тогда в <code>config.h</code> поставить <code>BUZZER_ACTIVE 0</code>. Ток больше 20 мА — скажи, переделаем на ключ.</li>
+      <li><b>Плата:</b> найти на ней надписи пинов и сверить с картой выше. Особенно нижние площадки 14 и 15.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="bringup">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <h2>Первый запуск по шагам</h2>
+    <span class="progress" id="prog" aria-live="polite">0 / 9</span>
+  </div>
+  <p class="note">По одному модулю: подключил — проверил — дальше. Пока идёт проверка, всё питается от USB компьютера, <b>кнопка питания выключена</b>. Команды вводятся в Monitor PlatformIO (115200). После любой команды гаджет 10 минут не засыпает.</p>
+  <div class="steps" id="steps">
+
+    <label class="step"><input type="checkbox" id="s0"><h3>0. Только плата</h3>
+      <dl><dt>Сделать</dt><dd>Окружение <code>s3_fake</code> → Upload → Monitor. Ввести <code>info</code>.</dd>
+      <dt>Ок, если</dt><dd class="ok">В начале строка <span class="mono">vabuGEOde 0.1.0, чип ESP32-S3 [FAKE_SENSORS]</span>. В приложении: Настройки → Гаджет, на плате долгое B или команда <code>win</code> → телефон видит vabuGEOde.</dd>
+      <dt>Если нет</dt><dd class="fail">Строки не видно — монитор открылся позже: нажать RESET. Не прошивается — зажать BOOT, нажать RESET, отпустить BOOT. Написано ESP32-C3 — пришла не та плата, дальше не идём, пиши мне.</dd></dl></label>
+
+    <label class="step"><input type="checkbox" id="s1"><h3>1. Питание без платы</h3>
+      <dl><dt>Сделать</dt><dd>Аккумулятор → TP4056 → кнопка → INA219 → TPS63020. Плату не подключать. Включить кнопку.</dd>
+      <dt>Ок, если</dt><dd class="ok">На выходе TPS 3,25–3,40 В. При зарядке через Type-C горит красный, полный — синий или зелёный.</dd>
+      <dt>Если нет</dt><dd class="fail">0 В — посмотреть кнопку и VIN+/VIN−. 4,2 или 5 В — не та перемычка, плату не подключать.</dd></dl></label>
+
+    <label class="step"><input type="checkbox" id="s2"><h3>2. Экран</h3>
+      <dl><dt>Сделать</dt><dd>Окружение <code>s3</code> → Upload. Подключить OLED. Ввести <code>i2c</code>.</dd>
+      <dt>Ок, если</dt><dd class="ok">В ответе <span class="mono">I2C 0x3C</span>, на экране заставка.</dd>
+      <dt>Если нет</dt><dd class="fail">Перепутаны SDA и SCL; проверить порядок GND-VCC у экрана.</dd></dl></label>
+
+    <label class="step"><input type="checkbox" id="s3"><h3>3. BME280</h3>
+      <dl><dt>Сделать</dt><dd>Подключить, <code>i2c</code>, потом <code>st</code>.</dd>
+      <dt>Ок, если</dt><dd class="ok"><span class="mono">I2C 0x76</span> (или 0x77). В <code>st</code>: T комнатная, P 980–1040 гПа, H 20–70 %.</dd>
+      <dt>Если нет</dt><dd class="fail">Адреса нет — CSB не на 3,3 В. Влажность всегда 0 — это BMP280, а не BME280.</dd></dl></label>
+
+    <label class="step"><input type="checkbox" id="s4"><h3>4. MPU6050 и компас</h3>
+      <dl><dt>Сделать</dt><dd>По очереди, после каждого <code>i2c</code>. Потом походить с платой и смотреть шаги в <code>st</code>.</dd>
+      <dt>Ок, если</dt><dd class="ok"><span class="mono">0x68</span> и <span class="mono">0x0D</span> (или 0x1E). Шаги растут при ходьбе.</dd>
+      <dt>Если нет</dt><dd class="fail">0x69 вместо 0x68 — AD0 на 3,3 В, перекинуть на GND.</dd></dl></label>
+
+    <label class="step"><input type="checkbox" id="s5"><h3>5. Часы DS1302</h3>
+      <dl><dt>Сделать</dt><dd>Подключить, <code>st</code>. Связаться с телефоном (время придёт само). Выдернуть USB на минуту, вернуть, снова <code>st</code>.</dd>
+      <dt>Ок, если</dt><dd class="ok">После связи с телефоном в <code>st</code> верное время. После выключения оно продолжает идти, а не начинается сначала.</dd>
+      <dt>Если нет</dt><dd class="fail">Время каждый раз сначала — батарейка или CLK/DAT/RST перепутаны.</dd></dl></label>
+
+    <label class="step"><input type="checkbox" id="s6"><h3>6. SD-карта</h3>
+      <dl><dt>Сделать</dt><dd>Карта FAT32, подключить, <code>info</code>.</dd>
+      <dt>Ок, если</dt><dd class="ok"><span class="mono">SD 1</span> и размер в МБ. На карте появится папка <span class="mono">/tracks</span>.</dd>
+      <dt>Если нет</dt><dd class="fail">SD 0 — проверить MISO/MOSI, формат карты, питание большого модуля (пин 3V3).</dd></dl></label>
+
+    <label class="step"><input type="checkbox" id="s7"><h3>7. GPS</h3>
+      <dl><dt>Сделать</dt><dd>Антенну за окно или на улицу. <code>gps on</code>, затем <code>gps echo</code>.</dd>
+      <dt>Ок, если</dt><dd class="ok">Бегут строки <span class="mono">$GNGGA</span>, <span class="mono">$GPGSV</span>… Фикс за 1–5 мин (первый раз до 15). Мигает PPS на модуле. В <code>st</code> <span class="mono">фикс=1</span>. Запиши, какие GSV есть: GP — GPS, BD/GB — BeiDou, GL — ГЛОНАСС.</dd>
+      <dt>Если нет</dt><dd class="fail">Строк нет — TX/RX перепутаны или AO3401 развёрнут (светодиод питания GPS не горит).</dd></dl></label>
+
+    <label class="step"><input type="checkbox" id="s8"><h3>8. Кнопки, пищалка, целиком от аккумулятора</h3>
+      <dl><dt>Сделать</dt><dd>Короткое A — метка, долгое A — хлопушка, короткое B — экран, долгое B — Bluetooth. Потом <b>отключить USB</b> и включить кнопку питания.</dd>
+      <dt>Ок, если</dt><dd class="ok">Писк на метке. От аккумулятора: заставка на экране, телефон ловит маячок, в приложении видны заряд и ток.</dd>
+      <dt>Если нет</dt><dd class="fail">Ток на стоянке и в пути пришли мне — сверим с расчётом на двое суток.</dd></dl></label>
+  </div>
+</section>
+
+<section id="minimal">
+  <h2>Если 30-го пришло не всё</h2>
+  <div class="frame">
+    <p>Самый безопасный вариант для похода — <b>питать плату от пауэрбанка через USB-C</b>, без TP4056, INA219 и TPS63020. Тогда работает встроенный стабилизатор и ничего не сгорит.</p>
+    <table><thead><tr><th>Узел</th><th>Без него</th></tr></thead><tbody>
+      <tr><td>Плата + GPS + SD</td><td><b>Минимум.</b> Без них трека нет.</td></tr>
+      <tr><td>BME280</td><td>Нет температуры и давления — а ради них всё и затевалось. Очень желательно.</td></tr>
+      <tr><td>DS1302</td><td>Время ставит телефон при подключении. Без связи до первого GPS-фикса записи помечены «время не проверено».</td></tr>
+      <tr><td>MPU6050</td><td>Не видно движения и шагов. Держать GPS в режиме «всегда» (так по умолчанию).</td></tr>
+      <tr><td>Компас, OLED, INA219, кнопки</td><td>Можно без них: управление и метки с телефона, заряд пауэрбанка видно на нём самом.</td></tr>
+    </tbody></table>
+    <p class="note">Макетку в поход: провода прихватить термоусадкой или каплей клея, всё в зип-пакет, антенну GPS к верху рюкзака.</p>
+  </div>
+</section>
+
+<section id="check">
+  <h2>Перед походом</h2>
+  <div class="frame">
+    <ul class="tight">
+      <li>Сутки записи дома: в приложении трек без дыр, время верное.</li>
+      <li>1–2 часа в морозилке: запись идёт, время не сбилось, конденсат внутри после — нет.</li>
+      <li>Тряска в рюкзаке полчаса: ничего не отвалилось, SD не пропадала.</li>
+      <li>Брызги из пульверизатора: внутри сухо.</li>
+      <li>Аккумулятор полный, в держателе не болтается. Свободно на SD больше 1 ГБ.</li>
+      <li>Телефон: офлайн-карта загружена, фоновое наблюдение включено, оптимизация батареи для приложения выключена.</li>
+      <li>Гаджет в первом походе — второй. Основной трек пишет телефон.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>Источник: <code>firmware/include/pins.h</code>, <code>firmware/README.md</code>, CLAUDE.md. Копия — <code>docs/assembly.html</code> в репозитории.</footer>
+</div>
+
+<script>
+(function () {
+  var KEY = 'vabugeode-steps';
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('#steps input[type=checkbox]'));
+  var prog = document.getElementById('prog');
+  function update() {
+    var n = 0;
+    boxes.forEach(function (b) { b.closest('.step').classList.toggle('done', b.checked); if (b.checked) n++; });
+    prog.textContent = n + ' / ' + boxes.length;
+  }
+  boxes.forEach(function (b) {
+    b.checked = !!saved[b.id];
+    b.addEventListener('change', function () {
+      saved[b.id] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {}
+      update();
+    });
+  });
+  update();
+})();
+</script>
