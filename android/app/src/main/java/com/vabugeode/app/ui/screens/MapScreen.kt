@@ -206,10 +206,12 @@ fun TrackMap(
     LaunchedEffect(map, mode) {
         val m = map ?: return@LaunchedEffect
         style = null
-        val json = when (mode) {
-            BaseMap.SCHEME -> OfflineMap.styleJson(context)
-            BaseMap.SATELLITE -> OfflineMap.satelliteStyleJson(context)
-            BaseMap.HYBRID -> OfflineMap.satelliteStyleJson(context, hybrid = true)
+        val json = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            when (mode) {
+                BaseMap.SCHEME -> OfflineMap.styleJson(context)
+                BaseMap.SATELLITE -> OfflineMap.satelliteStyleJson(context)
+                BaseMap.HYBRID -> OfflineMap.satelliteStyleJson(context, hybrid = true)
+            }
         }
         val builder = if (json != null) Style.Builder().fromJson(json) else Style.Builder().fromUri(STYLE_URL)
         m.setStyle(builder) { s ->

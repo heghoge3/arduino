@@ -31,7 +31,7 @@ object OfflineMap {
     sealed interface State {
         data object None : State
         data class Copying(val fraction: Float) : State
-        data class Ready(val bytes: Long, val format: Format) : State
+        data class Ready(val bytes: Long, val format: Format, val info: String? = null) : State
     }
 
     private val states = Kind.entries.associateWith { MutableStateFlow<State?>(null) }
@@ -47,7 +47,13 @@ object OfflineMap {
         if (st.value is State.Copying) return
         val f = file(ctx, kind)
         val fmt = if (f.isFile && f.length() > 0) runCatching { detect(f.inputStream().use { readHead(it) }) }.getOrNull() else null
-        st.value = if (fmt != null) State.Ready(f.length(), fmt) else State.None
+        st.value = if (fmt != null) State.Ready(f.length(), fmt, describe(f, fmt)) else State.None
+    }
+
+    /** Подпись для настроек: какие уровни приближения есть в файле */
+    private fun describe(f: File, fmt: Format): String? = when (fmt) {
+        Format.MBTILES -> MbTiles.fix(f)?.let { "уровни ${it.minZoom}–${it.maxZoom} · ${it.tiles} тайлов · ${it.format}" }
+        else -> null
     }
 
     fun available(ctx: Context, kind: Kind = Kind.SCHEME): Boolean = file(ctx, kind).let { it.isFile && it.length() > 0 }
@@ -68,7 +74,8 @@ object OfflineMap {
         if (!f.isFile) return null
         val fmt = runCatching { detect(f.inputStream().use { readHead(it) }) }.getOrNull() ?: return null
         val url = when (fmt) {
-            Format.MBTILES -> "mbtiles://" + f.absolutePath
+            // Описание файла дописываем до того, как его прочитает карта (см. MbTiles)
+            Format.MBTILES -> MbTiles.fix(f).let { "mbtiles://" + f.absolutePath }
             else -> "pmtiles://file://" + f.absolutePath
         }
         val style = JSONObject()

@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun OfflineMapsPanel() {
     val context = LocalContext.current
-    LaunchedEffect(Unit) { OfflineMap.refresh(context) }
+    LaunchedEffect(Unit) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { OfflineMap.refresh(context) } }
     Panel(accent = Palette.Geo, title = "Офлайн-карты") {
         MapSlot(
             OfflineMap.Kind.SCHEME,
@@ -74,6 +74,9 @@ private fun MapSlot(kind: OfflineMap.Kind, hint: String) {
         Meter(s.fraction, Palette.Geo)
     } else {
         Text(hint, style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+        if (s is OfflineMap.State.Ready && s.info != null) {
+            Text(s.info, style = MaterialTheme.typography.labelMedium, color = Palette.Geo)
+        }
     }
     error?.let {
         Spacer(Modifier.height(4.dp))
