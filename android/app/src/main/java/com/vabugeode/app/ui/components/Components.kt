@@ -2,6 +2,7 @@ package com.vabugeode.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -183,6 +184,22 @@ fun Meter(fraction: Float, color: Color, modifier: Modifier = Modifier, height: 
             )
         }
     }
+}
+
+/** Кнопка-рамка в стиле терминала; selected — инверсный блок (выбранная вкладка) */
+@Composable
+fun TermButton(text: String, color: Color, modifier: Modifier = Modifier, selected: Boolean = false, onClick: () -> Unit) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = if (selected) Palette.Bg else color,
+        maxLines = 1,
+        modifier = modifier
+            .border(1.dp, color.copy(alpha = if (selected) 1f else 0.7f))
+            .background(if (selected) color else color.copy(alpha = 0.08f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    )
 }
 
 /** Заглушка, пока данных с устройства ещё нет. */

@@ -7,7 +7,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ShowChart
-import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Hiking
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Memory
@@ -27,9 +31,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -57,7 +58,7 @@ import com.vabugeode.app.ui.screens.ChartsScreen
 import com.vabugeode.app.ui.screens.DeviceScreen
 import com.vabugeode.app.ui.screens.HomeScreen
 import com.vabugeode.app.ui.screens.MapScreen
-import com.vabugeode.app.ui.screens.MarksScreen
+import com.vabugeode.app.ui.screens.HikesScreen
 import com.vabugeode.app.ui.screens.SettingsScreen
 import com.vabugeode.app.ui.theme.Palette
 import com.vabugeode.app.ui.theme.VabuTheme
@@ -78,7 +79,7 @@ private enum class Tab(val title: String, val icon: ImageVector) {
     HOME("Главная", Icons.Filled.Home),
     MAP("Карта", Icons.Filled.Map),
     CHARTS("Графики", Icons.AutoMirrored.Filled.ShowChart),
-    MARKS("Метки", Icons.Filled.Bookmarks),
+    HIKES("Походы", Icons.Filled.Hiking),
     DEVICE("Трекер", Icons.Filled.Memory),
 }
 
@@ -157,29 +158,7 @@ internal fun App(vm: AppViewModel = viewModel()) {
         },
         bottomBar = {
             if (!settings) {
-                NavigationBar(
-                    containerColor = Palette.Bg, tonalElevation = 0.dp,
-                    modifier = Modifier.drawBehind {
-                        drawLine(Palette.Outline, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), 2f)
-                    },
-                ) {
-                    Tab.entries.forEach { t ->
-                        NavigationBarItem(
-                            selected = tab == t,
-                            onClick = { tab = t },
-                            icon = { Icon(t.icon, t.title) },
-                            label = { Text(t.title, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
-                            // Выбранная вкладка — инверсный блок, как выделение в терминале
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Palette.Bg,
-                                selectedTextColor = Palette.Geo,
-                                indicatorColor = Palette.Geo,
-                                unselectedIconColor = Palette.TextDim,
-                                unselectedTextColor = Palette.TextDim,
-                            ),
-                        )
-                    }
-                }
+                TermNavBar(tab) { tab = it }
             }
         },
         modifier = Modifier.fillMaxSize().scanlines(),
@@ -192,9 +171,9 @@ internal fun App(vm: AppViewModel = viewModel()) {
                 onMark = { vm.repo.addMark(com.vabugeode.app.model.MarkType.MARK); toast("📍 Метка поставлена") },
                 onClap = { vm.repo.clap(); toast("🎬 Хлопушка! Устройство пищит и мигает — метка SYNC") },
             )
-            Tab.MAP -> MapScreen(vm, padding)
+            Tab.MAP -> MapScreen(vm, padding, onAdded = ::toast)
             Tab.CHARTS -> ChartsScreen(vm, padding)
-            Tab.MARKS -> MarksScreen(vm, padding, onAdded = ::toast)
+            Tab.HIKES -> HikesScreen(vm, padding)
             Tab.DEVICE -> DeviceScreen(vm, padding)
         }
     }
@@ -208,5 +187,33 @@ private fun Modifier.scanlines() = drawWithContent {
     while (y < size.height) {
         drawLine(Palette.Scan, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 1f)
         y += step
+    }
+}
+
+/** Нижняя панель терминала: квадратные ячейки, выбранная — инверсный блок */
+@Composable
+private fun TermNavBar(selected: Tab, onSelect: (Tab) -> Unit) {
+    androidx.compose.foundation.layout.Column(Modifier.background(Palette.Bg).navigationBarsPadding()) {
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.Outline))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp)) {
+            Tab.entries.forEach { t ->
+                val on = t == selected
+                androidx.compose.foundation.layout.Column(
+                    Modifier
+                        .weight(1f)
+                        .background(if (on) Palette.Geo else Palette.Bg)
+                        .clickable { onSelect(t) }
+                        .padding(vertical = 7.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(t.icon, null, tint = if (on) Palette.Bg else Palette.TextDim, modifier = Modifier.size(22.dp))
+                    Text(
+                        t.title, maxLines = 1,
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp),
+                        color = if (on) Palette.Bg else Palette.TextDim,
+                    )
+                }
+            }
+        }
     }
 }

@@ -1,6 +1,9 @@
 package com.vabugeode.app.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -88,7 +91,16 @@ private val typography = Typography(
     labelSmall = TextStyle(fontFamily = Fonts.Mono, fontSize = 11.sp, letterSpacing = 1.sp),
 )
 
+/** Почти прямые углы у всего: диалоги, поля ввода, плавающие кнопки */
+private val shapes = Shapes(
+    extraSmall = RoundedCornerShape(2.dp),
+    small = RoundedCornerShape(2.dp),
+    medium = RoundedCornerShape(2.dp),
+    large = RoundedCornerShape(2.dp),
+    extraLarge = RoundedCornerShape(2.dp),
+)
+
 @Composable
 fun VabuTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = scheme, typography = typography, content = content)
+    MaterialTheme(colorScheme = scheme, typography = typography, shapes = shapes, content = content)
 }

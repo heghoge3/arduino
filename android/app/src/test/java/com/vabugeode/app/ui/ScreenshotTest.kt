@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.vabugeode.app.App
@@ -60,8 +61,24 @@ class ScreenshotTest {
         shot("1_home")
         compose.onNodeWithText("Графики").performClick()
         shot("2_charts")
-        compose.onNodeWithText("Метки").performClick()
-        shot("3_marks")
+        compose.onNodeWithText("Карта").performClick()
+        shot("3_map_marks")
+        compose.onNodeWithText("Походы").performClick()
+        // Room читает в своих потоках — ждём настоящее время, пока список не появится
+        repeat(100) {
+            if (compose.onAllNodesWithText("км").fetchSemanticsNodes().isNotEmpty()) return@repeat
+            Thread.sleep(100)
+            ShadowLooper.idleMainLooper()
+            compose.mainClock.advanceTimeBy(100)
+        }
+        shot("8_hikes")
+        compose.onAllNodesWithText("км")[0].performClick()
+        repeat(50) {
+            Thread.sleep(100)
+            ShadowLooper.idleMainLooper()
+            compose.mainClock.advanceTimeBy(100)
+        }
+        shot("9_hike_detail")
         compose.onNodeWithText("Трекер").performClick()
         shot("4_device")
         compose.onNodeWithContentDescription("Настройки").performClick()

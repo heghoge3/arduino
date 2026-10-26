@@ -44,6 +44,7 @@ import com.vabugeode.app.ui.components.KeyValue
 import com.vabugeode.app.ui.components.LineChart
 import com.vabugeode.app.ui.components.Panel
 import com.vabugeode.app.ui.components.SectionLabel
+import com.vabugeode.app.ui.components.TermButton
 import com.vabugeode.app.ui.components.Waiting
 import com.vabugeode.app.ui.theme.Palette
 import com.vabugeode.app.ui.theme.Fonts
@@ -69,7 +70,6 @@ fun ChartsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     val track by vm.repo.track.collectAsStateWithLifecycle()
     val sun by vm.sun.collectAsStateWithLifecycle()
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
-    var selected by rememberSaveable { mutableStateOf(Metric.TEMP) }
     if (track.size < 2) return Waiting(contentPadding, "Трек ещё не загружен")
     val sunset = sun?.sunsetUtcMs
     val dusk = sun?.civilDuskUtcMs
@@ -83,33 +83,31 @@ fun ChartsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
-        SunsetSummary(track, start, sunset, dusk)
-
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Metric.entries.forEach { m ->
-                FilterChip(
-                    selected = m == selected,
-                    onClick = { selected = m },
-                    label = { Text(m.title) },
-                    leadingIcon = { Box(Modifier.size(8.dp).clip(CircleShape).background(m.color)) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = m.color.copy(alpha = 0.18f),
-                        selectedLabelColor = m.color,
-                    ),
-                )
-            }
-        }
-
-        BigChart(selected, track, sunset, dusk)
-
-        SectionLabel("Все показатели", Modifier.padding(top = 4.dp))
-        Metric.entries.filter { it != selected }.forEach { m ->
-            SmallChart(m, track, sunset, dusk) { selected = m }
-        }
+        ChartsBody(track, start, sunset, dusk, "Поход сегодня")
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** Сводка заката + графики всех показателей. Общие для вкладки «Графики» и экрана похода. */
+@Composable
+fun ChartsBody(track: List<TrackPoint>, start: Long?, sunset: Long?, dusk: Long?, summaryTitle: String) {
+    var selected by rememberSaveable { mutableStateOf(Metric.TEMP) }
+    SunsetSummary(track, start, sunset, dusk, summaryTitle)
+
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Metric.entries.forEach { m ->
+            TermButton(m.title, m.color, selected = m == selected) { selected = m }
+        }
+    }
+
+    BigChart(selected, track, sunset, dusk)
+
+    SectionLabel("Все показатели", Modifier.padding(top = 4.dp))
+    Metric.entries.filter { it != selected }.forEach { m ->
+        SmallChart(m, track, sunset, dusk) { selected = m }
     }
 }
 
@@ -119,11 +117,9 @@ private fun seriesOf(track: List<TrackPoint>, f: (TrackPoint) -> Double) =
 
 /** Сводка «что произошло на закате» — ради этого проект и затевался. */
 @Composable
-private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sunset: Long?, dusk: Long?) {
+private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sunset: Long?, dusk: Long?, title: String) {
     val last = track.last()
-    Panel(accent = Palette.Sunset) {
-        SectionLabel("Поход сегодня", color = Palette.Sunset)
-        Spacer(Modifier.height(6.dp))
+    Panel(accent = Palette.Sunset, title = title) {
         if (start != null) KeyValue("Старт", "${Fmt.time(start)} · в пути ${Fmt.duration(last.tsUtcMs - start)}")
         if (sunset != null) KeyValue("Закат", Fmt.time(sunset), Palette.Sunset)
         if (dusk != null) KeyValue("Конец сумерек", Fmt.time(dusk))

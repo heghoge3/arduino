@@ -1,9 +1,13 @@
 package com.vabugeode.app.ui.screens
 
+import android.os.Build
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,13 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vabugeode.app.model.Mark
 import com.vabugeode.app.model.MarkType
@@ -46,6 +50,8 @@ import com.vabugeode.app.ui.AppViewModel
 import com.vabugeode.app.ui.Fmt
 import com.vabugeode.app.ui.components.Panel
 import com.vabugeode.app.ui.components.Pill
+import com.vabugeode.app.ui.components.SectionLabel
+import com.vabugeode.app.ui.theme.Fonts
 import com.vabugeode.app.ui.theme.Palette
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -72,13 +78,80 @@ import org.maplibre.geojson.Point
  */
 private const val STYLE_URL = "https://tiles.openfreemap.org/styles/dark"
 
+/** Вкладка «Карта»: сверху трек текущего похода, снизу метки. */
 @Composable
-fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues) {
+fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String) -> Unit) {
     val track by vm.repo.track.collectAsStateWithLifecycle()
     val marks by vm.repo.marks.collectAsStateWithLifecycle()
     val status by vm.repo.status.collectAsStateWithLifecycle()
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
 
+    Column(Modifier.fillMaxSize().padding(contentPadding)) {
+        Box(Modifier.weight(1.1f).fillMaxWidth()) {
+            val st = status
+            TrackMap(
+                track, marks, Modifier.fillMaxSize(),
+                me = st?.lat?.let { la -> st.lon?.let { lo -> la to lo } },
+                topInset = 100,
+            )
+            // Сводка и легенда
+            Panel(
+                Modifier.padding(12.dp).fillMaxWidth(),
+                accent = Palette.Geo,
+                padding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(Fmt.num(st?.distanceKm ?: 0.0), fontFamily = Fonts.Pixel, fontSize = 34.sp, lineHeight = 32.sp, color = Palette.Geo)
+                    Text(" км", style = MaterialTheme.typography.labelMedium, color = Palette.Geo)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        if (start != null && st != null) {
+                            Text("в пути ${Fmt.duration(st.timeUtcMs - start!!)}", style = MaterialTheme.typography.labelMedium, color = Palette.Text)
+                        }
+                        if (st?.lat != null && st.lon != null) {
+                            Text(Fmt.coord(st.lat, st.lon), style = MaterialTheme.typography.labelSmall, color = Palette.TextDim)
+                        }
+                    }
+                }
+                MapLegend(track.count { it.spoof })
+            }
+        }
+        MarksPanel(vm, marks, start, onAdded, Modifier.weight(1f).fillMaxWidth())
+    }
+}
+
+@Composable
+fun MapLegend(spoofCount: Int) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
+        Text("━ GPS", color = Palette.Geo, fontSize = 11.sp)
+        Text("┅ по шагам", color = Palette.Pdr, fontSize = 11.sp)
+        Text(if (spoofCount > 0) "● подмена $spoofCount" else "● подмена", color = Palette.Bad, fontSize = 11.sp)
+        Text("● метки", color = Palette.Text, fontSize = 11.sp)
+    }
+}
+
+/** На JVM-тестах (Robolectric) нативной карты нет — рисуем заглушку */
+private val mapAvailable = Build.FINGERPRINT != "robolectric"
+
+/**
+ * Карта трека: GPS сплошной, по шагам пунктир, ложные точки подмены красным, метки.
+ * me — текущая позиция для кнопки «следовать» (null — кнопки нет, например у прошлого похода).
+ * topInset — сколько dp сверху занято панелью поверх карты.
+ */
+@Composable
+fun TrackMap(
+    track: List<TrackPoint>,
+    marks: List<Mark>,
+    modifier: Modifier = Modifier,
+    me: Pair<Double, Double>? = null,
+    topInset: Int = 40,
+) {
+    if (!mapAvailable) {
+        Box(modifier.border(1.dp, Palette.Outline), contentAlignment = Alignment.Center) {
+            Text("[ КАРТА · ${track.size} точек ]", style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint)
+        }
+        return
+    }
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember {
@@ -89,6 +162,7 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     var style by remember { mutableStateOf<Style?>(null) }
     var follow by remember { mutableStateOf(false) }
     var fitted by remember { mutableStateOf(false) }
+    val topPx = with(LocalDensity.current) { topInset.dp.roundToPx() }
 
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, e ->
@@ -127,73 +201,44 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         updateLayers(s, track, marks)
         if (!fitted && track.size > 1) {
             fitted = true
-            fitTrack(map, track)
+            fitTrack(map, track, topPx)
         }
     }
     // Следование за позицией
     LaunchedEffect(follow, track.size) {
-        val st = status
-        if (follow && st?.lat != null && st.lon != null) {
-            map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(st.lat, st.lon), 15.5), 400)
+        if (follow && me != null) {
+            map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(me.first, me.second), 15.5), 400)
         }
     }
 
-    val spoofCount = track.count { it.spoof }
-    Box(Modifier.fillMaxSize().padding(contentPadding)) {
+    Box(modifier) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-
-        // Сводка и легенда
-        Panel(
-            Modifier.padding(12.dp).fillMaxWidth(),
-            padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-        ) {
-            val st = status
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "${Fmt.num(st?.distanceKm ?: 0.0)} км" + (start?.let { s -> st?.let { " · ${Fmt.duration(it.timeUtcMs - s)}" } } ?: ""),
-                        fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text,
-                    )
-                    if (st?.lat != null && st.lon != null) {
-                        Text(Fmt.coord(st.lat, st.lon), style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
-                    }
-                }
-                if (spoofCount > 0) {
-                    Pill(
-                        "подмена: $spoofCount",
-                        Palette.Bad,
-                        Modifier.clickable { follow = false; fitSpoof(map, track) },
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("━ GPS", color = Palette.Geo, fontSize = 11.sp)
-                Text("┅ по шагам", color = Palette.Pdr, fontSize = 11.sp)
-                Text("● подмена", color = Palette.Bad, fontSize = 11.sp)
-                Text("● метки", color = Palette.Text, fontSize = 11.sp)
-            }
-        }
-
         Column(
             Modifier.align(Alignment.BottomEnd).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            if (track.any { it.spoofLat != null }) {
+                SmallFloatingActionButton(
+                    onClick = { follow = false; fitSpoof(map, track, topPx) },
+                    containerColor = Palette.BadBg, contentColor = Palette.Bad,
+                ) { Text("!", fontFamily = Fonts.Pixel, fontSize = 24.sp) }
+            }
             SmallFloatingActionButton(
-                onClick = { follow = false; fitTrack(map, track) },
+                onClick = { follow = false; fitTrack(map, track, topPx) },
                 containerColor = Palette.SurfaceHigh, contentColor = Palette.Text,
             ) { Icon(Icons.Filled.ZoomOutMap, "Весь трек") }
-            SmallFloatingActionButton(
-                onClick = { follow = !follow },
-                containerColor = if (follow) Palette.Geo else Palette.SurfaceHigh,
-                contentColor = if (follow) Palette.Bg else Palette.Text,
-            ) { Icon(Icons.Filled.MyLocation, "Следовать") }
+            if (me != null) {
+                SmallFloatingActionButton(
+                    onClick = { follow = !follow },
+                    containerColor = if (follow) Palette.Geo else Palette.SurfaceHigh,
+                    contentColor = if (follow) Palette.Bg else Palette.Text,
+                ) { Icon(Icons.Filled.MyLocation, "Следовать") }
+            }
         }
-
         Text(
-            "Онлайн-карта © OpenStreetMap · офлайн будет позже",
+            "© OpenStreetMap · онлайн",
             fontSize = 10.sp, color = Palette.TextDim,
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 14.dp).width(200.dp),
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 6.dp),
         )
     }
 }
@@ -308,17 +353,17 @@ private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
 private fun lineFeature(pts: List<Point>, src: String) =
     Feature.fromGeometry(LineString.fromLngLats(pts)).apply { addStringProperty("src", src) }
 
-private fun fitTrack(map: MapLibreMap?, track: List<TrackPoint>) {
+private fun fitTrack(map: MapLibreMap?, track: List<TrackPoint>, top: Int) {
     val pts = track.filter { !it.lat.isNaN() && !it.lon.isNaN() }.map { LatLng(it.lat, it.lon) }
-    fitPoints(map, pts)
+    fitPoints(map, pts, top)
 }
 
-private fun fitSpoof(map: MapLibreMap?, track: List<TrackPoint>) {
+private fun fitSpoof(map: MapLibreMap?, track: List<TrackPoint>, top: Int) {
     val pts = track.mapNotNull { p -> p.spoofLat?.let { LatLng(it, p.spoofLon!!) } }
-    fitPoints(map, pts)
+    fitPoints(map, pts, top)
 }
 
-private fun fitPoints(map: MapLibreMap?, pts: List<LatLng>) {
+private fun fitPoints(map: MapLibreMap?, pts: List<LatLng>, top: Int) {
     map ?: return
     if (pts.isEmpty()) return
     if (pts.size == 1 || pts.all { it == pts.first() }) {
@@ -327,7 +372,7 @@ private fun fitPoints(map: MapLibreMap?, pts: List<LatLng>) {
     }
     val bounds = LatLngBounds.Builder().includes(pts).build()
     // Сверху место под панель сводки
-    map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 60, 260, 60, 120), 500)
+    map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 60, top + 60, 120, 60), 500)
 }
 
 fun markColor(t: MarkType) = when (t) {

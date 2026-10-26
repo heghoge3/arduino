@@ -455,22 +455,6 @@ class ProtocolDeviceRepository(
         )
     }
 
-    private fun PointMsg.toTrackPoint() = TrackPoint(
-        tsUtcMs = timeUtc * 1000, lat = lat ?: Double.NaN, lon = lon ?: Double.NaN,
-        altGps = altGps, sats = sats, hdop = hdop ?: 99.9, speedKmh = speedKmh,
-        spoof = spoof, spoofMask = spoofMask, spoofLat = spoofLat, spoofLon = spoofLon,
-        tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN, humidity = humidity,
-        pressureHpa = pressureHpa, altBaro = altBaro ?: Double.NaN,
-        battV = battMv / 1000.0, battMa = 0.0, battPercent = battPct,
-        steps = steps.toInt(), headingDeg = headingDeg, src = srcOf(src), markId = null,
-    )
-
-    private fun MarkMsg.toMark() = Mark(
-        id = id, tsUtcMs = timeUtc * 1000,
-        type = MarkType.entries.getOrElse(type) { MarkType.MARK },
-        text = text, lat = lat, lon = lon,
-    )
-
     private fun buildInfo(m: InfoMsg, st: DeviceStatus?): DeviceInfo {
         val systems = listOf("GPS", "BeiDou", "ГЛОНАСС", "Galileo").filterIndexed { i, _ -> m.gnssMask and (1 shl i) != 0 }
         return DeviceInfo(
@@ -590,3 +574,22 @@ class ProtocolDeviceRepository(
         }
     }
 }
+
+/** Пакеты из базы и по радио → модель экранов */
+internal fun PointMsg.toTrackPoint() = TrackPoint(
+    tsUtcMs = timeUtc * 1000, lat = lat ?: Double.NaN, lon = lon ?: Double.NaN,
+    altGps = altGps, sats = sats, hdop = hdop ?: 99.9, speedKmh = speedKmh,
+    spoof = spoof, spoofMask = spoofMask, spoofLat = spoofLat, spoofLon = spoofLon,
+    tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN, humidity = humidity,
+    pressureHpa = pressureHpa, altBaro = altBaro ?: Double.NaN,
+    battV = battMv / 1000.0, battMa = 0.0, battPercent = battPct,
+    steps = steps.toInt(), headingDeg = headingDeg, src = srcOfCode(src), markId = null,
+)
+
+internal fun MarkMsg.toMark() = Mark(
+    id = id, tsUtcMs = timeUtc * 1000,
+    type = MarkType.entries.getOrElse(type) { MarkType.MARK },
+    text = text, lat = lat, lon = lon,
+)
+
+private fun srcOfCode(s: Int) = when (s) { 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; else -> PositionSource.NONE }

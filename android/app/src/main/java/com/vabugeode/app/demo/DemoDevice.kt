@@ -52,7 +52,7 @@ import kotlin.random.Random
  * - после заката резко падает температура (исходная идея проекта);
  * - стоянки с выключенным GPS, потеря сигнала в здании, эпизоды подмены GNSS.
  */
-class DemoDevice(private val scope: CoroutineScope) {
+class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
 
     private val zone = ZoneId.of("Europe/Moscow")
     private val rnd = Random(42)
@@ -105,16 +105,16 @@ class DemoDevice(private val scope: CoroutineScope) {
     private val scriptedDone = mutableSetOf<Int>()
 
     init {
-        restart()
+        if (autoStart) restart()
     }
 
     /**
      * Перезапуск сценария с начала.
      * historyMin — сколько минут похода «уже записано» к моменту открытия.
      */
-    fun restart(historyMin: Int = 120) {
+    fun restart(historyMin: Int = 120, day: LocalDate = LocalDate.now(zone), live: Boolean = true) {
         job?.cancel()
-        val today = LocalDate.now(zone)
+        val today = day
         // +N секунд на каждый перезапуск: у каждого похода свой hike_start, как на настоящем устройстве
         startMs = today.atTime(14, 0).atZone(zone).toInstant().toEpochMilli() + restartCount * 1000L
         restartCount++
@@ -139,6 +139,7 @@ class DemoDevice(private val scope: CoroutineScope) {
         }
         publish()
         restarts.value++
+        if (!live) return
 
         job = scope.launch {
             while (isActive) {
@@ -509,6 +510,10 @@ class DemoDevice(private val scope: CoroutineScope) {
         val m = markList[i]
         return MarkMsg(m.id, m.tsUtcMs / 1000, m.type.ordinal, m.lat, m.lon, m.text)
     }
+
+    /** Записанный поход целиком — для прошлых демо-походов в базе */
+    fun recorded(): Pair<List<PointMsg>, List<MarkMsg>> =
+        List(points.size) { pointMsg(it) } to List(markList.size) { markMsg(it) }
 
     /** Индекс первой точки не раньше времени since (Unix-с). */
     fun firstPointSince(sinceSec: Long): Int {
