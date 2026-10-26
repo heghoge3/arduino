@@ -1,6 +1,7 @@
 package com.vabugeode.app.ui.screens
 
 import android.os.Build
+import com.vabugeode.app.data.OfflineMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,8 +74,8 @@ import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 
 /**
- * Онлайн-стиль для макета. В походе интернета нет — потом заменим на офлайн-файл
- * региона (PMTiles/MBTiles), см. ТЗ, раздел 12. Массово качать тайлы OSM нельзя.
+ * Онлайн-стиль — только если офлайн-файл региона не загружен (см. OfflineMap).
+ * Массово качать тайлы OSM нельзя (ТЗ, раздел 12).
  */
 private const val STYLE_URL = "https://tiles.openfreemap.org/styles/dark"
 
@@ -182,7 +183,10 @@ fun TrackMap(
             map = m
             m.uiSettings.isRotateGesturesEnabled = false
             m.uiSettings.isLogoEnabled = false
-            m.setStyle(Style.Builder().fromUri(STYLE_URL)) { s ->
+            // Есть файл региона — карта без интернета; нет — онлайн-стиль
+            val offline = OfflineMap.styleJson(context)
+            val builder = if (offline != null) Style.Builder().fromJson(offline) else Style.Builder().fromUri(STYLE_URL)
+            m.setStyle(builder) { s ->
                 setupLayers(s)
                 style = s
             }
@@ -236,7 +240,7 @@ fun TrackMap(
             }
         }
         Text(
-            "© OpenStreetMap · онлайн",
+            if (OfflineMap.available(context)) "© OpenStreetMap · офлайн" else "© OpenStreetMap · онлайн",
             fontSize = 10.sp, color = Palette.TextDim,
             modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 6.dp),
         )
