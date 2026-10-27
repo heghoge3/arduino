@@ -55,7 +55,11 @@ struct SyncJob {
   uint8_t what = 0;
   uint32_t idx = 0, end = 0, sent = 0;
 };
-SyncJob g_sync, g_syncNext;
+SyncJob g_sync;
+// Ожидающие — по одной на вид (точки, метки, журнал): повторный запрос того же вида заменяет старый,
+// другие виды не вытесняет (раньше запрос журнала мог вытеснить метки, пока шёл длинный трек)
+SyncJob g_syncWait[3];
+int syncSlot(uint8_t what) { return what == proto::CMD_SYNC_TRACK ? 0 : (what == proto::CMD_SYNC_MARKS ? 1 : 2); }
 
 // ---------------------------------------------------------------------------
 // Настройки и состояние
@@ -525,14 +529,15 @@ void startSync(uint8_t what, uint32_t since) {
     j.idx = storage::firstMarkSince(since);
     j.end = storage::markCount();
   }
-  if (g_sync.active) g_syncNext = j;
+  if (g_sync.active) g_syncWait[syncSlot(what)] = j;
   else g_sync = j;
 }
 
 void pumpSync() {
   if (!g_sync.active) return;
   if (!radio::secured()) {
-    g_sync.active = g_syncNext.active = false;
+    g_sync.active = false;
+    for (SyncJob& w : g_syncWait) w.active = false;
     return;
   }
   uint8_t b[96];
@@ -556,8 +561,14 @@ void pumpSync() {
   if (g_sync.idx >= g_sync.end) {
     if (g_sync.what != proto::CMD_SYNC_LOG || g_sync.sent) LOGD(M_BLE, "выгрузка 0x%02X: %lu записей", g_sync.what, (unsigned long)g_sync.sent);
     sendPacketEvent(b, proto::encodeSyncDone(g_sync.what, g_sync.sent, b, sizeof(b)));
-    g_sync = g_syncNext;
-    g_syncNext.active = false;
+    g_sync.active = false;
+    for (SyncJob& w : g_syncWait) {
+      if (w.active) {
+        g_sync = w;
+        w.active = false;
+        break;
+      }
+    }
   } else {
     delay(4);
   }

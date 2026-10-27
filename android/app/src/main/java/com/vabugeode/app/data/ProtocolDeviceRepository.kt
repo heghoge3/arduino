@@ -241,13 +241,7 @@ class ProtocolDeviceRepository(
         g.hike?.let { hike ->
             hikeStartSec = hike
             hikeStartMs.value = hike * 1000
-            dao.points(key, hike).forEach { row ->
-                (runCatching { Codec.decodeMsg(row.data) }.getOrNull() as? PointMsg)?.let { points[it.timeUtc * 1000] = it.toTrackPoint() }
-            }
-            dao.marks(key, hike).forEach { row ->
-                (runCatching { Codec.decodeMsg(row.data) }.getOrNull() as? MarkMsg)?.let { markMap[it.id] = it.toMark() }
-            }
-            dirty = true
+            loadHike(key, hike)
         }
         lastSatsBytes = g.sats
         lastSats = g.sats?.let { runCatching { Codec.decodeMsg(it) }.getOrNull() as? SatsMsg }
@@ -260,6 +254,18 @@ class ProtocolDeviceRepository(
                 info.value = buildInfo(it, status.value)
             }
         }
+    }
+
+    /** Точки и метки похода из базы в память (то, что уже скачано с гаджета раньше) */
+    private suspend fun loadHike(key: String, hike: Long) {
+        val dao = store ?: return
+        dao.points(key, hike).forEach { row ->
+            (runCatching { Codec.decodeMsg(row.data) }.getOrNull() as? PointMsg)?.let { points[it.timeUtc * 1000] = it.toTrackPoint() }
+        }
+        dao.marks(key, hike).forEach { row ->
+            (runCatching { Codec.decodeMsg(row.data) }.getOrNull() as? MarkMsg)?.let { markMap[it.id] = it.toMark() }
+        }
+        dirty = true
     }
 
     private suspend fun persist(force: Boolean = false) {
@@ -417,7 +423,9 @@ class ProtocolDeviceRepository(
         lastInfo = m
         val newHike = m.hikeStartUtc != hikeStartSec
         if (newHike) {
-            // Другой поход на устройстве — начинаем с чистого листа
+            // Другой поход на устройстве: в памяти — только его точки. Что уже скачано раньше, берём из базы,
+            // иначе вкладка «Графики» покажет лишь хвост, а гаджет будет заново слать весь поход
+            AppLog.i("SYNC", "поход на гаджете ${m.hikeStartUtc}, в приложении был $hikeStartSec")
             hikeStartSec = m.hikeStartUtc
             hikeStartMs.value = m.hikeStartUtc?.let { it * 1000 }
             points.clear()
@@ -427,14 +435,19 @@ class ProtocolDeviceRepository(
         // После подключения или смены похода догружаем только недостающее — с последней известной записи
         if (syncAfterInfo || newHike) {
             syncAfterInfo = false
-            val sincePoint = points.lastEntry()?.key?.let { it / 1000 + 1 } ?: 0
-            val sinceMark = markMap.values.maxOfOrNull { it.tsUtcMs }?.let { it / 1000 + 1 } ?: 0
+            val key = transport.key
+            val hike = m.hikeStartUtc
             stats.value = stats.value.copy(syncing = true)
-            send(Cmd.SyncTrack(sincePoint))
-            send(Cmd.SyncMarks(sinceMark))
-            send(Cmd.SetDebug(debugLog))
-            // Живой сеанс: устройство начнёт слать STATUS раз в секунду (protocol.md, порядок подключения)
-            send(Cmd.Session(live = liveWanted))
+            scope.launch {
+                if (newHike && hike != null) loadHike(key, hike)
+                val sincePoint = points.lastEntry()?.key?.let { it / 1000 + 1 } ?: 0
+                val sinceMark = markMap.values.maxOfOrNull { it.tsUtcMs }?.let { it / 1000 + 1 } ?: 0
+                send(Cmd.SyncTrack(sincePoint))
+                send(Cmd.SyncMarks(sinceMark))
+                send(Cmd.SetDebug(debugLog))
+                // Живой сеанс: устройство начнёт слать STATUS раз в секунду (protocol.md, порядок подключения)
+                send(Cmd.Session(live = liveWanted))
+            }
         }
         // Журнал гаджета — при каждом INFO (раз в 30 с): только новые строки
         send(Cmd.SyncLog(logSeq))
