@@ -114,6 +114,26 @@ void flushLog() {
   dlog::flush();
 }
 
+// Часы переставили на d секунд (телефон или GPS). Все «когда в следующий раз» и «когда было» сдвигаем
+// вместе с ними: иначе после перевода назад запись и маячок замолкают на эти d секунд, а пауза начинает
+// новый поход. Номер похода (hikeStart) не трогаем — по нему поход узнают SD и телефон.
+void onClockJump(int32_t d) {
+  using logic::shiftTime;
+  shiftTime(P.nextLogAt, d);
+  shiftTime(P.nextBeaconAt, d);
+  shiftTime(P.lastFlushAt, d);
+  shiftTime(P.lastPointTime, d);
+  shiftTime(P.spoofAlertUntil, d);
+  shiftTime(P.pressHistAt, d);
+  shiftTime(g_powerOnUtc, d);
+  P.power.shiftTime(d);
+  P.pulse.shiftTime(d);
+  P.alerts.shiftTime(d);
+  P.spoof.shiftTime(d);
+  if (P.lastPointTime) g_prefs.putULong("last", P.lastPointTime);
+  N.now = clockx::now();
+}
+
 void newHike(uint32_t start) {
   P.hikeStart = start;
   P.distM = 0;
@@ -309,7 +329,10 @@ void onFix() {
   spoof::Result r = P.spoof.check(in);
 
   // Время от GPS — только если часы не проверены и нет подозрения
-  if (f.timeValid) clockx::offerGps(f.utc, r.spoof);
+  if (f.timeValid) {
+    int32_t d = clockx::offerGps(f.utc, r.spoof);
+    if (d) onClockJump(d);
+  }
 
   N.fix = true;
   N.fixType = f.fixType;
@@ -535,7 +558,7 @@ void handleCommand(const uint8_t* data, size_t len) {
       else if (delta > 300 || delta < -300) LOGW(M_RTC, "время с телефона: часы ушли на %+ld с", delta);
       else LOGD(M_RTC, "время с телефона: сдвиг %+ld с", delta);
       clockx::setFromPhone(c.time);
-      N.now = c.time;
+      if (delta) onClockJump((int32_t)delta);
       if (c.tzMin != S.tzMin) {
         S.tzMin = c.tzMin;
         saveSettings();
@@ -546,7 +569,7 @@ void handleCommand(const uint8_t* data, size_t len) {
       P.spoof.setPhone(c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM, N.now);
       break;
     case proto::CMD_RECORD:
-      if (c.flag && !P.recording && (P.hikeStart == 0 || N.now - P.lastPointTime > 6 * 3600)) newHike(N.now);
+      if (c.flag && !P.recording && (P.hikeStart == 0 || (int32_t)(N.now - P.lastPointTime) > 6 * 3600)) newHike(N.now);
       P.recording = c.flag;
       break;
     case proto::CMD_MARK:

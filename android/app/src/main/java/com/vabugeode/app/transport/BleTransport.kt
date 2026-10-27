@@ -195,12 +195,13 @@ class BleTransport(
             state.value = LinkState.DISCONNECTED
             return
         }
-        // Гаджет мог уснуть между маячками — не висим вечно
+        // Гаджет мог уснуть между маячками — не висим вечно. Ждём дольше периода маячка (30 с),
+        // чтобы система успела поймать хотя бы один выход в эфир
         scope.launch {
-            delay(15_000)
+            delay(CONNECT_TIMEOUT_MS)
             if (state.value == LinkState.CONNECTING) {
-                AppLog.w("GATT", "гаджет не ответил за 15 с")
-                lastError.value = "Гаджет не ответил за 15 с"
+                AppLog.w("GATT", "гаджет не ответил за ${CONNECT_TIMEOUT_MS / 1000} с")
+                lastError.value = "Гаджет не ответил за ${CONNECT_TIMEOUT_MS / 1000} с"
                 gatt?.disconnect()
                 cleanup()
             }
@@ -258,5 +259,6 @@ class BleTransport(
         private const val TIMEOUT = -1
         // Нет шифрования/сопряжения (5, 15) и типичная ошибка Android при сопряжении (137)
         private val AUTH_ERRORS = setOf(5, 15, 137)
+        private const val CONNECT_TIMEOUT_MS = 35_000L
     }
 }

@@ -67,6 +67,12 @@ class Detector {
   void setBlacklist(const double* lat, const double* lon, const uint16_t* radiusM, size_t n);
   void setPhone(double lat, double lon, float accuracyM, uint32_t time);
   void clearPhone() { phoneValid_ = false; }
+  // Часы переставили на d секунд: сдвинуть запомненные моменты (иначе «возраст» точек врёт)
+  void shiftTime(int32_t d) {
+    if (phoneTime_) phoneTime_ += (uint32_t)d;
+    if (lastGoodTime_) lastGoodTime_ += (uint32_t)d;
+    if (stillTime_) stillTime_ += (uint32_t)d;
+  }
 
   // Проверить очередной фикс. Чистые фиксы запоминаются как «последняя достоверная точка».
   Result check(const Input& in);

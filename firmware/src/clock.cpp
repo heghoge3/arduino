@@ -196,12 +196,14 @@ void setFromPhone(uint32_t utc) {
   if (g_present) writeClock(utc);
 }
 
-void offerGps(uint32_t utc, bool spoofSuspected) {
-  if (g_trusted || spoofSuspected || utc < 1700000000UL) return;
+int32_t offerGps(uint32_t utc, bool spoofSuspected) {
+  if (g_trusted || spoofSuspected || utc < 1700000000UL) return 0;
+  int32_t delta = (int32_t)(utc - now());
   setBase(utc);
   g_trusted = true;
   g_source = SRC_GPS;
   if (g_present) writeClock(utc);
+  return delta;
 }
 
 void resync() {

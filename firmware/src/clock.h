@@ -21,7 +21,7 @@ bool rtcPresent();
 // Поставить время (и записать в DS1302)
 void setFromPhone(uint32_t utc);
 // Время GPS: ставим только если часы не проверены, и только без подозрения на подмену
-void offerGps(uint32_t utc, bool spoofSuspected);
+int32_t offerGps(uint32_t utc, bool spoofSuspected);  // на сколько с переставили часы (0 — не брали)
 
 // Перечитать DS1302 (раз в 10 мин, после сна)
 void resync();

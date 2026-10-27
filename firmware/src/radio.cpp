@@ -28,6 +28,8 @@ uint32_t g_advUntilMs = 0;
 uint32_t g_lastRxMs = 0;
 uint32_t g_windowUntilMs = 0;
 volatile bool g_disconnected = false;
+volatile bool g_dropSecured = false;  // оборвалась связь с сопряжённым телефоном
+bool g_selfDisconnect = false;        // рвём сами (BYE, тайм-аут) — окно потом не нужно
 
 NimBLEServer* g_server = nullptr;
 NimBLECharacteristic* g_status = nullptr;
@@ -56,6 +58,7 @@ class ServerCB : public NimBLEServerCallbacks {
     LOGI(M_BLE, "телефон отключился");
     g_conn = 0xFFFF;
     g_live = false;
+    g_dropSecured = g_secured;
     g_secured = false;
     g_disconnected = true;
   }
@@ -182,8 +185,17 @@ void poll() {
   uint32_t now = millis();
   if (g_disconnected) {
     g_disconnected = false;
+    bool reopen = g_dropSecured && !g_selfDisconnect;
+    g_dropSecured = false;
+    g_selfDisconnect = false;
     g_state = State::OFF;
     g_pairing = false;
+    if (reopen) {
+      // Телефон ушёл из зоны: 2 мин окно, чтобы он переподключился сам, как только вернётся.
+      // Одним маячком (0,3 с раз в 30 с) телефон поймать почти не успевает
+      LOGI(M_BLE, "связь оборвалась — окно переподключения");
+      openWindow(g_lastBeacon, false);
+    }
   }
   switch (g_state) {
     case State::BEACON:
@@ -232,7 +244,9 @@ void setLive(bool on) {
 void touch() { g_lastRxMs = millis(); }
 
 void disconnect() {
-  if (connected() && g_conn != 0xFFFF) g_server->disconnect(g_conn);
+  if (!connected() || g_conn == 0xFFFF) return;
+  g_selfDisconnect = true;
+  g_server->disconnect(g_conn);
 }
 
 void shutdown() {
