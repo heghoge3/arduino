@@ -192,6 +192,9 @@ class ProtocolDeviceRepository(
         if (t === transport) return
         scope.launch { persist(force = true) }
         transport.disconnect()
+        // Загрузка из базы для прошлого источника могла ещё не закончиться — иначе она допишет
+        // его поход (например, эмулятора) в данные нового гаджета
+        restoreJob?.cancel()
         transportJobs.forEach { it.cancel() }
         points.clear()
         markMap.clear()
@@ -236,6 +239,7 @@ class ProtocolDeviceRepository(
     private suspend fun restore(key: String) {
         val dao = store ?: return
         val g = dao.gadget(key) ?: return
+        if (transport.key != key) return  // источник сменился, пока читали базу
         lastSeenMs.value = g.lastSeenMs
         logSeq = dao.maxLogSeq(key) ?: 0
         g.hike?.let { hike ->
@@ -259,10 +263,14 @@ class ProtocolDeviceRepository(
     /** Точки и метки похода из базы в память (то, что уже скачано с гаджета раньше) */
     private suspend fun loadHike(key: String, hike: Long) {
         val dao = store ?: return
-        dao.points(key, hike).forEach { row ->
+        val rows = dao.points(key, hike)
+        if (transport.key != key) return
+        rows.forEach { row ->
             (runCatching { Codec.decodeMsg(row.data) }.getOrNull() as? PointMsg)?.let { points[it.timeUtc * 1000] = it.toTrackPoint() }
         }
-        dao.marks(key, hike).forEach { row ->
+        val markRows = dao.marks(key, hike)
+        if (transport.key != key) return
+        markRows.forEach { row ->
             (runCatching { Codec.decodeMsg(row.data) }.getOrNull() as? MarkMsg)?.let { markMap[it.id] = it.toMark() }
         }
         dirty = true
