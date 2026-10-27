@@ -90,6 +90,7 @@ internal fun App(vm: AppViewModel = viewModel()) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val link by vm.repo.link.collectAsStateWithLifecycle()
+    val source by vm.link.source.collectAsStateWithLifecycle()
 
     fun toast(text: String) {
         scope.launch {
@@ -141,8 +142,8 @@ internal fun App(vm: AppViewModel = viewModel()) {
                 }
                 Spacer(Modifier.weight(1f))
                 Pill(
-                    // Пока устройство виртуальное — показываем это явно, чтобы не путать с настоящим
-                    if (link == LinkState.CONNECTED) "Эмулятор" else link.title,
+                    // Эмулятор показываем явно, чтобы не путать с настоящим гаджетом
+                    if (link == LinkState.CONNECTED) source.title else link.title,
                     when (link) {
                         LinkState.CONNECTED -> Palette.Geo
                         LinkState.CONNECTING -> Palette.Warn

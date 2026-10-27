@@ -61,7 +61,8 @@ fun summarize(device: String, hike: Long, name: String?, track: List<TrackPoint>
     return HikeSummary(
         device = device, hike = hike, name = name,
         startMs = hike * 1000,
-        endMs = track.lastOrNull()?.tsUtcMs ?: (hike * 1000),
+        // Конец не раньше начала (старые записи по неверным часам)
+        endMs = maxOf(track.lastOrNull()?.tsUtcMs ?: 0L, hike * 1000),
         km = trackKm(track),
         tempMin = temps.minOrNull() ?: Double.NaN,
         tempMax = temps.maxOrNull() ?: Double.NaN,

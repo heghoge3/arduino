@@ -1207,10 +1207,12 @@ void setup() {
            S.gpsPulseS, S.beaconS, S.logMovingS, S.logCampS, S.debug ? "вкл" : "выкл");
     }
     loadBlacklist();
-    // Продолжить поход, если последняя запись свежее 6 ч; иначе новый
+    // Продолжить поход, если последняя запись свежее 6 ч; иначе новый.
+    // При непроверенных часах «6 ч назад» посчитать нельзя — начинаем новый: его начало и записи
+    // сдвинутся, когда придёт время (onClockJump). Иначе остаётся поход с началом «из будущего»
     uint32_t hike = g_prefs.getULong("hike", 0);
     uint32_t last = g_prefs.getULong("last", 0);
-    if (hike && last && N.now >= last && N.now - last < 6 * 3600) {
+    if (clockx::trusted() && hike && last && N.now >= last && N.now - last < 6 * 3600) {
       P.hikeStart = hike;
       P.lastPointTime = last;
       storage::openHike(hike);
