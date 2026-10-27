@@ -67,6 +67,8 @@ class Detector {
   void setBlacklist(const double* lat, const double* lon, const uint16_t* radiusM, size_t n);
   void setPhone(double lat, double lon, float accuracyM, uint32_t time);
   void clearPhone() { phoneValid_ = false; }
+  // Забыть последнюю достоверную точку (эмуляция перенесла трек — иначе это «невозможный скачок»)
+  void forgetLastGood() { lastGoodValid_ = false; stillValid_ = false; }
   // Часы переставили на d секунд: сдвинуть запомненные моменты (иначе «возраст» точек врёт)
   void shiftTime(int32_t d) {
     if (phoneTime_) phoneTime_ += (uint32_t)d;

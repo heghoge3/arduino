@@ -610,6 +610,13 @@ void handleCommand(const uint8_t* data, size_t len) {
     }
     case proto::CMD_PHONE_POS:
       P.spoof.setPhone(c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM, N.now);
+#ifdef FAKE_SENSORS
+      if (gps::fakeAnchor(c.lat7 / 1e7, c.lon7 / 1e7)) {
+        P.spoof.forgetLastGood();
+        P.haveGood = false;
+        LOGI(M_GPS, "эмуляция: трек идёт от позиции телефона, подмена — каждые 10 мин на 2 мин");
+      }
+#endif
       break;
     case proto::CMD_RECORD:
       if (c.flag && !P.recording && (P.hikeStart == 0 || (int32_t)(N.now - P.lastPointTime) > 6 * 3600)) newHike(N.now);

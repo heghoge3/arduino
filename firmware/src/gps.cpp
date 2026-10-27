@@ -23,6 +23,7 @@ uint32_t g_onSinceMs = 0;
 uint32_t g_fakeLastMs = 0;
 double g_fakeLat = 60.1580, g_fakeLon = 30.5150;
 float g_fakeHeading = 40;
+bool g_fakeAnchored = false;
 
 void fakeTick() {
   uint32_t ms = millis();
@@ -34,7 +35,7 @@ void fakeTick() {
   g_fakeLat += d * cos(g_fakeHeading * PI / 180) / 111320.0;
   g_fakeLon += d * sin(g_fakeHeading * PI / 180) / (111320.0 * cos(g_fakeLat * PI / 180));
 
-  bool spoof = (ms / 1000) % 2400 >= 2220;  // последние 3 мин каждых 40 мин
+  bool spoof = (ms / 1000) % 600 >= 480;  // последние 2 мин каждых 10 мин
   double lat = spoof ? 60.0346 : g_fakeLat;
   double lon = spoof ? 30.5693 : g_fakeLon;
   uint32_t t = clockx::now();
@@ -105,6 +106,16 @@ void power(bool on) {
 }
 
 bool isOn() { return g_on; }
+
+#ifdef FAKE_SENSORS
+bool fakeAnchor(double lat, double lon) {
+  if (g_fakeAnchored) return false;
+  g_fakeAnchored = true;
+  g_fakeLat = lat;
+  g_fakeLon = lon;
+  return true;
+}
+#endif
 
 void poll() {
   if (!g_on) return;
