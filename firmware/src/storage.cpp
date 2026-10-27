@@ -249,6 +249,71 @@ uint32_t firstMarkSince(uint32_t utc) {
 
 uint16_t nextMarkId() { return ++g_markId; }
 
+namespace {
+// Сдвиг времени в одной записи точки (pkt — POINT_SIZE байт)
+bool shiftPoint(uint8_t* pkt, int32_t d) {
+  proto::Point p;
+  if (!proto::decodePoint(pkt, proto::POINT_SIZE, p)) return false;
+  p.time += (uint32_t)d;
+  return proto::encodePoint(p, pkt, proto::POINT_SIZE) == proto::POINT_SIZE;
+}
+
+// Сдвиг времени в одной записи метки (rec — MARK_REC байт: [длина][пакет])
+bool shiftMark(uint8_t* rec, int32_t d) {
+  proto::Mark m;
+  if (rec[0] > MARK_REC - 1 || !proto::decodeMark(rec + 1, rec[0], m)) return false;
+  m.time += (uint32_t)d;
+  rec[0] = static_cast<uint8_t>(proto::encodeMark(m, rec + 1, MARK_REC - 1));
+  return true;
+}
+
+// Переписать записи [from, count) файла на SD через fix
+void shiftFile(const char* path, size_t recSize, uint32_t from, uint32_t count, bool (*fix)(uint8_t*, int32_t), int32_t d) {
+  if (from >= count) return;
+  File f = SD.open(path, "r+");
+  if (!f) return;
+  uint8_t buf[MARK_REC > proto::POINT_SIZE ? MARK_REC : proto::POINT_SIZE];
+  for (uint32_t i = from; i < count; i++) {
+    if (!f.seek(i * recSize) || f.read(buf, recSize) != recSize) break;
+    if (!fix(buf, d)) continue;
+    f.seek(i * recSize);
+    f.write(buf, recSize);
+  }
+  f.close();
+}
+}  // namespace
+
+void shiftTimes(uint32_t fromPoint, uint32_t fromMark, int32_t d) {
+  if (g_ramPoints) {
+    uint32_t lo = g_ramPointCount > RAM_POINTS ? g_ramPointCount - RAM_POINTS : 0;
+    for (uint32_t i = fromPoint > lo ? fromPoint : lo; i < g_ramPointCount; i++)
+      shiftPoint(g_ramPoints + (i % RAM_POINTS) * proto::POINT_SIZE, d);
+  }
+  if (g_ramMarks) {
+    uint32_t lo = g_ramMarkCount > RAM_MARKS ? g_ramMarkCount - RAM_MARKS : 0;
+    for (uint32_t i = fromMark > lo ? fromMark : lo; i < g_ramMarkCount; i++)
+      shiftMark(g_ramMarks + (i % RAM_MARKS) * MARK_REC, d);
+  }
+  if (!g_sd) return;
+  shiftFile(g_trackBin, proto::POINT_SIZE, fromPoint, g_sdPointCount, shiftPoint, d);
+  shiftFile(g_markBin, MARK_REC, fromMark, g_sdMarkCount, shiftMark, d);
+}
+
+void renameHike(uint32_t newStart) {
+  char oldName[4][40];
+  memcpy(oldName[0], g_trackCsv, 40);
+  memcpy(oldName[1], g_trackBin, 40);
+  memcpy(oldName[2], g_markCsv, 40);
+  memcpy(oldName[3], g_markBin, 40);
+  g_hike = newStart;
+  fileNames(newStart);
+  if (!g_sd) return;
+  const char* newName[4] = {g_trackCsv, g_trackBin, g_markCsv, g_markBin};
+  for (int i = 0; i < 4; i++) {
+    if (SD.exists(oldName[i])) SD.rename(oldName[i], newName[i]);
+  }
+}
+
 bool loadBlacklist(proto::BlEntry* out, uint8_t& n) {
   n = 0;
   if (!g_sd || !SD.exists("/blacklist.json")) return false;

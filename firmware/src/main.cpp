@@ -43,6 +43,10 @@ uint32_t g_lastAccelMs = 0, g_lastSecondMs = 0;
 uint32_t g_lastEnvMs = 0, g_lastSelftestMs = 0, g_lastResyncMs = 0;
 uint32_t g_tick = 0;
 uint32_t g_powerOnUtc = 0;
+// Записи с этих номеров сделаны по непроверенным часам (с включения) — сдвинуть, когда придёт время
+constexpr uint32_t NO_SHIFT = 0xFFFFFFFF;
+uint32_t g_shiftFromPoint = NO_SHIFT, g_shiftFromMark = NO_SHIFT;
+bool g_hikeUntrusted = false;  // поход начат по непроверенным часам
 bool g_fixAnnounced = false;
 
 // Синхронизация: идёт порциями в цикле, чтобы не блокировать остальное
@@ -130,12 +134,33 @@ void onClockJump(int32_t d) {
   P.pulse.shiftTime(d);
   P.alerts.shiftTime(d);
   P.spoof.shiftTime(d);
+  // Записанное с включения по неверным часам — туда же (иначе в приложении данные «из будущего»,
+  // а докачка «с последней точки» пропускает новые). Телефон шлёт время первой командой, до докачки
+  if ((d > 60 || d < -60) && g_shiftFromPoint != NO_SHIFT) {
+    storage::shiftTimes(g_shiftFromPoint, g_shiftFromMark, d);
+    proto::Point p;
+    for (uint8_t i = 0; i < P.campN; i++) {
+      if (proto::decodePoint(P.campBuf[i], proto::POINT_SIZE, p)) {
+        p.time += (uint32_t)d;
+        proto::encodePoint(p, P.campBuf[i], proto::POINT_SIZE);
+      }
+    }
+    if (g_hikeUntrusted) {
+      P.hikeStart += (uint32_t)d;
+      storage::renameHike(P.hikeStart);
+      g_prefs.putULong("hike", P.hikeStart);
+    }
+    LOGI(M_SYS, "время записей с включения сдвинуто на %+ld с", (long)d);
+  }
+  g_shiftFromPoint = g_shiftFromMark = NO_SHIFT;
+  g_hikeUntrusted = false;
   if (P.lastPointTime) g_prefs.putULong("last", P.lastPointTime);
   N.now = clockx::now();
 }
 
 void newHike(uint32_t start) {
   P.hikeStart = start;
+  g_hikeUntrusted = !clockx::trusted();
   P.distM = 0;
   P.stepDet.setCount(0);
   P.campN = 0;
@@ -329,10 +354,13 @@ void onFix() {
   spoof::Result r = P.spoof.check(in);
 
   // Время от GPS — только если часы не проверены и нет подозрения
+#ifndef FAKE_SENSORS
+  // В эмуляции время «GPS» берётся из самих часов — проверенным оно от этого не становится
   if (f.timeValid) {
     int32_t d = clockx::offerGps(f.utc, r.spoof);
     if (d) onClockJump(d);
   }
+#endif
 
   N.fix = true;
   N.fixType = f.fixType;
@@ -1189,6 +1217,10 @@ void setup() {
       LOGI(M_SYS, "продолжаю поход %lu (последняя запись %lu с назад)", (unsigned long)hike, (unsigned long)(N.now - last));
     } else {
       newHike(N.now);
+    }
+    if (!clockx::trusted()) {
+      g_shiftFromPoint = storage::pointCount();
+      g_shiftFromMark = storage::markCount();
     }
     P.nextLogAt = N.now;
     P.nextBeaconAt = N.now;

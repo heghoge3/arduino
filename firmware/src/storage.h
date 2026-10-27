@@ -24,6 +24,11 @@ uint32_t freeMb();
 // Открыть (или продолжить) поход с этим временем старта
 void openHike(uint32_t hikeStart);
 uint32_t hikeStart();
+// Часы переставили на d секунд: сдвинуть время у точек и меток с номеров fromPoint/fromMark
+// (записаны по неверным часам) в памяти и в .bin на SD. CSV не трогаем — он для ПК, правка дорогая
+void shiftTimes(uint32_t fromPoint, uint32_t fromMark, int32_t d);
+// Поход начат по неверным часам: перенести начало (и имена файлов на SD) на newStart
+void renameHike(uint32_t newStart);
 
 // false — запись на SD не удалась (тревога «ошибка SD»); в PSRAM запись есть в любом случае
 bool appendPoint(const proto::Point& p, const CsvExtra& extra);
