@@ -159,6 +159,10 @@ void onClockJump(int32_t d) {
 }
 
 void newHike(uint32_t start) {
+  // Без проверенных часов каждое включение стартует с одного времени (сборки) — номер повторил бы
+  // прошлый поход, и на SD точки дописались бы в его файлы. Номер нового всегда больше прошлого
+  uint32_t prev = g_prefs.getULong("hike", 0);
+  if (!clockx::trusted() && start <= prev) start = prev + 1;
   P.hikeStart = start;
   g_hikeUntrusted = !clockx::trusted();
   P.distM = 0;
