@@ -167,6 +167,7 @@ class LinkManager(
 
     fun connectNow() {
         if (selectedId.value == null) return
+        AppLog.i("LINK", "подключить (кнопка)")
         userDisconnected = false
         if (!_scanner.value.scanning.value) _scanner.value.start()
         repo.connect()
