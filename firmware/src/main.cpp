@@ -45,8 +45,8 @@ uint32_t g_tick = 0;
 uint32_t g_powerOnUtc = 0;
 // Записи с этих номеров сделаны по непроверенным часам (с включения) — сдвинуть, когда придёт время
 constexpr uint32_t NO_SHIFT = 0xFFFFFFFF;
-uint32_t g_shiftFromPoint = NO_SHIFT, g_shiftFromMark = NO_SHIFT;
-bool g_hikeUntrusted = false;  // поход начат по непроверенным часам
+RTC_DATA_ATTR uint32_t g_shiftFromPoint = NO_SHIFT, g_shiftFromMark = NO_SHIFT;  // переживают сон
+RTC_DATA_ATTR bool g_hikeUntrusted = false;  // поход начат по непроверенным часам
 bool g_fixAnnounced = false;
 
 // Синхронизация: идёт порциями в цикле, чтобы не блокировать остальное
@@ -976,7 +976,8 @@ bool canSleep(uint32_t ms) {
 #endif
 }
 
-void goToSleep() {
+// forceS > 0 — уснуть ровно на столько (консольная команда sleep, проверка сна на голой плате)
+void goToSleep(int32_t forceS = 0) {
   N.now = clockx::now();
   if (P.campN && N.now - P.lastFlushAt >= SD_FLUSH_S) flushCamp();
   // Будим на ближайшее: запись (если идёт) или маячок (если не невидимка); иначе через час
@@ -987,6 +988,7 @@ void goToSleep() {
   int32_t sleepS = (int32_t)(wakeAt - N.now);
   if (sleepS < 1) sleepS = 1;
   if (sleepS > 3600) sleepS = 3600;
+  if (forceS > 0) sleepS = forceS;
 
   LOGD(M_PWR, "сон %ld с", (long)sleepS);
   // Буфер журнала почти полон — сбросить, иначе за следующие пробуждения начнёт терять строки
@@ -1006,7 +1008,9 @@ void goToSleep() {
   rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_A);
   rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_B);
   esp_sleep_enable_ext1_wakeup((1ULL << PIN_BTN_A) | (1ULL << PIN_BTN_B), ESP_EXT1_WAKEUP_ANY_LOW);
+#ifndef FAKE_SENSORS  // в эмуляции MPU нет, вывод INT висит в воздухе — будил бы сразу
   if (sensors::presence().mpu) esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_MPU_INT, 1);
+#endif
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);  // держать подтяжки кнопок
   esp_deep_sleep_start();
 }
@@ -1032,6 +1036,8 @@ void console() {
     if (!strcmp(line, "help")) {
       Serial.println("st — состояние; i2c — сканер шины; gps on|off|echo — GPS; pcas <тело> — команда модулю;"
                      " win — окно BLE; info — чип и SD; log — сбросить журнал на SD; debug on|off — подробный журнал");
+      Serial.println("Проверки: sleep <с> — глубокий сон (USB пропадёт, монитор переоткрыть); jump <±с> — переставить"
+                     " часы, как телефон; newhike — начать новый поход");
     } else if (!strcmp(line, "log")) {
       uint32_t n = dlog::pending();
       flushLog();
@@ -1064,6 +1070,22 @@ void console() {
       gps::setEcho(echo);
     } else if (!strncmp(line, "pcas ", 5)) {
       gps::sendCommand(line + 5);
+    } else if (!strncmp(line, "sleep ", 6)) {
+      int32_t s = atol(line + 6);
+      if (s < 1 || s > 3600) {
+        Serial.println("sleep 1..3600");
+      } else {
+        Serial.printf("сплю %ld с; после пробуждения переоткрой монитор и введи st\n", (long)s);
+        goToSleep(s);
+      }
+    } else if (!strncmp(line, "jump ", 5)) {
+      int32_t d = atol(line + 5);
+      clockx::setFromPhone(clockx::now() + d);
+      onClockJump(d);
+      Serial.printf("часы переставлены на %+ld с (как от телефона), t=%lu\n", (long)d, (unsigned long)N.now);
+    } else if (!strcmp(line, "newhike")) {
+      newHike(clockx::now());
+      LOGI(M_SYS, "новый поход %lu (команда)", (unsigned long)P.hikeStart);
     } else if (!strcmp(line, "win")) {
       radio::openWindow(makeBeacon(), true);
     } else if (!strcmp(line, "info")) {
@@ -1160,7 +1182,7 @@ void setup() {
 
   loadSettings();
   applySettings();
-  bool rtcOk = clockx::begin();
+  bool rtcOk = clockx::begin(cold);
   N.now = clockx::now();
   if (cold) {
     logBoot(g_prefs);
@@ -1171,6 +1193,7 @@ void setup() {
     if (wake == ESP_SLEEP_WAKEUP_TIMER) c.wakeTimer++;
     else if (wake == ESP_SLEEP_WAKEUP_EXT1) c.wakeButton++;
     else if (wake == ESP_SLEEP_WAKEUP_EXT0) c.wakeMotion++;
+    if (!rtcOk) LOGW(M_RTC, "DS1302 не ответил после сна — время по внутренним часам");
     if (wake != ESP_SLEEP_WAKEUP_TIMER) {
       LOGD(M_PWR, "проснулся: %s", wake == ESP_SLEEP_WAKEUP_EXT1 ? "кнопка" : (wake == ESP_SLEEP_WAKEUP_EXT0 ? "движение" : "?"));
     }
@@ -1224,10 +1247,8 @@ void setup() {
     } else {
       newHike(N.now);
     }
-    if (!clockx::trusted()) {
-      g_shiftFromPoint = storage::pointCount();
-      g_shiftFromMark = storage::markCount();
-    }
+    g_shiftFromPoint = clockx::trusted() ? NO_SHIFT : storage::pointCount();
+    g_shiftFromMark = clockx::trusted() ? NO_SHIFT : storage::markCount();
     P.nextLogAt = N.now;
     P.nextBeaconAt = N.now;
     // После включения 2 мин окно подключения (без сопряжения новых) и не спим

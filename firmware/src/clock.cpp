@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <string.h>
+#include <sys/time.h>
+#include <time.h>
 
 #include "nmea.h"
 #include "pins.h"
@@ -22,10 +24,11 @@ constexpr uint8_t REG_RAM0 = 0xC0;
 constexpr uint8_t RAM_MAGIC = 0xA7;
 
 bool g_present = false;
-bool g_trusted = false;
-Source g_source = SRC_NONE;
-uint32_t g_baseUtc = 0;
-uint32_t g_baseMs = 0;
+// Ход времени ведут внутренние часы ESP32 (системное время): они идут и в глубоком сне.
+// Доверие и источник — в RTC-памяти, чтобы пережить сон, даже если DS1302 при пробуждении не ответил
+RTC_DATA_ATTR bool g_trusted = false;
+RTC_DATA_ATTR Source g_source = SRC_NONE;
+RTC_DATA_ATTR bool g_sysValid = false;  // системное время уже ставили (до сна)
 
 void writeByte(uint8_t v) {
   pinMode(PIN_RTC_DAT, OUTPUT);
@@ -129,8 +132,9 @@ void writeClock(uint32_t utc) {
 }
 
 void setBase(uint32_t utc) {
-  g_baseUtc = utc;
-  g_baseMs = millis();
+  timeval tv{static_cast<time_t>(utc), 0};
+  settimeofday(&tv, nullptr);
+  g_sysValid = true;
 }
 
 // Время сборки прошивки — нижняя граница для непроверенного времени (лучше, чем 1970 или 2000 год)
@@ -145,7 +149,7 @@ uint32_t buildTime() {
 
 }  // namespace
 
-bool begin() {
+bool begin(bool cold) {
   pinMode(PIN_RTC_CLK, OUTPUT);
   pinMode(PIN_RTC_RST, OUTPUT);
   digitalWrite(PIN_RTC_RST, LOW);
@@ -159,6 +163,11 @@ bool begin() {
   uint32_t utc = 0;
   bool halted = true;
   g_present = readClock(utc, halted);
+  if (!g_present && !cold && g_sysValid) {
+    // Проснулись, а DS1302 не ответил (контакт, сбой чтения): внутренние часы шли во сне — верим им,
+    // доверие прежнее. Иначе время откатилось бы на время сборки посреди похода
+    return false;
+  }
   if (!g_present) {
     g_trusted = false;
     g_source = SRC_NONE;
@@ -183,7 +192,7 @@ bool begin() {
   return true;
 }
 
-uint32_t now() { return g_baseUtc + (millis() - g_baseMs) / 1000; }
+uint32_t now() { return static_cast<uint32_t>(time(nullptr)); }
 
 bool trusted() { return g_trusted; }
 Source source() { return g_source; }
