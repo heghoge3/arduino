@@ -79,7 +79,7 @@ class ScreenshotTest {
             compose.mainClock.advanceTimeBy(100)
         }
         shot("9_hike_detail")
-        compose.onNodeWithText("Трекер").performClick()
+        compose.onNodeWithText("Гаджет").performClick()
         shot("4_device")
         compose.onNodeWithText("Открыть").performClick()
         repeat(30) {
@@ -88,7 +88,7 @@ class ScreenshotTest {
             compose.mainClock.advanceTimeBy(100)
         }
         shot("10_log")
-        compose.onNodeWithText("← Трекер").performClick()
+        compose.onNodeWithText("← Гаджет").performClick()
         compose.onNodeWithContentDescription("Настройки").performClick()
         shot("5_settings")
     }

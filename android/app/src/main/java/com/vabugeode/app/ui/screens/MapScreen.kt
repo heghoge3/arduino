@@ -155,7 +155,7 @@ fun TrackMap(
 ) {
     if (!mapAvailable) {
         Box(modifier.border(1.dp, Palette.Outline), contentAlignment = Alignment.Center) {
-            Text("[ КАРТА · ${track.size} точек ]", style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint)
+            Text("[ КАРТА | ${track.size} точек ]", style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint)
         }
         return
     }
@@ -276,9 +276,9 @@ fun TrackMap(
         }
         Text(
             when {
-                mode != BaseMap.SCHEME -> "${mode.title} · офлайн"
-                OfflineMap.available(context) -> "© OpenStreetMap · офлайн"
-                else -> "© OpenStreetMap · онлайн"
+                mode != BaseMap.SCHEME -> "${mode.title} | офлайн"
+                OfflineMap.available(context) -> "© OpenStreetMap | офлайн"
+                else -> "© OpenStreetMap | онлайн"
             },
             fontSize = 10.sp, color = Palette.TextDim,
             modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 6.dp),

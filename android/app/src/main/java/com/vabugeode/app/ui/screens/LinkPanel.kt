@@ -77,7 +77,7 @@ private fun LinkContent(vm: AppViewModel) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(selectedName ?: "Гаджет не выбран", style = MaterialTheme.typography.titleMedium, color = Palette.Text)
-                Text("${source.title} · ${link.title}", style = MaterialTheme.typography.labelMedium, color = color)
+                Text("${source.title} | ${link.title}", style = MaterialTheme.typography.labelMedium, color = color)
             }
             if (selectedId != null) {
                 if (link == LinkState.DISCONNECTED) {
@@ -94,7 +94,7 @@ private fun LinkContent(vm: AppViewModel) {
             Text(bleError, style = MaterialTheme.typography.labelMedium, color = Palette.Warn)
         }
         Spacer(Modifier.height(10.dp))
-        KeyValue("Принято пакетов", "${stats.packetsIn} · ${Fmt.num(stats.bytesIn / 1024.0)} КБ")
+        KeyValue("Принято пакетов", "${stats.packetsIn} | ${Fmt.num(stats.bytesIn / 1024.0)} КБ")
         KeyValue("Отправлено команд", "${stats.packetsOut}")
         KeyValue("Потеряно STATUS", "${stats.lostStatus}", if (stats.lostStatus > 0) Palette.Warn else Palette.Text)
         KeyValue("Ошибок разбора", "${stats.errors}", if (stats.errors > 0) Palette.Bad else Palette.Text)
@@ -152,7 +152,7 @@ private fun FoundRow(g: FoundGadget, selected: Boolean, onChoose: () -> Unit) {
             Text(g.name, style = MaterialTheme.typography.titleMedium, color = Palette.Text)
             Text(beaconSummary(g.beacon), style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             Text(
-                "${g.id}${g.rssi?.let { " · $it дБм" } ?: ""}",
+                "${g.id}${g.rssi?.let { " | $it дБм" } ?: ""}",
                 fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Palette.TextFaint,
             )
         }
@@ -174,4 +174,4 @@ fun beaconSummary(b: BeaconMsg): String = buildList {
     )
     add(PowerMode.entries.getOrNull(b.mode)?.title?.lowercase() ?: "?")
     if (b.flags and Proto.B_WINDOW != 0) add("окно открыто")
-}.joinToString(" · ")
+}.joinToString(" | ")

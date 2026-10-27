@@ -123,7 +123,7 @@ private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sun: SunSchedul
     val last = track.last()
     val now = last.tsUtcMs
     Panel(accent = Palette.Sunset, title = title) {
-        if (start != null) KeyValue("Старт", "${Fmt.time(start)} · в пути ${Fmt.duration(now - start)}")
+        if (start != null) KeyValue("Старт", "${Fmt.time(start)} | в пути ${Fmt.duration(now - start)}")
         if (sun == null) {
             Text("Закат посчитается, когда будет позиция", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             return@Panel
@@ -154,8 +154,8 @@ private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sun: SunSchedul
         val nextRise = sun.next(SunSchedule.Kind.SUNRISE, now)
         when {
             nextSet != null && (nextRise == null || nextSet.timeMs < nextRise.timeMs) ->
-                KeyValue("До заката", "${Fmt.duration(nextSet.timeMs - now)} · в ${Fmt.time(nextSet.timeMs)}", Palette.SunsetSun)
-            nextRise != null -> KeyValue("До восхода", "${Fmt.duration(nextRise.timeMs - now)} · в ${Fmt.time(nextRise.timeMs)}", Palette.Sunrise)
+                KeyValue("До заката", "${Fmt.duration(nextSet.timeMs - now)} | в ${Fmt.time(nextSet.timeMs)}", Palette.SunsetSun)
+            nextRise != null -> KeyValue("До восхода", "${Fmt.duration(nextRise.timeMs - now)} | в ${Fmt.time(nextRise.timeMs)}", Palette.Sunrise)
         }
     }
 }
@@ -176,9 +176,10 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?) {
             Spacer(Modifier.width(4.dp))
             Text(m.unit, color = Palette.TextDim, modifier = Modifier.padding(bottom = 6.dp))
             Spacer(Modifier.weight(1f))
-            Column(horizontalAlignment = Alignment.End) {
-                Text("мин ${Fmt.num(values.min(), m.digits)}  ·  макс ${Fmt.num(values.max(), m.digits)}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
-                Text("ведите пальцем по графику", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+            // Мин и макс — по строке, с единицами, без переноса
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(bottom = 4.dp)) {
+                Text("макс ${Fmt.num(values.max(), m.digits)} ${m.unit}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1, softWrap = false)
+                Text("мин ${Fmt.num(values.min(), m.digits)} ${m.unit}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1, softWrap = false)
             }
         }
         Spacer(Modifier.height(8.dp))

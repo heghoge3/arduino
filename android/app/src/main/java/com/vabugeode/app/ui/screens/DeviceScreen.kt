@@ -90,7 +90,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(i.name, style = MaterialTheme.typography.titleLarge, color = Palette.Text)
-                    Text("${i.chipModel} · прошивка ${i.firmware}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+                    Text("${i.chipModel} | прошивка ${i.firmware}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -119,7 +119,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
 
         val pw = st.power
         Panel {
-            SectionLabel("Питание · INA219")
+            SectionLabel("Питание | INA219")
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text("${pw.percent}%", fontFamily = Fonts.Pixel, fontSize = 52.sp, lineHeight = 48.sp, color = Palette.Battery)
@@ -139,7 +139,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         }
 
         Panel {
-            SectionLabel("Спутники · ${st.gps.satsUsed} в решении из ${st.gps.satsInView}")
+            SectionLabel("Спутники | ${st.gps.satsUsed} в решении из ${st.gps.satsInView}")
             Spacer(Modifier.height(10.dp))
             if (st.gps.satellites.isEmpty()) {
                 Text("GPS выключен или спутников не видно", color = Palette.TextDim)
@@ -172,7 +172,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
 private fun ExchangeLog(vm: AppViewModel) {
     val log by vm.repo.log.collectAsStateWithLifecycle()
     Panel {
-        SectionLabel("Журнал обмена · протокол v${Proto.VERSION}")
+        SectionLabel("Журнал обмена | протокол v${Proto.VERSION}")
         Spacer(Modifier.height(4.dp))
         Text(
             "→ команда на устройство, ← ответ. STATUS показан каждый десятый, POINT — не показан.",
@@ -193,7 +193,7 @@ private fun ExchangeLog(vm: AppViewModel) {
                         },
                         modifier = Modifier.weight(1f),
                     )
-                    Text("${e.size} Б · ${Fmt.timeSec(e.timeMs)}", fontSize = 11.sp, color = Palette.TextFaint)
+                    Text("${e.size} Б | ${Fmt.timeSec(e.timeMs)}", fontSize = 11.sp, color = Palette.TextFaint)
                 }
                 Text(e.hex, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Palette.TextDim, maxLines = 2)
             }
@@ -232,7 +232,7 @@ private fun WherePanel(vm: AppViewModel) {
     Panel {
         SectionLabel("Где гаджет")
         Spacer(Modifier.height(6.dp))
-        KeyValue("Последний маячок", "${Fmt.time(r.beaconMs)} · ${Fmt.duration(System.currentTimeMillis() - r.beaconMs)} назад")
+        KeyValue("Последний маячок", "${Fmt.time(r.beaconMs)} | ${Fmt.duration(System.currentTimeMillis() - r.beaconMs)} назад")
         beacon?.let { Text(beaconSummary(it), style = MaterialTheme.typography.labelMedium, color = Palette.TextDim) }
         val lat = r.phoneLat
         val lon = r.phoneLon

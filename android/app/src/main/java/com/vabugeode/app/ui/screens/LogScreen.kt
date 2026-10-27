@@ -72,7 +72,7 @@ fun LogEntryPanel(vm: AppViewModel, onOpen: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (errors > 0) Palette.Bad else if (warns > 0) Palette.Warn else Palette.Text,
                 )
-                Text("гаджет ${g.size} строк · телефон ${a.size}", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+                Text("гаджет ${g.size} строк | телефон ${a.size}", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
             }
             TermButton("Открыть", Palette.Geo, onClick = onOpen)
         }

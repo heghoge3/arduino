@@ -124,7 +124,7 @@ fun HomeScreen(
                 Icons.Filled.BatteryChargingFull, "Заряд", "${pw.percent}", "%",
                 if (pw.percent < 20) Palette.Bad else Palette.Battery,
                 Modifier.weight(1f),
-                sub = "${Fmt.num(pw.voltage, 2)} В · ${Fmt.num(pw.currentMa, 0)} мА",
+                sub = "${Fmt.num(pw.voltage, 2)} В | ${Fmt.num(pw.currentMa, 0)} мА",
                 sub2 = "~${Fmt.num(pw.hoursLeft, 0)} ч осталось",
             )
         }
@@ -239,7 +239,7 @@ private fun GpsCard(st: DeviceStatus) {
         )
         else -> Quad(
             Palette.Good, Icons.Filled.GpsFixed, "GPS: сигнал хороший",
-            "${g.fix.title} · ${g.satsUsed} из ${g.satsInView} спутников · HDOP ${Fmt.num(g.hdop)} · ±${Fmt.num(g.hdop * 3, 0)} м",
+            "${g.fix.title} | ${g.satsUsed} из ${g.satsInView} спутников | HDOP ${Fmt.num(g.hdop)} | ±${Fmt.num(g.hdop * 3, 0)} м",
         )
     }
     Panel(accent = color) {
@@ -255,7 +255,7 @@ private fun GpsCard(st: DeviceStatus) {
         // Всегда две строки текста и строка причин — блок одной высоты в любом состоянии
         Text(text, style = MaterialTheme.typography.bodyMedium, color = Palette.Text, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(
-            if (g.spoof) "Причины: " + SpoofReason.fromMask(g.spoofMask).joinToString(" · ") { it.title.lowercase() } else "",
+            if (g.spoof) "Причины: " + SpoofReason.fromMask(g.spoofMask).joinToString(" | ") { it.title.lowercase() } else "",
             style = MaterialTheme.typography.labelMedium, color = Palette.Bad, minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(8.dp))

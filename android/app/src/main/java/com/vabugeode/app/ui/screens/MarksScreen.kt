@@ -64,7 +64,7 @@ fun MarksPanel(vm: AppViewModel, marks: List<Mark>, start: Long?, onAdded: (Stri
             TermButton("✏️ Свой текст", Palette.Text) { textDialog = true }
         }
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel("Метки похода · ${marks.size}", Modifier.weight(1f))
+            SectionLabel("Метки похода | ${marks.size}", Modifier.weight(1f))
             TermButton("↗ CapCut", Palette.Geo) { shareMarks(context, marks, start) }
         }
         LazyColumn(
