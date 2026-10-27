@@ -268,10 +268,16 @@ bool sendStatus(const uint8_t* data, size_t len) {
 }
 
 bool sendEvent(const uint8_t* data, size_t len) {
-  if (!secured() || !g_event) return false;
-  g_event->setValue(data, len);
-  g_event->notify();
-  return true;
+  if (!secured() || !g_event || g_conn == 0xFFFF) return false;
+  // Уведомление напрямую через стек, чтобы знать, ушло ли оно: при выгрузке пачкой буферы NimBLE
+  // кончаются, и notify() молча теряет пакеты. Несколько коротких попыток, потом — false
+  for (int attempt = 0; attempt < 5; attempt++) {
+    os_mbuf* om = ble_hs_mbuf_from_flat(data, len);
+    if (om && ble_gatts_notify_custom(g_conn, g_event->getHandle(), om) == 0) return true;
+    // om при ошибке стек освобождает сам
+    delay(10);
+  }
+  return false;
 }
 
 }  // namespace radio

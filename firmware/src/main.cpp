@@ -542,7 +542,7 @@ void pumpSync() {
   }
   uint8_t b[96];
   // Порция за итерацию: темп ограничен буферами BLE — подобрать на железе
-  for (int i = 0; i < 4 && g_sync.idx < g_sync.end; i++, g_sync.idx++) {
+  for (int i = 0; i < 4 && g_sync.idx < g_sync.end; i++) {
     size_t n = 0;
     if (g_sync.what == proto::CMD_SYNC_TRACK) {
       proto::Point p;
@@ -554,13 +554,15 @@ void pumpSync() {
       if (storage::readMark(g_sync.idx, m)) n = proto::encodeMark(m, b, sizeof(b));
     }
     if (n) {
-      radio::sendEvent(b, n);
+      if (!radio::sendEvent(b, n)) break;  // буферы BLE заняты — эту же запись в следующий раз
       g_sync.sent++;
     }
+    g_sync.idx++;
   }
   if (g_sync.idx >= g_sync.end) {
+    // SYNC_DONE тоже не терять: без него приложение считает, что выгрузка ещё идёт
+    if (!radio::sendEvent(b, proto::encodeSyncDone(g_sync.what, g_sync.sent, b, sizeof(b)))) return;
     if (g_sync.what != proto::CMD_SYNC_LOG || g_sync.sent) LOGD(M_BLE, "выгрузка 0x%02X: %lu записей", g_sync.what, (unsigned long)g_sync.sent);
-    sendPacketEvent(b, proto::encodeSyncDone(g_sync.what, g_sync.sent, b, sizeof(b)));
     g_sync.active = false;
     for (SyncJob& w : g_syncWait) {
       if (w.active) {
