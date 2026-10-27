@@ -223,6 +223,14 @@ class BleTransport(
         val g = gatt ?: return false
         val c = cmdChar ?: return false
         var st = write(g, c, data)
+        // Гаджет занят выгрузкой (буферы BLE заняты уведомлениями) — короткая пауза и ещё раз
+        var retry = 0
+        while (st != BluetoothGatt.GATT_SUCCESS && st !in AUTH_ERRORS && retry < 3 && state.value == LinkState.CONNECTED) {
+            retry++
+            AppLog.d("GATT", "запись команды: код $st, повтор $retry")
+            delay(150L * retry)
+            st = write(g, c, data)
+        }
         if (st != BluetoothGatt.GATT_SUCCESS) AppLog.w("GATT", "запись команды: код $st")
         if (st in AUTH_ERRORS) {
             // Команды — только по шифрованной связи: ждём, пока Android проведёт сопряжение, и пробуем снова
