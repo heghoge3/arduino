@@ -80,7 +80,7 @@ private enum class Tab(val title: String, val icon: ImageVector) {
     MAP("Карта", Icons.Filled.Map),
     CHARTS("Графики", Icons.AutoMirrored.Filled.ShowChart),
     HIKES("Походы", Icons.Filled.Hiking),
-    DEVICE("Трекер", Icons.Filled.Memory),
+    DEVICE("Гаджет", Icons.Filled.Memory),
 }
 
 @Composable

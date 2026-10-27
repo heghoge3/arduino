@@ -336,7 +336,7 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
                 )
             } else {
                 Text(
-                    if (name == null) "Выберите гаджет на вкладке «Трекер»."
+                    if (name == null) "Выберите гаджет на вкладке «Гаджет»."
                     else "Гаджет пока не слышно. Он выходит в эфир раз в 30–60 с; чтобы сразу — зажмите B на 1,5 с.",
                     style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
                 )

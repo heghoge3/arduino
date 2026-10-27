@@ -56,7 +56,7 @@ private fun levelColor(level: Int): Color = when (level) {
     else -> Palette.TextFaint
 }
 
-/** Вход в журнал на вкладке «Трекер»: сколько ошибок и предупреждений за сутки */
+/** Вход в журнал на вкладке «Гаджет»: сколько ошибок и предупреждений за сутки */
 @Composable
 fun LogEntryPanel(vm: AppViewModel, onOpen: () -> Unit) {
     val g by vm.gadgetLog.collectAsStateWithLifecycle()
@@ -99,7 +99,7 @@ fun LogScreen(vm: AppViewModel, contentPadding: PaddingValues, onClose: () -> Un
     Column(Modifier.fillMaxSize().padding(contentPadding)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TermButton("← Трекер", Palette.TextDim, onClick = onClose)
+                TermButton("← Гаджет", Palette.TextDim, onClick = onClose)
                 Spacer(Modifier.weight(1f))
                 TermButton(if (sharing) "Готовим…" else "↗ Поделиться", Palette.Geo) {
                     if (sharing) return@TermButton
