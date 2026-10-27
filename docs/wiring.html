@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кнопки и ключ GPS</title>
+<style>
+/* Крупные схемы к docs/assembly.html: кнопки и AO3401. Стиль и цвета — как в assembly.html */
+:root {
+  color-scheme: dark;
+  --bg: #060A12;
+  --line: #1E2D44;
+  --text: #D7EEFF;
+  --dim: #8CA3BD;
+  --geo: #9FD8FF;
+  --pwr: #FF7B6E;
+  --gnd: #8CA3BD;
+  --gps: #7CE3B0;
+  --io: #FF9FCB;
+  --warn: #FFBE5A;
+  --bad: #FF6B5E;
+  --badbg: #1D0C10;
+  --f-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --f-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.55 var(--f-sans);
+  margin: 0; padding: 20px 16px 48px;
+}
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1 { font: 600 26px/1.2 var(--f-sans); margin: 0; color: var(--geo); }
+h2 { font: 500 13px/1.3 var(--f-mono); letter-spacing: 2px; text-transform: uppercase; color: var(--geo); margin: 0; }
+p { margin: 0; }
+.lead { color: var(--dim); }
+section { border: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+section.danger { border-color: var(--bad); background: var(--badbg); }
+section.danger h2 { color: var(--bad); }
+.scroll { overflow-x: auto; }
+svg { width: 100%; min-width: 620px; height: auto; display: block; }
+svg text { font-family: var(--f-mono); }
+ol, ul { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+code { font-family: var(--f-mono); color: var(--geo); font-size: 0.92em; }
+b.pwr { color: var(--pwr); } b.gnd { color: var(--gnd); } b.gps { color: var(--gps); } b.io { color: var(--io); }
+.note { color: var(--dim); font-size: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font: 13px var(--f-mono); color: var(--dim); }
+.legend span::before { content: ""; display: inline-block; width: 18px; height: 3px; margin-right: 6px; vertical-align: middle; background: currentColor; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:8px">
+  <h1>Кнопки и ключ GPS крупно</h1>
+  <p class="lead">На телефоне схемы листаются вбок. Дополнение к <code>assembly.html</code>. Три схемы: кнопка питания, кнопки A/B, MOSFET AO3401. Каждый провод нарисован отдельно. Номера GPIO как в <code>firmware/include/pins.h</code>, сверь их с надписями на своей плате.</p>
+  <div class="legend">
+    <span style="color:var(--pwr)">плюс питания</span>
+    <span style="color:var(--gnd)">GND</span>
+    <span style="color:var(--io)">кнопки → GPIO</span>
+    <span style="color:var(--gps)">GPS</span>
+  </div>
+</header>
+
+<section class="danger">
+  <h2>Сначала узнай выводы мультиметром</h2>
+  <p>У кнопок бывает 2, 4 или 6 выводов, а у переходника SOT-23→DIP разная разводка. Не паяй «по картинке», пока не прозвонил:</p>
+  <ul>
+    <li><b>Кнопка:</b> режим прозвонки, щупы на два вывода. Нажал — пищит, отпустил — тишина: это нужная пара. Если пищит всегда, эти выводы внутри соединены, бери другую пару.</li>
+    <li><b>Кнопка с фиксацией:</b> так же, но «нажата» = пищит постоянно, «отжата» = тишина.</li>
+    <li><b>AO3401 на переходнике:</b> прозвони, к какой ножке DIP идёт каждая ножка корпуса (вид корпуса — в схеме 3). Подпиши ножки маркером: G, S, D.</li>
+  </ul>
+</section>
+
+<!-- ============ 1. Кнопка питания ============ -->
+<section>
+  <h2>1. Кнопка питания (с фиксацией)</h2>
+  <p>Она стоит в разрыве <b class="pwr">плюса</b> между зарядкой TP4056 и INA219. Минус через кнопку не идёт.</p>
+  <div class="scroll"><svg viewBox="0 0 720 300" role="img" aria-labelledby="t1">
+    <title id="t1">TP4056 OUT+ к кнопке питания, кнопка к INA219 VIN+, VIN− к TPS63020 VIN. OUT− на общий GND</title>
+    <!-- TP4056 -->
+    <rect x="20" y="60" width="150" height="150" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="95" y="50" fill="#D7EEFF" font-size="15" text-anchor="middle">TP4056</text>
+    <text x="30" y="95" fill="#8CA3BD" font-size="13">B+ ← аккум +</text>
+    <text x="30" y="120" fill="#8CA3BD" font-size="13">B− ← аккум −</text>
+    <text x="160" y="160" fill="#FF7B6E" font-size="14" text-anchor="end">OUT+</text>
+    <text x="160" y="195" fill="#8CA3BD" font-size="14" text-anchor="end">OUT−</text>
+    <circle cx="170" cy="155" r="4" fill="#FF7B6E"/>
+    <circle cx="170" cy="190" r="4" fill="#8CA3BD"/>
+    <!-- провод к кнопке -->
+    <line x1="170" y1="155" x2="250" y2="155" stroke="#FF7B6E" stroke-width="3"/>
+    <!-- кнопка -->
+    <circle cx="250" cy="155" r="5" fill="#FF7B6E"/>
+    <circle cx="320" cy="155" r="5" fill="#FF7B6E"/>
+    <line x1="252" y1="152" x2="315" y2="128" stroke="#FFBE5A" stroke-width="3"/>
+    <text x="285" y="105" fill="#FFBE5A" font-size="13" text-anchor="middle">кнопка</text>
+    <text x="285" y="182" fill="#8CA3BD" font-size="12" text-anchor="middle">с фиксацией</text>
+    <line x1="320" y1="155" x2="400" y2="155" stroke="#FF7B6E" stroke-width="3"/>
+    <!-- INA219 -->
+    <rect x="400" y="110" width="120" height="90" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="460" y="100" fill="#D7EEFF" font-size="15" text-anchor="middle">INA219</text>
+    <circle cx="400" cy="155" r="4" fill="#FF7B6E"/>
+    <text x="410" y="150" fill="#FF7B6E" font-size="13">VIN+</text>
+    <circle cx="520" cy="155" r="4" fill="#FF7B6E"/>
+    <text x="510" y="150" fill="#FF7B6E" font-size="13" text-anchor="end">VIN−</text>
+    <line x1="520" y1="155" x2="580" y2="155" stroke="#FF7B6E" stroke-width="3"/>
+    <!-- TPS -->
+    <rect x="580" y="110" width="120" height="110" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="640" y="100" fill="#D7EEFF" font-size="15" text-anchor="middle">TPS63020</text>
+    <circle cx="580" cy="155" r="4" fill="#FF7B6E"/>
+    <text x="590" y="150" fill="#FF7B6E" font-size="13">VIN</text>
+    <circle cx="580" cy="200" r="4" fill="#8CA3BD"/>
+    <text x="590" y="205" fill="#8CA3BD" font-size="13">GND</text>
+    <text x="640" y="245" fill="#FF7B6E" font-size="13" text-anchor="middle">VOUT 3,3 В →</text>
+    <text x="640" y="262" fill="#FF7B6E" font-size="13" text-anchor="middle">пин 3V3 платы</text>
+    <!-- общий GND -->
+    <line x1="170" y1="190" x2="200" y2="190" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="200" y1="190" x2="200" y2="270" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="200" y1="270" x2="560" y2="270" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="560" y1="270" x2="560" y2="200" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="560" y1="200" x2="580" y2="200" stroke="#8CA3BD" stroke-width="3"/>
+    <text x="380" y="290" fill="#8CA3BD" font-size="13" text-anchor="middle">общий GND (и GND платы)</text>
+  </svg></div>
+  <p class="note">Проверка: кнопка нажата — на VOUT TPS63020 3,3 В, отжата — 0 В. Это шаг 1 гайда, плату при этом <b>не подключать</b>. Зарядка через Type-C работает при любом положении кнопки.</p>
+</section>
+
+<!-- ============ 2. Кнопки A и B ============ -->
+<section>
+  <h2>2. Кнопки A и B (без фиксации)</h2>
+  <p>Один вывод кнопки — на GPIO, второй — на <b class="gnd">GND</b>. <b>Резисторы не нужны</b>: подтяжку к 3,3 В включает прошивка внутри чипа (<code>INPUT_PULLUP</code>). Отпущена — на пине 1, нажата — 0.</p>
+  <div class="scroll"><svg viewBox="0 0 720 250" role="img" aria-labelledby="t2">
+    <title id="t2">GPIO1 через кнопку A на GND, GPIO2 через кнопку B на GND</title>
+    <!-- плата -->
+    <rect x="20" y="30" width="170" height="190" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="105" y="22" fill="#D7EEFF" font-size="15" text-anchor="middle">ESP32-S3-Zero</text>
+    <text x="180" y="85" fill="#FF9FCB" font-size="15" text-anchor="end">GPIO1</text>
+    <text x="180" y="145" fill="#FF9FCB" font-size="15" text-anchor="end">GPIO2</text>
+    <text x="180" y="205" fill="#8CA3BD" font-size="15" text-anchor="end">GND</text>
+    <circle cx="190" cy="80" r="4" fill="#FF9FCB"/>
+    <circle cx="190" cy="140" r="4" fill="#FF9FCB"/>
+    <circle cx="190" cy="200" r="4" fill="#8CA3BD"/>
+    <!-- A -->
+    <line x1="190" y1="80" x2="360" y2="80" stroke="#FF9FCB" stroke-width="3"/>
+    <circle cx="360" cy="80" r="5" fill="#FF9FCB"/>
+    <circle cx="440" cy="80" r="5" fill="#8CA3BD"/>
+    <line x1="362" y1="77" x2="435" y2="55" stroke="#FFBE5A" stroke-width="3"/>
+    <text x="400" y="40" fill="#FFBE5A" font-size="14" text-anchor="middle">кнопка A</text>
+    <text x="400" y="105" fill="#8CA3BD" font-size="12" text-anchor="middle">метка / хлопушка</text>
+    <line x1="440" y1="80" x2="600" y2="80" stroke="#8CA3BD" stroke-width="3"/>
+    <!-- B -->
+    <line x1="190" y1="140" x2="360" y2="140" stroke="#FF9FCB" stroke-width="3"/>
+    <circle cx="360" cy="140" r="5" fill="#FF9FCB"/>
+    <circle cx="440" cy="140" r="5" fill="#8CA3BD"/>
+    <line x1="362" y1="137" x2="435" y2="115" stroke="#FFBE5A" stroke-width="3"/>
+    <text x="400" y="165" fill="#8CA3BD" font-size="12" text-anchor="middle">экран / Bluetooth</text>
+    <text x="480" y="125" fill="#FFBE5A" font-size="14">кнопка B</text>
+    <line x1="440" y1="140" x2="600" y2="140" stroke="#8CA3BD" stroke-width="3"/>
+    <!-- GND шина -->
+    <line x1="600" y1="80" x2="600" y2="200" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="190" y1="200" x2="600" y2="200" stroke="#8CA3BD" stroke-width="3"/>
+    <circle cx="600" cy="140" r="5" fill="#8CA3BD"/>
+    <text x="400" y="225" fill="#8CA3BD" font-size="13" text-anchor="middle">одна общая земля для обеих кнопок</text>
+  </svg></div>
+  <p class="note">Можно проще: вторые выводы обеих кнопок соединить перемычкой и одним проводом на GND. Какой вывод кнопки идёт на GPIO, а какой на GND, неважно. Главное, чтобы это была пара, которую ты нашёл прозвонкой.</p>
+  <p class="note">Проверка без пайки остального: прошивка <code>s3_fake</code>, монитор порта. Короткое нажатие A — в журнале метка, долгое B — открывается окно Bluetooth.</p>
+</section>
+
+<!-- ============ 3. AO3401 ============ -->
+<section>
+  <h2>3. Ключ GPS: AO3401 (P-MOSFET)</h2>
+  <p>Ключ стоит в разрыве <b class="pwr">плюса</b> GPS-модуля. <b class="gnd">GND</b> модуля идёт на общую землю напрямую, через ключ не проходит.</p>
+
+  <div class="scroll"><svg viewBox="0 0 720 230" role="img" aria-labelledby="t3a">
+    <title id="t3a">Корпус SOT-23 сверху: ножка 1 G слева снизу, ножка 2 S справа снизу, ножка 3 D одна сверху</title>
+    <text x="20" y="24" fill="#D7EEFF" font-size="14">Корпус SOT-23, вид сверху (надпись на корпусе читается)</text>
+    <rect x="230" y="70" width="260" height="90" rx="6" fill="#0A111C" stroke="#8CA3BD" stroke-width="2"/>
+    <text x="360" y="122" fill="#8CA3BD" font-size="16" text-anchor="middle">A1 / AO3401</text>
+    <!-- ножка 3 сверху -->
+    <rect x="345" y="38" width="30" height="32" fill="#7CE3B0"/>
+    <text x="385" y="60" fill="#7CE3B0" font-size="15">3 = D (сток)</text>
+    <!-- 1 и 2 снизу -->
+    <rect x="255" y="160" width="30" height="32" fill="#FF9FCB"/>
+    <rect x="435" y="160" width="30" height="32" fill="#FF7B6E"/>
+    <text x="270" y="215" fill="#FF9FCB" font-size="15" text-anchor="middle">1 = G (затвор)</text>
+    <text x="450" y="215" fill="#FF7B6E" font-size="15" text-anchor="middle">2 = S (исток)</text>
+  </svg></div>
+
+  <div class="scroll"><svg viewBox="0 0 720 320" role="img" aria-labelledby="t3b">
+    <title id="t3b">+3,3 В к S; резистор 10 кОм между S и G; GPIO6 к G; D к VCC модуля GPS; GND модуля на общий GND</title>
+    <!-- шина 3,3 -->
+    <text x="20" y="44" fill="#FF7B6E" font-size="15">+3,3 В (пин 3V3 платы)</text>
+    <line x1="20" y1="60" x2="420" y2="60" stroke="#FF7B6E" stroke-width="3"/>
+    <!-- к S -->
+    <line x1="300" y1="60" x2="300" y2="140" stroke="#FF7B6E" stroke-width="3"/>
+    <circle cx="300" cy="60" r="5" fill="#FF7B6E"/>
+    <!-- транзистор -->
+    <rect x="260" y="140" width="140" height="90" rx="6" fill="#0A111C" stroke="#8CA3BD" stroke-width="2"/>
+    <text x="330" y="190" fill="#D7EEFF" font-size="16" text-anchor="middle">AO3401</text>
+    <circle cx="300" cy="140" r="5" fill="#FF7B6E"/>
+    <text x="308" y="160" fill="#FF7B6E" font-size="14">S</text>
+    <circle cx="260" cy="215" r="5" fill="#FF9FCB"/>
+    <text x="270" y="220" fill="#FF9FCB" font-size="14">G</text>
+    <circle cx="400" cy="185" r="5" fill="#7CE3B0"/>
+    <text x="390" y="180" fill="#7CE3B0" font-size="14" text-anchor="end">D</text>
+    <!-- резистор 10к между S-шиной и G -->
+    <line x1="150" y1="60" x2="150" y2="105" stroke="#FF7B6E" stroke-width="3"/>
+    <circle cx="150" cy="60" r="5" fill="#FF7B6E"/>
+    <rect x="135" y="105" width="30" height="60" fill="none" stroke="#FFBE5A" stroke-width="3"/>
+    <text x="125" y="140" fill="#FFBE5A" font-size="14" text-anchor="end">10 кОм</text>
+    <line x1="150" y1="165" x2="150" y2="215" stroke="#FF9FCB" stroke-width="3"/>
+    <line x1="150" y1="215" x2="260" y2="215" stroke="#FF9FCB" stroke-width="3"/>
+    <circle cx="150" cy="215" r="5" fill="#FF9FCB"/>
+    <!-- GPIO6 -->
+    <line x1="20" y1="215" x2="150" y2="215" stroke="#FF9FCB" stroke-width="3"/>
+    <text x="20" y="205" fill="#FF9FCB" font-size="15">GPIO6</text>
+    <!-- GPS модуль -->
+    <line x1="400" y1="185" x2="540" y2="185" stroke="#7CE3B0" stroke-width="3"/>
+    <rect x="540" y="140" width="160" height="140" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="620" y="130" fill="#D7EEFF" font-size="15" text-anchor="middle">GPS ATGM336H</text>
+    <circle cx="540" cy="185" r="4" fill="#7CE3B0"/>
+    <text x="550" y="190" fill="#7CE3B0" font-size="14">VCC</text>
+    <circle cx="540" cy="250" r="4" fill="#8CA3BD"/>
+    <text x="550" y="255" fill="#8CA3BD" font-size="14">GND</text>
+    <line x1="540" y1="250" x2="480" y2="250" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="480" y1="250" x2="480" y2="300" stroke="#8CA3BD" stroke-width="3"/>
+    <text x="490" y="300" fill="#8CA3BD" font-size="14">→ общий GND</text>
+    <text x="20" y="275" fill="#8CA3BD" font-size="13">GPIO6 = LOW → GPS включён</text>
+    <text x="20" y="295" fill="#8CA3BD" font-size="13">GPIO6 = HIGH или плата выключена → GPS выключен</text>
+  </svg></div>
+
+  <ol>
+    <li><b class="pwr">S</b> (исток, ножка 2) — к +3,3 В.</li>
+    <li><b class="gps">D</b> (сток, ножка 3) — к VCC GPS-модуля.</li>
+    <li><b class="io">G</b> (затвор, ножка 1) — к GPIO6.</li>
+    <li>Резистор 10 кОм — между G и S, то есть от затвора к +3,3 В. Он держит GPS выключенным, пока плата загружается.</li>
+    <li>GND модуля GPS — на общую землю. TX/RX модуля — к GPIO44/43 крест-накрест, как в гайде.</li>
+  </ol>
+  <p class="note"><b>Частая ошибка:</b> перепутать S и D. Тогда GPS не выключается никогда (ток идёт через встроенный диод транзистора) или не включается вовсе. Если GPS горит постоянно, даже на паузе, — переверни S и D.</p>
+  <p class="note"><b>Проверка до подключения GPS:</b> прошивка <code>s3</code>, плата на USB, мультиметр между D и GND. Нажми в приложении «Пауза» — около 0 В. «Запись» с GPS в режиме «всегда» (Настройки) — 3,2–3,3 В. Только после этого подключай модуль.</p>
+</section>
+
+</div>
+</body>
+</html>
