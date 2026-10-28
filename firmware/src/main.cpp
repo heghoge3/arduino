@@ -131,6 +131,7 @@ void onClockJump(int32_t d) {
   shiftTime(P.nextBeaconAt, d);
   shiftTime(P.lastFlushAt, d);
   shiftTime(P.lastPointTime, d);
+  shiftTime(P.goodTime, d);
   shiftTime(P.spoofAlertUntil, d);
   shiftTime(P.pressHistAt, d);
   shiftTime(g_powerOnUtc, d);
@@ -388,7 +389,13 @@ void onFix() {
     bool moved = !P.haveGood;
     if (P.haveGood) {
       double d = spoof::distanceM(P.goodLat, P.goodLon, f.lat, f.lon);
-      if (d > fmaxf(5.0f, f.hdop * 3.0f)) {
+      // GPS молчал дольше 5 мин (пауза записи, стоянка) и точка далеко — переехали (машина, электричка):
+      // в километраж не идёт, отсчёт с новой точки
+      int32_t gap = P.goodTime ? (int32_t)(N.now - P.goodTime) : 0;
+      if (gap > 300 && d > 200) {
+        LOGI(M_GPS, "переезд %.1f км за %ld мин — в километраж не идёт", d / 1000, (long)(gap / 60));
+        moved = true;
+      } else if (d > fmaxf(5.0f, f.hdop * 3.0f)) {
         P.distM += d;
         moved = true;
       }
@@ -399,6 +406,7 @@ void onFix() {
       P.goodLon = f.lon;
     }
     P.goodAlt = f.altM;
+    P.goodTime = N.now;
     N.src = 1;
     N.altValid = f.altValid;
     N.altGps = f.altM;

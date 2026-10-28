@@ -434,6 +434,17 @@ void test_spoof_blacklist_and_jump() {
   TEST_ASSERT_EQUAL_UINT8(spoof::R_JUMP, r.mask);
 }
 
+void test_spoof_jump_after_pause() {
+  // Пауза записи / стоянка с выключенным GPS, потом переезд на машине на 10 км — не подмена
+  spoof::Detector d;
+  d.check(inputAt(1000, 60.1580, 30.5150));
+  TEST_ASSERT_FALSE(d.check(inputAt(1000 + 900, 60.2480, 30.5150)).mask & spoof::R_JUMP);
+  // А тот же скачок через минуту при включённом GPS — скачок
+  spoof::Detector d2;
+  d2.check(inputAt(1000, 60.1580, 30.5150));
+  TEST_ASSERT_TRUE(d2.check(inputAt(1060, 60.2480, 30.5150)).mask & spoof::R_JUMP);
+}
+
 void test_spoof_phone_and_time() {
   spoof::Detector d;
   d.setPhone(60.1580, 30.5150, 50, 1000);
@@ -670,6 +681,7 @@ int main(int, char**) {
   RUN_TEST(test_nmea_lost_fix_and_errors);
   RUN_TEST(test_nmea_command_build);
   RUN_TEST(test_spoof_blacklist_and_jump);
+  RUN_TEST(test_spoof_jump_after_pause);
   RUN_TEST(test_spoof_phone_and_time);
   RUN_TEST(test_spoof_weak_signs_need_two);
   RUN_TEST(test_spoof_steps_but_standing);

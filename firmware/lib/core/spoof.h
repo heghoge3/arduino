@@ -34,7 +34,7 @@ struct Config {
   uint32_t accelWindowS = 120;     // идут шаги, а позиция стоит столько секунд
   float accelStillM = 15.0f;
   uint32_t stepsWhileStill = 60;
-  uint32_t lastGoodMaxAgeS = 3600; // старше — скачок не проверяем
+  uint32_t lastGoodMaxAgeS = 300;  // GPS молчал дольше (пауза, стоянка, переезд на машине) — скачок не проверяем
 };
 
 struct Input {
