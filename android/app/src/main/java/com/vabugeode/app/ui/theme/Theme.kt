@@ -30,23 +30,25 @@ object Palette {
     val TextFaint = Color(0xFF6A819E)
 
     val Geo = Color(0xFF9FD8FF)          // основной цвет интерфейса — «GEO» в логотипе
-    val Good = Color(0xFF7CE3B0)
-    val Warn = Color(0xFFFFBE5A)
-    val Bad = Color(0xFFFF6B5E)
+    // Каждый цвет — свой оттенок по кругу, без повторов: красный, оранжевый, жёлтый, салатовый,
+    // зелёный, бирюзовый, голубой (Geo), синий, фиолетовый
+    val Good = Color(0xFF4CD48A)         // зелёный: всё хорошо, питание
+    val Warn = Color(0xFFFFD166)         // жёлтый: внимание
+    val Bad = Color(0xFFFF5E57)          // красный: тревога
     val BadBg = Color(0xFF1D0C10)
     val BadText = Color(0xFFFFB8B0)
 
-    val Temp = Color(0xFFFFBE5A)         // температура — тёплая
-    val Cold = Color(0xFF9FD8FF)         // холод после заката
-    val Pressure = Color(0xFFC2A8FF)
-    val Humidity = Color(0xFF7FE0E6)
-    val Altitude = Color(0xFF7CE3B0)
-    val Battery = Color(0xFF7CE3B0)
-    val Sunset = Color(0xFFFF8FA8)
-    val SunsetSun = Color(0xFFFF9A4D)    // солнышко заката — оранжевое
-    val Sunrise = Color(0xFFFFD75A)      // солнышко восхода — жёлтое
-    val Pdr = Color(0xFFC2A8FF)
-    val Pink = Color(0xFFFF9FCB)
+    val Temp = Color(0xFFFFA54C)         // температура — оранжевая
+    val Cold = Color(0xFF5AA9FF)         // холод после заката — синий
+    val Pressure = Color(0xFFA38CFF)     // фиолетовый
+    val Humidity = Color(0xFF36CFC9)     // бирюзовый
+    val Altitude = Color(0xFFB8E35A)     // салатовый
+    val Battery = Color(0xFF4CD48A)      // зелёный, как «всё хорошо»
+    val Sunset = Color(0xFFFF7A45)       // закат — красно-оранжевый (вместо розового)
+    val SunsetSun = Color(0xFFFF7A45)    // солнышко заката
+    val Sunrise = Color(0xFFFFD166)      // солнышко восхода — жёлтое
+    val Pdr = Color(0xFFD69BFF)          // счисление по шагам на карте — сиреневый
+    val Pink = Color(0xFF9FD8FF)         // имя осталось от старой палитры; розового больше нет
 
     val Scan = Color(0x08A0D8FF)         // сканлайны поверх экрана
 }
