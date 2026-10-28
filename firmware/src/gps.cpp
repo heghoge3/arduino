@@ -91,6 +91,9 @@ void power(bool on) {
   g_on = on;
   if (on) {
     digitalWrite(PIN_GPS_EN, LOW);
+    // 9600 бод ≈ 1 КБ/с: стандартных 256 байт хватает на ~0,25 с. Запись на SD или выгрузка по BLE
+    // иногда держат цикл дольше — без запаса теряются предложения NMEA
+    Serial1.setRxBufferSize(2048);
     Serial1.begin(9600, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
     g_onSinceMs = millis();
   } else {

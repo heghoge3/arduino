@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include "clock.h"
+#include "dlog.h"
 #include "config.h"
 #include "pins.h"
 
@@ -194,6 +195,11 @@ Power readPower() {
   // Напряжение на аккумуляторе = после шунта + падение на шунте
   p.voltage = ina.getBusVoltage_V() + ina.getShuntVoltage_mV() / 1000.0f;
   p.currentMa = ina.getCurrent_mA();
+  static bool warned = false;
+  if (p.currentMa < -5 && !warned) {
+    warned = true;
+    LOGW(M_SENS, "INA219: ток %.1f мА — отрицательный, VIN+ и VIN- перепутаны?", p.currentMa);
+  }
 #endif
   p.pct = batteryPercent(p.voltage);
   return p;
