@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -40,6 +41,7 @@ import com.vabugeode.app.model.TrackPoint
 import com.vabugeode.app.ui.AppViewModel
 import com.vabugeode.app.ui.Fmt
 import com.vabugeode.app.ui.components.ChartSeries
+import com.vabugeode.app.ui.components.chartBands
 import com.vabugeode.app.ui.components.KeyValue
 import com.vabugeode.app.ui.components.LineChart
 import com.vabugeode.app.ui.components.Panel
@@ -164,6 +166,7 @@ private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sun: SunSchedul
 private fun BigChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?) {
     val values = track.map { m.value(it) }.filter { !it.isNaN() }
     if (values.isEmpty()) return
+    val bands = remember(track) { chartBands(track) }
     val series = buildList {
         add(ChartSeries(seriesOf(track, m.value), m.color, if (m == Metric.TEMP) "воздух" else m.title.lowercase()))
         if (m == Metric.TEMP) {
@@ -187,8 +190,19 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?) {
             series = series,
             modifier = Modifier.fillMaxWidth().height(260.dp),
             unit = m.unit, digits = m.digits,
-            sun = sun,
+            sun = sun, bands = bands,
         )
+        // Какие отрезки есть на графике — подписи цветом
+        val kinds = bands.distinctBy { it.label }
+        if (kinds.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.padding(start = 4.dp)) {
+                kinds.forEach { b ->
+                    Text("▮ ${b.label}", color = b.color, fontSize = 11.sp)
+                    Spacer(Modifier.width(12.dp))
+                }
+            }
+        }
         if (m == Metric.TEMP) {
             Spacer(Modifier.height(6.dp))
             Row(Modifier.padding(start = 4.dp)) {
@@ -222,7 +236,7 @@ private fun SmallChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?, on
             LineChart(
                 series = listOf(ChartSeries(seriesOf(track, m.value), m.color, m.title)),
                 modifier = Modifier.weight(1f).height(48.dp),
-                sun = sun, showAxes = false, interactive = false,
+                sun = sun, showAxes = false, interactive = false, bands = remember(track) { chartBands(track) },
             )
         }
     }

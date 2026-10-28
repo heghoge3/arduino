@@ -54,7 +54,8 @@ data class ChartSeries(
 
 /**
  * Линейный график по времени. Умеет: восходы и закаты (солнышки), затенение ночей,
- * разрывы при пропусках данных, «ползунок» пальцем с подсказкой значения.
+ * отрезки событий (привал, пропуск записи, подмена), разрывы при пропусках данных,
+ * «ползунок» пальцем с подсказкой значения.
  */
 @Composable
 fun LineChart(
@@ -65,6 +66,7 @@ fun LineChart(
     sun: SunSchedule? = null,
     showAxes: Boolean = true,
     interactive: Boolean = true,
+    bands: List<ChartBand> = emptyList(),
 ) {
     val measurer = rememberTextMeasurer()
     var touchX by remember { mutableStateOf<Float?>(null) }
@@ -138,6 +140,22 @@ fun LineChart(
                     ),
                     topLeft = Offset(x(a0), top), size = Size(x(a1) - x(a0), h),
                 )
+            }
+        }
+
+        // Отрезки событий: заливка и подпись сверху, если помещается
+        val bandStyle = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Medium)
+        for (b in bands) {
+            val a0 = max(b.startMs, t0)
+            val a1 = min(b.endMs, t1)
+            if (a1 <= a0) continue
+            val bx = x(a0)
+            val bw = max(x(a1) - bx, 1.dp.toPx())
+            drawRect(b.color.copy(alpha = 0.10f), topLeft = Offset(bx, top), size = Size(bw, h))
+            drawLine(b.color.copy(alpha = 0.5f), Offset(bx, top), Offset(bx + bw, top), strokeWidth = 2.dp.toPx())
+            if (showAxes) {
+                val tl = measurer.measure(b.label, bandStyle.copy(color = b.color))
+                if (tl.size.width + 4.dp.toPx() <= bw) drawText(tl, topLeft = Offset(bx + 2.dp.toPx(), top + 3.dp.toPx()))
             }
         }
 
