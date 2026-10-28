@@ -50,6 +50,7 @@ class WatchService : Service() {
     private var scanner: BleScanner? = null
     private var gadgetId: String? = null
     private var lastHeardMs = 0L
+    private var scanStartMs = 0L
     private var lastBeacon: BeaconMsg? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -87,6 +88,7 @@ class WatchService : Service() {
             gadgetId = id
             scanner = BleScanner(this, scope, ScanSettings.SCAN_MODE_BALANCED).also { s ->
                 s.start()
+                scanStartMs = System.currentTimeMillis()
                 scope.launch { s.found.collect { all -> all[id]?.let { onBeacon(id, it.beacon, it.seenAtMs) } } }
                 scope.launch { s.error.collect { e -> if (e != null) updateWatch("Поиск не работает: $e") } }
             }
@@ -106,8 +108,17 @@ class WatchService : Service() {
             scope.launch {
                 while (isActive) {
                     delay(60_000)
-                    if (lastHeardMs > 0 && System.currentTimeMillis() - lastHeardMs > 10 * 60_000) {
-                        updateWatch("Гаджет не слышно ${Fmt.duration(System.currentTimeMillis() - lastHeardMs)}")
+                    val now = System.currentTimeMillis()
+                    if (lastHeardMs > 0 && now - lastHeardMs > 10 * 60_000) {
+                        updateWatch("Гаджет не слышно ${Fmt.duration(now - lastHeardMs)}")
+                    }
+                    // 10 мин тишины с последнего маячка или перезапуска — перезапустить поиск: система могла
+                    // его тихо остановить (сон, перезапуск службы). Не чаще раза в 10 мин
+                    if (now - maxOf(lastHeardMs, scanStartMs) > 10 * 60_000) {
+                        AppLog.w("WATCH", "маячок не слышен 10 мин — перезапускаю поиск")
+                        scanner?.stop()
+                        scanner?.start()
+                        scanStartMs = now
                     }
                 }
             }
