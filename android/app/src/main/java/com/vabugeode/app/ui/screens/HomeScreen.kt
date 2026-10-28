@@ -20,12 +20,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.WaterDrop
@@ -150,7 +148,8 @@ fun HomeScreen(
 @Composable
 private fun StatusRow(st: DeviceStatus, start: Long?) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (st.recording) Pill("Запись", Palette.Bad, blink = true) else Pill("Пауза", Palette.TextDim)
+        // Датчики пишутся всегда; кнопка включает и выключает только GPS (пауза — переезд на машине)
+        if (st.recording) Pill("GPS вкл", Palette.Good) else Pill("GPS выкл", Palette.Bad, blink = true)
         Pill(st.mode.title, if (st.mode == PowerMode.MOVING) Palette.Good else Palette.Cold)
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End) {
@@ -279,9 +278,9 @@ private fun Actions(st: DeviceStatus, onMark: () -> Unit, onClap: () -> Unit, on
         ActionButton(Icons.Filled.BookmarkAdd, "Метка", Palette.Geo, Modifier.weight(1f), onMark)
         ActionButton(Icons.Filled.Movie, "Хлопушка", Palette.Sunset, Modifier.weight(1f), onClap)
         ActionButton(
-            if (st.recording) Icons.Filled.Pause else Icons.Filled.FiberManualRecord,
-            if (st.recording) "Пауза" else "Запись",
-            if (st.recording) Palette.TextDim else Palette.Bad,
+            if (st.recording) Icons.Filled.GpsOff else Icons.Filled.GpsFixed,
+            if (st.recording) "Выкл GPS" else "Вкл GPS",
+            if (st.recording) Palette.Bad else Palette.Good,
             Modifier.weight(1f), onToggle,
         )
     }
