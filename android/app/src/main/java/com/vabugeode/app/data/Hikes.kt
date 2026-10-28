@@ -38,6 +38,8 @@ fun trackKm(track: List<TrackPoint>): Double {
     var m = 0.0
     var prev: TrackPoint? = null
     for (p in track) {
+        // Пауза (переезд на машине) — переезд в километраж не идёт
+        if (p.src == com.vabugeode.app.model.PositionSource.PAUSE) { prev = null; continue }
         if (p.lat.isNaN() || p.lon.isNaN()) continue
         val q = prev
         if (q == null) { prev = p; continue }

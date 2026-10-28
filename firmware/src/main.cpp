@@ -441,15 +441,17 @@ void flushCamp() {
 void logPoint() {
   proto::Point p{};
   p.time = N.now;
-  bool haveGps = N.fix && !N.spoof && N.src == 1;
-  double lat = haveGps ? N.lat : (P.haveGood ? P.goodLat : 0);
-  double lon = haveGps ? N.lon : (P.haveGood ? P.goodLon : 0);
+  bool paused = !P.recording;
+  bool haveGps = !paused && N.fix && !N.spoof && N.src == 1;
+  // На паузе (едем на машине и т. п.) — только датчики: без координат, в трек и километраж не идёт
+  double lat = paused ? 0 : (haveGps ? N.lat : (P.haveGood ? P.goodLat : 0));
+  double lon = paused ? 0 : (haveGps ? N.lon : (P.haveGood ? P.goodLon : 0));
   p.lat7 = (lat || lon) ? c7(lat) : 0;
   p.lon7 = (lat || lon) ? c7(lon) : 0;
-  p.src = haveGps ? 1 : 0;
-  p.spoof = N.spoof;
-  p.spoofMask = N.spoofMask;
-  if (N.spoof) {
+  p.src = paused ? proto::SRC_PAUSE : (haveGps ? 1 : 0);
+  p.spoof = !paused && N.spoof;
+  p.spoofMask = p.spoof ? N.spoofMask : 0;
+  if (p.spoof) {
     const nmea::Fix& f = gps::parser().fix();
     p.spoofLat7 = c7(f.lat);
     p.spoofLon7 = c7(f.lon);
@@ -469,7 +471,7 @@ void logPoint() {
   p.speed10 = haveGps ? (uint16_t)lroundf(N.speedKmh * 10) : 0;
   P.lastPointTime = p.time;
 
-  bool camp = P.power.state() == logic::CAMP || P.power.state() == logic::CRITICAL ||
+  bool camp = paused || P.power.state() == logic::CAMP || P.power.state() == logic::CRITICAL ||
               (P.power.state() == logic::ECONOMY && !P.power.moving());
   if (camp) {
     // На стоянке копим в RTC-памяти — SD не трогаем на каждой записи
@@ -931,9 +933,12 @@ void secondTick() {
   if (g_tick % 600 == 0) updateSun();
 
   // Запись
-  if (P.recording && P.hikeStart && (int32_t)(N.now - P.nextLogAt) >= 0) {
+  // На паузе GPS выключен, но датчики пишутся дальше — раз в минуту (как на стоянке), без координат
+  if (P.hikeStart && (int32_t)(N.now - P.nextLogAt) >= 0) {
     logPoint();
-    P.nextLogAt = N.now + P.power.logIntervalS();
+    uint16_t every = P.power.logIntervalS();
+    if (!P.recording && every < S.logCampS) every = S.logCampS;
+    P.nextLogAt = N.now + every;
   }
 
   // Тревоги
@@ -1010,7 +1015,7 @@ void goToSleep(int32_t forceS = 0) {
   if (P.campN && N.now - P.lastFlushAt >= SD_FLUSH_S) flushCamp();
   // Будим на ближайшее: запись (если идёт) или маячок (если не невидимка); иначе через час
   uint32_t wakeAt = N.now + 3600;
-  if (P.recording && P.hikeStart && (int32_t)(P.nextLogAt - wakeAt) < 0) wakeAt = P.nextLogAt;
+  if (P.hikeStart && (int32_t)(P.nextLogAt - wakeAt) < 0) wakeAt = P.nextLogAt;
   uint16_t beaconEvery = P.power.beaconIntervalS(S.beaconS);
   if (beaconEvery && (int32_t)(P.nextBeaconAt - wakeAt) < 0) wakeAt = P.nextBeaconAt;
   int32_t sleepS = (int32_t)(wakeAt - N.now);

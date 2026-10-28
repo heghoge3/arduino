@@ -531,7 +531,7 @@ class ProtocolDeviceRepository(
     companion object {
         private fun sysName(s: Int) = when (s) { 0 -> "GPS"; 1 -> "BDS"; 2 -> "GLO"; else -> "GAL" }
 
-        private fun srcOf(s: Int) = when (s) { 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; else -> PositionSource.NONE }
+        private fun srcOf(s: Int) = when (s) { 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; 3 -> PositionSource.PAUSE; else -> PositionSource.NONE }
 
         private fun f(fmt: String, vararg a: Any) = String.format(Locale("ru"), fmt, *a)
 
@@ -655,4 +655,4 @@ internal fun MarkMsg.toMark() = Mark(
     text = text, lat = lat, lon = lon,
 )
 
-private fun srcOfCode(s: Int) = when (s) { 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; else -> PositionSource.NONE }
+private fun srcOfCode(s: Int) = when (s) { 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; 3 -> PositionSource.PAUSE; else -> PositionSource.NONE }

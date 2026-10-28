@@ -361,13 +361,20 @@ private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
     var cur = ArrayList<Point>()
     var curSrc: String? = null
     for (p in track) {
+        // Пауза (переезд на машине) — линию рвём, а не тянем прямую через весь переезд
+        if (p.src == PositionSource.PAUSE) {
+            if (cur.size > 1) segments += lineFeature(cur, curSrc!!)
+            cur = ArrayList()
+            curSrc = null
+            continue
+        }
         if (p.lat.isNaN() || p.lon.isNaN()) continue
         val src = if (p.src == PositionSource.PDR) "pdr" else "gps"
         val pt = Point.fromLngLat(p.lon, p.lat)
         if (src != curSrc) {
             if (cur.size > 1) segments += lineFeature(cur, curSrc!!)
             // Отрезки стыкуем, чтобы не было дырок
-            cur = if (cur.isNotEmpty()) arrayListOf(cur.last(), pt) else arrayListOf(pt)
+            cur = if (cur.isNotEmpty() && curSrc != null) arrayListOf(cur.last(), pt) else arrayListOf(pt)
             curSrc = src
         } else cur.add(pt)
     }

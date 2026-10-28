@@ -139,7 +139,7 @@ bool appendPoint(const proto::Point& p, const CsvExtra& extra) {
   fmtScaled(tr, sizeof(tr), p.tempRaw100, 100, 2, p.tempRaw100 == proto::NA16);
   fmtScaled(tc, sizeof(tc), p.tempCorr100, 100, 2, p.tempCorr100 == proto::NA16);
   fmtScaled(hd, sizeof(hd), p.hdop10, 10, 1, p.hdop10 == proto::HDOP_NA);
-  const char* src = p.src == 1 ? "gps" : (p.src == 2 ? "pdr" : "none");
+  const char* src = p.src == 1 ? "gps" : (p.src == 2 ? "pdr" : (p.src == proto::SRC_PAUSE ? "pause" : "none"));
   char line[256];
   int n = snprintf(line, sizeof(line), "%s,%.7f,%.7f,%s,%u,%s,%.1f,%.1f,%d,%u,%s,%s,%.2f,%.2f,%s,%.3f,%.1f,%lu,%.1f,%s,",
                    ts, p.lat7 / 1e7, p.lon7 / 1e7, altG, p.sats, hd, p.speed10 / 10.0, extra.courseDeg, p.spoof ? 1 : 0,

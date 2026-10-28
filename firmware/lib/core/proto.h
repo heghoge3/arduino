@@ -93,6 +93,7 @@ enum Alert : uint8_t {
 };
 
 constexpr int16_t NA16 = -32768;
+constexpr uint8_t SRC_PAUSE = 3;  // точка на паузе: только датчики, без координат
 constexpr uint8_t HDOP_NA = 255;
 constexpr size_t MAX_TEXT = 60;
 constexpr size_t MAX_SATS = 24;
