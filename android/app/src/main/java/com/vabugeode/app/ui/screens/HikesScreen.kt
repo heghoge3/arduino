@@ -149,7 +149,7 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
         Row(verticalAlignment = Alignment.CenterVertically) {
             TermButton("← Походы", Palette.TextDim, onClick = onClose)
             Spacer(Modifier.width(12.dp))
-            Text(h.title(), style = MaterialTheme.typography.titleMedium, color = Palette.Text, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(h.title(), style = MaterialTheme.typography.titleMedium, color = Palette.Text, modifier = Modifier.weight(1f))
         }
 
         Panel(accent = Palette.Geo, title = dateOf(h.startMs), titleRight = if (h.demo) "эмулятор" else null) {

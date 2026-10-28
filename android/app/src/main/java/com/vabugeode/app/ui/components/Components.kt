@@ -25,7 +25,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -233,8 +232,8 @@ fun StatTile(
             Box(Modifier.weight(1f)) { BigValue(value, unit, color, size) }
             Icon(icon, contentDescription = null, tint = color.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
         }
-        Text(sub, style = MaterialTheme.typography.labelMedium, color = subColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(sub2, style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(sub, style = MaterialTheme.typography.labelMedium, color = subColor)
+        Text(sub2, style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
     }
 }
 

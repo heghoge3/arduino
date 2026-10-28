@@ -65,7 +65,6 @@ import com.vabugeode.app.ui.components.StatTile
 import com.vabugeode.app.ui.theme.Palette
 import com.vabugeode.app.astro.SunSchedule
 import com.vabugeode.app.ui.components.AnimatedValue
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.WbSunny
 import kotlin.math.abs
 
@@ -205,7 +204,7 @@ private fun TempHero(st: DeviceStatus, track: List<TrackPoint>, sun: SunSchedule
                     nextSet != null -> Triple("до заката ${Fmt.duration(nextSet.timeMs - now)}", Palette.SunsetSun, false)
                     else -> Triple("", Palette.TextDim, false)
                 }
-                Text(first.first, color = first.second, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(first.first, color = first.second, style = MaterialTheme.typography.titleMedium)
                 Text("в корпусе ${Fmt.num(st.env.tempRaw)}°", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
                 Text("поправка ${Fmt.signed(st.env.tempCorr - st.env.tempRaw)}°", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
             }
@@ -247,16 +246,16 @@ private fun GpsCard(st: DeviceStatus) {
             IconBadge(icon, color)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = color)
                 Text("Позиция: ${st.positionSource.title}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
             }
         }
         Spacer(Modifier.height(8.dp))
         // Всегда две строки текста и строка причин — блок одной высоты в любом состоянии
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = Palette.Text, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = Palette.Text, minLines = 2)
         Text(
-            if (g.spoof) "Причины: " + SpoofReason.fromMask(g.spoofMask).joinToString(" | ") { it.title.lowercase() } else "",
-            style = MaterialTheme.typography.labelMedium, color = Palette.Bad, minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            if (g.spoof) "Причины: " + SpoofReason.fromMask(g.spoofMask).joinToString(" | ") { it.title.replaceFirstChar { c -> c.lowercase() } } else "",
+            style = MaterialTheme.typography.labelMedium, color = Palette.Bad, minLines = 1,
         )
         Spacer(Modifier.height(8.dp))
         SnrBars(g.satellites, Modifier.fillMaxWidth().height(36.dp))

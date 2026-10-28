@@ -33,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.vabugeode.app.model.Mark
 import com.vabugeode.app.model.MarkType
@@ -113,7 +112,7 @@ fun MarkLine(m: Mark, start: Long?) {
             Column(Modifier.weight(1f)) {
                 Text(m.type.title.uppercase(), style = MaterialTheme.typography.labelSmall, color = color)
                 if (m.text.isNotBlank()) {
-                    Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Palette.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(m.text, style = MaterialTheme.typography.bodyMedium, color = Palette.Text)
                 }
             }
         }
