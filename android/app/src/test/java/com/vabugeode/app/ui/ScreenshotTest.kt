@@ -61,7 +61,7 @@ class ScreenshotTest {
                     """"temperature_2m_max":[4.2,2.1],"temperature_2m_min":[-1.4,-3.0],""" +
                     """"precipitation_probability_max":[10,70],"wind_speed_10m_max":[4.0,7.5]}}""",
             )
-            .putLong("at", System.currentTimeMillis()).commit()
+            .putLong("at", System.currentTimeMillis()).putString("place", "Санкт-Петербург").commit()
     }
 
     @Test

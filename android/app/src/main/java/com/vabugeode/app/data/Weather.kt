@@ -16,12 +16,26 @@ import java.util.Locale
  */
 object Weather {
     data class Day(val date: String, val code: Int, val tMin: Double, val tMax: Double, val precipProb: Int, val windMaxMs: Double)
-    data class Forecast(val fetchedMs: Long, val days: List<Day>)
+    data class Forecast(val fetchedMs: Long, val days: List<Day>, val place: String?)
 
     private const val PREFS = "weather"
 
-    fun cached(ctx: Context): Forecast? =
-        ctx.getSharedPreferences(PREFS, 0).getString("json", null)?.let { runCatching { parse(it, ctx.getSharedPreferences(PREFS, 0).getLong("at", 0)) }.getOrNull() }
+    fun cached(ctx: Context): Forecast? {
+        val p = ctx.getSharedPreferences(PREFS, 0)
+        val json = p.getString("json", null) ?: return null
+        return runCatching { parse(json, p.getLong("at", 0), p.getString("place", null)) }.getOrNull()
+    }
+
+    /** Название места по координатам (нужен интернет — он и так есть, раз прогноз скачался); нет — координаты */
+    @Suppress("DEPRECATION")
+    private fun placeName(ctx: Context, lat: Double, lon: Double): String {
+        val name = runCatching {
+            android.location.Geocoder(ctx, Locale("ru")).getFromLocation(lat, lon, 1)?.firstOrNull()?.let {
+                it.locality ?: it.subAdminArea ?: it.adminArea
+            }
+        }.getOrNull()
+        return name ?: String.format(Locale.US, "%.3f, %.3f", lat, lon)
+    }
 
     suspend fun refresh(ctx: Context, lat: Double, lon: Double): Forecast? = withContext(Dispatchers.IO) {
         val url = String.format(
@@ -38,8 +52,9 @@ object Weather {
             val body = c.inputStream.bufferedReader().use { it.readText() }
             c.disconnect()
             val now = System.currentTimeMillis()
-            val f = parse(body, now)
-            ctx.getSharedPreferences(PREFS, 0).edit().putString("json", body).putLong("at", now).apply()
+            val place = placeName(ctx, lat, lon)
+            val f = parse(body, now, place)
+            ctx.getSharedPreferences(PREFS, 0).edit().putString("json", body).putLong("at", now).putString("place", place).apply()
             AppLog.d("WEATHER", "прогноз обновлён")
             f
         } catch (e: Exception) {
@@ -49,7 +64,7 @@ object Weather {
         }
     }
 
-    private fun parse(json: String, at: Long): Forecast {
+    private fun parse(json: String, at: Long, place: String?): Forecast {
         val d = JSONObject(json).getJSONObject("daily")
         fun arr(k: String): JSONArray = d.getJSONArray(k)
         val n = arr("time").length()
@@ -62,7 +77,7 @@ object Weather {
                 precipProb = arr("precipitation_probability_max").optInt(i),
                 windMaxMs = arr("wind_speed_10m_max").optDouble(i),
             )
-        })
+        }, place)
     }
 
     /** Коды погоды WMO → коротко по-русски */

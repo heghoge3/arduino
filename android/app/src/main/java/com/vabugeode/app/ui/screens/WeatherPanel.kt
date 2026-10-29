@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Thunderstorm
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbCloudy
@@ -67,6 +68,15 @@ internal fun WeatherPanel(vm: AppViewModel) {
                     Text("осадки ${d.precipProb}%", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
                     Text("ветер до ${d.windMaxMs.roundToInt()}\u00A0м/с", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
                 }
+            }
+        }
+        // Где брался прогноз: пишет «Санкт-Петербург», а мы уже в Сланцах — значит, ещё не обновился
+        forecast.place?.let { place ->
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Place, null, tint = Palette.TextFaint, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(place, style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint)
             }
         }
     }
