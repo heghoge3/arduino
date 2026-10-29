@@ -110,7 +110,7 @@ fun LineChart(
     Canvas(modifier.then(gestureMod)) {
         val left = if (showAxes) 40.dp.toPx() else 0f
         val bottom = if (showAxes) 20.dp.toPx() else 0f
-        val top = if (showAxes) 18.dp.toPx() else 4.dp.toPx()
+        val top = if (showAxes) 32.dp.toPx() else 4.dp.toPx()  // сверху место под солнышки и время над ними
         val right = 6.dp.toPx()
         val w = size.width - left - right
         val h = size.height - top - bottom
@@ -201,7 +201,8 @@ fun LineChart(
 
         // Закаты и восходы: пунктир и солнышко (закат — оранжевое садится, восход — жёлтое встаёт)
         if (sun != null) {
-            for (e in sun.events) {
+            var sunLabelRight = Float.NEGATIVE_INFINITY
+            for (e in sun.events.sortedBy { it.timeMs }) {
                 if (e.kind != SunSchedule.Kind.SUNSET && e.kind != SunSchedule.Kind.SUNRISE) continue
                 if (e.timeMs !in t0..t1) continue
                 val rising = e.kind == SunSchedule.Kind.SUNRISE
@@ -215,9 +216,13 @@ fun LineChart(
                 val horizon = if (showAxes) top - 3.dp.toPx() else top + r * 2.4f
                 drawSun(xs, horizon, r, c, rising)
                 if (showAxes) {
+                    // Время — над солнышком, по центру; налезает на соседнее — пропускаем
                     val tl = measurer.measure(Fmt.time(e.timeMs), TextStyle(color = c, fontSize = 10.sp, fontWeight = FontWeight.SemiBold))
-                    val tx = min(xs + r * 2.6f, left + w - tl.size.width)
-                    drawText(tl, topLeft = Offset(tx, horizon - tl.size.height + 2.dp.toPx()))
+                    val tx = (xs - tl.size.width / 2).coerceIn(0f, size.width - tl.size.width)
+                    if (tx > sunLabelRight + 4.dp.toPx()) {
+                        drawText(tl, topLeft = Offset(tx, horizon - r * 2.2f - tl.size.height))
+                        sunLabelRight = tx + tl.size.width
+                    }
                 }
             }
         }
