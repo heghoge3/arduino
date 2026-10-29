@@ -233,7 +233,7 @@ proto::Beacon makeBeacon() {
             (storage::sdOk() ? proto::B_SD_OK : 0);
   b.alerts = P.alerts.unacked();
   b.tempCorr100 = s16(N.env.tempCorr, 100);
-  b.battPct = N.pwr.pct;
+  b.battPct = N.pwr.batteryKnown() ? N.pwr.pct : 255;
   b.satsUsed = N.fix ? N.satsUsed : 0;
   b.press10 = isnan(N.env.pressHpa) ? 0 : (uint16_t)lroundf(N.env.pressHpa * 10);
   b.lastRecord = P.lastPointTime;
@@ -815,7 +815,7 @@ void secondTick() {
 
   // Состояние питания и GPS
   logic::Power before = P.power.state();
-  P.power.update(N.now, N.pwr.pct, P.stepDet.count());
+  P.power.update(N.now, N.pwr.controlPercent(), P.stepDet.count());
   if (before != P.power.state()) {
     static const char* names[] = {"стоянка", "в пути", "экономия", "критично"};
     LOGI(M_PWR, "режим %s -> %s (%u%%, %.2f В)", names[before & 3], names[P.power.state() & 3], N.pwr.pct, N.pwr.voltage);
@@ -1046,7 +1046,8 @@ uint8_t buildChecks(proto::Check* c) {
   else if (N.spoof) c[n++] = {7, 1, 5, 0};
   else if (!N.fix) c[n++] = {7, 1, 6, 0};
   else c[n++] = {7, 0, 0, 0};
-  if (P.power.critical()) c[n++] = {8, 2, 8, 0};
+  if (!N.pwr.batteryKnown()) c[n++] = {8, 1, 12, 0};
+  else if (P.power.critical()) c[n++] = {8, 2, 8, 0};
   else if (P.power.low()) c[n++] = {8, 1, 8, 0};
   else c[n++] = {8, 0, 0, 0};
   if (!clockx::rtcPresent()) c[n++] = {9, 2, 1, 0};
@@ -1109,7 +1110,7 @@ void setup() {
   N.now = clockx::now();
   if (cold) {
     logBoot(g_prefs);
-    if (!rtcOk) LOGE(M_RTC, "DS1302 не отвечает — время от телефона или GPS");
+    if (!rtcOk) LOGE(M_RTC, "DS1302: нет ответа RAM; CLK=%d DAT=%d RST=%d, проверь питание и общий GND", PIN_RTC_CLK, PIN_RTC_DAT, PIN_RTC_RST);
     else if (!clockx::trusted()) LOGW(M_RTC, "часы не проверены: стояли или не ставились");
   } else {
     dlog::Counters& c = dlog::counters();

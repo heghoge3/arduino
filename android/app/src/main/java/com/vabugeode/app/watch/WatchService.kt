@@ -120,7 +120,8 @@ class WatchService : Service() {
         if (lastHeardMs > 0 && seenMs - lastHeardMs > 5 * 60_000) {
             AppLog.i("WATCH", "маячок снова слышен после ${Fmt.duration(seenMs - lastHeardMs)} тишины")
         } else if (lastHeardMs == 0L) {
-            AppLog.i("WATCH", "первый маячок: заряд ${b.battPct}%, режим ${b.mode}")
+            val battery = if (b.battPct in 0..100) "${b.battPct}%" else "неизвестен"
+            AppLog.i("WATCH", "первый маячок: заряд $battery, режим ${b.mode}")
         }
         lastHeardMs = seenMs
         lastBeacon = b

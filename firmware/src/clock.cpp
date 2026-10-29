@@ -27,13 +27,16 @@ Source g_source = SRC_NONE;
 uint32_t g_baseUtc = 0;
 uint32_t g_baseMs = 0;
 
-void writeByte(uint8_t v) {
+void writeByte(uint8_t v, bool reading = false) {
   pinMode(PIN_RTC_DAT, OUTPUT);
   for (int i = 0; i < 8; i++) {
     digitalWrite(PIN_RTC_DAT, v & 1);
     delayMicroseconds(1);
     digitalWrite(PIN_RTC_CLK, HIGH);
     delayMicroseconds(1);
+    // DS1302 выдаёт первый бит уже на последнем спаде команды чтения.
+    // Освобождаем DAT ДО этого спада, иначе оба устройства ведут линию.
+    if (reading && i == 7) pinMode(PIN_RTC_DAT, INPUT_PULLUP);
     digitalWrite(PIN_RTC_CLK, LOW);
     v >>= 1;
   }
@@ -65,7 +68,7 @@ void stop() {
 
 uint8_t readReg(uint8_t reg) {
   start();
-  writeByte(reg | 1);
+  writeByte(reg | 1, true);
   uint8_t v = readByte();
   stop();
   return v;
@@ -85,7 +88,7 @@ uint8_t bin2bcd(uint8_t v) { return ((v / 10) << 4) | (v % 10); }
 bool readClock(uint32_t& utc, bool& halted) {
   uint8_t r[8];
   start();
-  writeByte(REG_CLOCK_BURST | 1);
+  writeByte(REG_CLOCK_BURST | 1, true);
   for (int i = 0; i < 8; i++) r[i] = readByte();
   stop();
   halted = r[0] & 0x80;
@@ -158,14 +161,24 @@ bool begin() {
 
   uint32_t utc = 0;
   bool halted = true;
-  g_present = readClock(utc, halted);
+  // Неправильная дата нового модуля не означает, что он отсутствует.
+  // Проверяем обмен через последний байт RAM, сохраняя его содержимое.
+  constexpr uint8_t probeReg = 0xFC;
+  uint8_t saved = readReg(probeReg);
+  writeReg(REG_WP, 0x00);
+  writeReg(probeReg, 0x5A);
+  bool first = readReg(probeReg) == 0x5A;
+  writeReg(probeReg, 0xA5);
+  g_present = first && readReg(probeReg) == 0xA5;
+  writeReg(probeReg, saved);
+  writeReg(REG_WP, 0x80);
   if (!g_present) {
     g_trusted = false;
     g_source = SRC_NONE;
     setBase(buildTime());
     return false;
   }
-  if (utc < buildTime()) {
+  if (!readClock(utc, halted) || utc < buildTime()) {
     // Часы показывают прошлое (новый модуль, 2000 год) — точно не проверены
     halted = true;
     utc = buildTime();

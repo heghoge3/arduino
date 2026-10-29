@@ -122,12 +122,12 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             SectionLabel("Питание · INA219")
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.Bottom) {
-                Text("${pw.percent}%", fontFamily = Fonts.Pixel, fontSize = 52.sp, lineHeight = 48.sp, color = Palette.Battery)
+                Text(if (pw.batteryKnown) "${pw.percent}%" else "—", fontFamily = Fonts.Pixel, fontSize = 52.sp, lineHeight = 48.sp, color = Palette.Battery)
                 Spacer(Modifier.width(10.dp))
-                Text("~${Fmt.num(pw.hoursLeft, 0)} ч до разряда", color = Palette.TextDim, modifier = Modifier.padding(bottom = 6.dp))
+                Text(if (pw.batteryKnown) "~${Fmt.num(pw.hoursLeft, 0)} ч до разряда" else "Заряд неизвестен", color = Palette.TextDim, modifier = Modifier.padding(bottom = 6.dp))
             }
             Spacer(Modifier.height(8.dp))
-            Meter(pw.percent / 100f, if (pw.percent < 20) Palette.Bad else Palette.Battery)
+            if (pw.batteryKnown) Meter(pw.percent / 100f, if (pw.percent < 20) Palette.Bad else Palette.Battery)
             Spacer(Modifier.height(8.dp))
             KeyValue("Напряжение", "${Fmt.num(pw.voltage, 2)} В")
             KeyValue("Ток сейчас", "${Fmt.num(pw.currentMa, 0)} мА")

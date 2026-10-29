@@ -164,7 +164,7 @@ private fun FoundRow(g: FoundGadget, selected: Boolean, onChoose: () -> Unit) {
 /** «2,3° · 80 % · GPS 9 сп. · в пути» — из маячка, без подключения */
 fun beaconSummary(b: BeaconMsg): String = buildList {
     add(b.tempCorr?.let { "${Fmt.num(it)}°" } ?: "—°")
-    add("${b.battPct} %")
+    add(if (b.battPct in 0..100) "${b.battPct} %" else "заряд неизвестен")
     add(
         when {
             b.flags and Proto.B_SPOOF != 0 -> "подмена GPS!"

@@ -79,6 +79,23 @@ ESP32-S3-Zero + PlatformIO (Arduino). Логика — [docs/gadget-logic.md](..
 pio test -e native
 ```
 
+Регрессионные проверки DS1302 (модель шины) и питания без платы:
+
+```
+mkdir -p /tmp/vabugeode-tests
+g++ -std=gnu++17 -Wall -Wextra -Itest_host -Isrc -Iinclude -Ilib/core test_host/clock_test.cpp src/clock.cpp lib/core/nmea.cpp -o /tmp/vabugeode-tests/clock_test
+/tmp/vabugeode-tests/clock_test
+g++ -std=gnu++17 -Wall -Wextra -Isrc -Ilib/core test_host/power_test.cpp lib/core/logic.cpp -o /tmp/vabugeode-tests/power_test
+/tmp/vabugeode-tests/power_test
+```
+
+В версии 0.1.1 определяется также QMC5883P (адрес 0x2C, ID 0x80).
+Калибровка и направление по компасу пока не реализованы.
+При нулевом напряжении INA219 заряд считается неизвестным: возможны питание от USB
+без батареи или обрыв измерительной цепи. Это не определение источника питания.
+Проверять выключение/включение BLE и глубокий сон нужно на плате:
+подключить телефон, отключиться, дождаться сна и повторить подключение после пробуждения.
+
 Протокол сверяется с `docs/protocol_vectors.json` — теми же байтами, что проверяет приложение.
 
 ## Что дальше (не сделано)

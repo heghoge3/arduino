@@ -121,11 +121,11 @@ fun HomeScreen(
             )
             val pw = st.power
             StatTile(
-                Icons.Filled.BatteryChargingFull, "Заряд", "${pw.percent}", "%",
-                if (pw.percent < 20) Palette.Bad else Palette.Battery,
+                Icons.Filled.BatteryChargingFull, "Заряд", if (pw.batteryKnown) "${pw.percent}" else "—", if (pw.batteryKnown) "%" else "",
+                if (pw.batteryKnown && pw.percent < 20) Palette.Bad else Palette.Battery,
                 Modifier.weight(1f),
                 sub = "${Fmt.num(pw.voltage, 2)} В · ${Fmt.num(pw.currentMa, 0)} мА",
-                sub2 = "~${Fmt.num(pw.hoursLeft, 0)} ч осталось",
+                sub2 = if (pw.batteryKnown) "~${Fmt.num(pw.hoursLeft, 0)} ч осталось" else "Заряд неизвестен",
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

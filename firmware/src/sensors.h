@@ -20,6 +20,10 @@ struct Power {
   float voltage;
   float currentMa;   // плюс — разряд
   uint8_t pct;
+  // Около нуля бывает при USB-питании без аккумулятора или обрыве измерительной цепи.
+  // Это неизвестный заряд, а не разряженная батарея; источник питания так не определяем.
+  bool batteryKnown() const { return ok && voltage >= 0.5f && voltage <= 6.0f; }
+  uint8_t controlPercent() const { return batteryKnown() ? pct : 100; }
 };
 
 struct Presence {

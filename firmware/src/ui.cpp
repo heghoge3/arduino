@@ -116,7 +116,8 @@ void drawHeader(const char* title) {
   oled.drawUTF8(0, 10, tm);
   oled.drawUTF8(40, 10, title);
   char batt[8];
-  snprintf(batt, sizeof(batt), "%u%%", N.pwr.pct);
+  if (N.pwr.batteryKnown()) snprintf(batt, sizeof(batt), "%u%%", N.pwr.pct);
+  else snprintf(batt, sizeof(batt), "—");
   oled.drawUTF8(128 - oled.getUTF8Width(batt), 10, batt);
   oled.drawHLine(0, 13, 128);
 }

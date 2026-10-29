@@ -18,6 +18,7 @@ constexpr uint8_t ADDR_INA = 0x40;
 constexpr uint8_t ADDR_MPU = 0x68;
 constexpr uint8_t ADDR_OLED = 0x3C;
 constexpr uint8_t ADDR_QMC = 0x0D;
+constexpr uint8_t ADDR_QMC_P = 0x2C;
 constexpr uint8_t ADDR_HMC = 0x1E;
 
 Adafruit_BME280 bme;
@@ -73,6 +74,10 @@ void detect() {
     }
   }
   if (i2cProbe(ADDR_QMC)) { g_pres.compass = true; g_pres.compassAddr = ADDR_QMC; }
+  else if (i2cProbe(ADDR_QMC_P) && readReg(ADDR_QMC_P, 0x00) == 0x80) {
+    g_pres.compass = true;
+    g_pres.compassAddr = ADDR_QMC_P;
+  }
   else if (i2cProbe(ADDR_HMC)) { g_pres.compass = true; g_pres.compassAddr = ADDR_HMC; }
 }
 
@@ -112,6 +117,10 @@ void begin(bool coldBoot) {
     // Компас пока не используется (счисление по шагам — следующий этап): держим в standby
     writeReg(ADDR_QMC, 0x0B, 0x01);
     writeReg(ADDR_QMC, 0x09, 0x00);
+  }
+  if (g_pres.compass && g_pres.compassAddr == ADDR_QMC_P) {
+    // QMC5883P: другой адрес и регистр режима, пока тоже standby.
+    writeReg(ADDR_QMC_P, 0x0A, 0x00);
   }
   (void)coldBoot;
 #endif

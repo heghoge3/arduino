@@ -74,7 +74,9 @@ data class PowerState(
     val charging: Boolean,
     val usedMah: Double,
     val hoursLeft: Double,
-)
+) {
+    val batteryKnown: Boolean get() = voltage.isFinite() && voltage in 0.5..6.0
+}
 
 /** Датчики окружения. */
 data class EnvState(

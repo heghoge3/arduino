@@ -238,10 +238,9 @@ void disconnect() {
 void shutdown() {
   if (!g_init) return;
   stopAdv();
-  NimBLEDevice::deinit(true);
-  g_init = false;
-  g_server = nullptr;
-  g_status = g_event = nullptr;
+  // Вызывается только перед deep sleep. Не удаляем стек и его объекты, пока
+  // FreeRTOS может выполнять отложенные BLE-таймеры после отключения телефона.
+  // Сам deep sleep выключает радио; после пробуждения setup запускается заново.
   g_state = State::OFF;
   g_live = g_secured = g_pairing = false;
 }
