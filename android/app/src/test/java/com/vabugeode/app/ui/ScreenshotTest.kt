@@ -52,6 +52,16 @@ class ScreenshotTest {
     @Before
     fun moscowTime() {
         TimeZone.setDefault(TimeZone.getTimeZone("Europe/Moscow"))
+        // Пример прогноза — чтобы на снимке было окошко погоды (в тесте интернета нет)
+        androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getSharedPreferences("weather", 0).edit()
+            .putString(
+                "json",
+                """{"daily":{"time":["2026-10-28","2026-10-29"],"weather_code":[3,61],""" +
+                    """"temperature_2m_max":[4.2,2.1],"temperature_2m_min":[-1.4,-3.0],""" +
+                    """"precipitation_probability_max":[10,70],"wind_speed_10m_max":[4.0,7.5]}}""",
+            )
+            .putLong("at", System.currentTimeMillis()).commit()
     }
 
     @Test

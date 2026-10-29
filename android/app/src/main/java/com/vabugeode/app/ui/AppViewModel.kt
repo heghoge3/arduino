@@ -115,10 +115,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Оба журнала целиком одним текстом — чтобы поделиться */
     suspend fun exportLogs(): String = withContext(Dispatchers.IO) { LogText.export(dao.allGadgetLog(), dao.allAppLog()) }
 
+    /** Прогноз погоды для места телефона: последний скачанный (в походе интернета может не быть) */
+    val weather = MutableStateFlow(com.vabugeode.app.data.Weather.cached(app))
+
     init {
         AppLog.debug = debugLog.value
         repo.debugLog = debugLog.value
         AppLog.i("APP", "запуск приложения ${com.vabugeode.app.BuildConfig.VERSION_NAME}")
+        // Прогноз: раз в 10 мин проверяем, не старше ли он часа; обновляем, если есть интернет и позиция
+        viewModelScope.launch {
+            while (true) {
+                val age = System.currentTimeMillis() - (weather.value?.fetchedMs ?: 0)
+                if (age > 60 * 60_000) {
+                    PhoneLocation.last(app, maxAgeMs = 6 * 60 * 60_000)?.let { pos ->
+                        com.vabugeode.app.data.Weather.refresh(app, pos.lat, pos.lon)?.let { weather.value = it }
+                    }
+                }
+                kotlinx.coroutines.delay(10 * 60_000)
+            }
+        }
         // Позиция телефона — гаджету для проверки подмены (сверка с телефоном)
         repo.phonePosition = { PhoneLocation.last(app, repo.blacklist.value, maxAgeMs = 5 * 60_000)?.let { Triple(it.lat, it.lon, it.accuracyM) } }
         // Маячки, услышанные с открытым приложением, тоже запоминаем для «где гаджет»

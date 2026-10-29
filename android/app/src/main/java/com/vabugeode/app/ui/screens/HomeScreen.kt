@@ -92,6 +92,7 @@ fun HomeScreen(
         StatusRow(st, start)
         TempHero(st, track, sun)
         GpsCard(st)
+        WeatherPanel(vm)
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val trend = st.env.pressureTrend3h
@@ -348,6 +349,7 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
                 }
             }
         }
+        WeatherPanel(vm)
     }
 }
 
