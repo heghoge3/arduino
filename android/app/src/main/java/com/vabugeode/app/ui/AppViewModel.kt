@@ -120,7 +120,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         repo.debugLog = debugLog.value
         AppLog.i("APP", "запуск приложения ${com.vabugeode.app.BuildConfig.VERSION_NAME}")
         // Позиция телефона — гаджету для проверки подмены (сверка с телефоном)
-        repo.phonePosition = { PhoneLocation.last(app, repo.blacklist.value)?.let { Triple(it.lat, it.lon, it.accuracyM) } }
+        repo.phonePosition = { PhoneLocation.last(app, repo.blacklist.value, maxAgeMs = 5 * 60_000)?.let { Triple(it.lat, it.lon, it.accuracyM) } }
         // Маячки, услышанные с открытым приложением, тоже запоминаем для «где гаджет»
         viewModelScope.launch {
             var lastMs = 0L

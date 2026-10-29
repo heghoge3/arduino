@@ -341,6 +341,29 @@ void sendSats() {
 void onFix() {
   const nmea::Parser& p = gps::parser();
   const nmea::Fix& f = p.fix();
+
+  // Вышли из здания: первые фиксы после потери сигнала неточные (отражения, мало спутников) —
+  // их не проверяем на подмену и не пишем в трек и километраж, иначе ложный «скачок» на каждом выходе.
+  // Подменный сигнал «хороший» (HDOP низкий, спутников много) — его эта отсрочка не прячет, только на 5 с
+  static uint32_t lastFixMs = 0;
+  static uint8_t settle = 0;
+  uint32_t ms = millis();
+  if (ms - lastFixMs > 30000) settle = 0;  // сигнала не было 30+ с
+  lastFixMs = ms;
+  bool rough = f.hdop > 5.0f || f.satsUsed < 4 || settle < 5;
+  if (settle < 255) settle++;
+  if (rough) {
+    N.fix = true;
+    N.fixType = f.fixType;
+    N.satsUsed = f.satsUsed;
+    N.hdop = f.hdop;
+    N.spoof = false;
+    N.spoofMask = 0;
+    N.src = 0;  // позиция — последняя достоверная
+    N.altValid = false;
+    N.speedKmh = 0;
+    return;
+  }
   uint8_t usedSnr[nmea::MAX_SATS];
   size_t used = 0;
   for (size_t i = 0; i < p.satCount(); i++) {
