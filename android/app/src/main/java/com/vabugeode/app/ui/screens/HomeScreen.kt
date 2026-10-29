@@ -275,7 +275,7 @@ private fun GpsCard(st: DeviceStatus) {
 @Composable
 private fun Actions(st: DeviceStatus, onMark: () -> Unit, onClap: () -> Unit, onToggle: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ActionButton(Icons.Filled.BookmarkAdd, "Метка", Palette.Geo, Modifier.weight(1f), onMark)
+        ActionButton(Icons.Filled.BookmarkAdd, "Метка", Palette.Warn, Modifier.weight(1f), onMark)
         ActionButton(Icons.Filled.Movie, "Хлопушка", Palette.Sunset, Modifier.weight(1f), onClap)
         ActionButton(
             if (st.recording) Icons.Filled.GpsOff else Icons.Filled.GpsFixed,
