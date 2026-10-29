@@ -408,9 +408,13 @@ class ProtocolDeviceRepository(
                 if (msg.what != Proto.CMD_SYNC_LOG || msg.count > 0) AppLog.d("SYNC", "${cmdNameByCode(msg.what)}: ${msg.count} записей")
                 if (msg.what == Proto.CMD_SYNC_MARKS) stats.value = stats.value.copy(syncing = false)
             }
-            is AlertMsg -> if (msg.fresh != 0) {
-                AppLog.w("ALERT", "тревога: ${alertText(msg.fresh)}, заряд ${msg.battPct}%")
-                _notices.tryEmit("Тревога: ${alertText(msg.fresh)}")
+            is AlertMsg -> {
+                // Подмену всплывашкой не показываем — она видна на Главной и на карте
+                val fresh = msg.fresh and Proto.AL_SPOOF.inv()
+                if (fresh != 0) {
+                    AppLog.w("ALERT", "тревога: ${alertText(fresh)}, заряд ${msg.battPct}%")
+                    _notices.tryEmit("Тревога: ${alertText(fresh)}")
+                }
             }
             is LogMsg -> {
                 if (msg.seq > logSeq) logSeq = msg.seq

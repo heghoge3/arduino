@@ -966,7 +966,9 @@ void secondTick() {
 
   // Тревоги
   uint8_t active = 0;
-  if (N.spoof || (int32_t)(P.spoofAlertUntil - N.now) > 0) active |= proto::AL_SPOOF;
+  // Подмена — не тревога: сделать с ней ничего нельзя, а писк и окно BLE на каждый эпизод только
+  // отвлекают и тратят батарею. Она видна в статусе, на карте и в журнале
+
   if (P.power.low()) active |= proto::AL_LOW_BATT;
   if (P.power.critical()) active |= proto::AL_CRIT_BATT;
   if (g_sdError && storage::sdOk() == false) active |= proto::AL_SD_ERROR;

@@ -145,14 +145,15 @@ class WatchService : Service() {
     }
 
     /** Новые тревоги — уведомление со звуком; одну и ту же тревогу не повторяем, пока не ушла */
-    private fun notifyAlerts(alerts: Int) {
+    private fun notifyAlerts(allAlerts: Int) {
+        // Подмену не уведомляем: сделать с ней ничего нельзя, а отвлекает (её видно в приложении)
+        val alerts = allAlerts and Proto.AL_SPOOF.inv()
         val p = WatchPrefs(this)
         val fresh = alerts and p.notifiedAlerts.inv()
         p.notifiedAlerts = alerts
         if (fresh == 0) return
         AppLog.w("WATCH", "тревога по маячку: 0x%02X".format(fresh))
         val text = buildList {
-            if (fresh and Proto.AL_SPOOF != 0) add("Подозрение на подмену GPS — точки не идут в трек")
             if (fresh and Proto.AL_CRIT_BATT != 0) add("Критический заряд гаджета — запись почти остановлена")
             else if (fresh and Proto.AL_LOW_BATT != 0) add("Низкий заряд гаджета (< 15 %)")
             if (fresh and Proto.AL_SD_ERROR != 0) add("Ошибка карты SD — запись только в память")
