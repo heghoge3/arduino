@@ -178,16 +178,22 @@ fun LineChart(
             val stepMs = when {
                 t1 - t0 <= 2 * HOUR -> HOUR / 2
                 t1 - t0 <= 8 * HOUR -> HOUR
-                else -> 3 * HOUR
+                t1 - t0 <= 24 * HOUR -> 3 * HOUR
+                t1 - t0 <= 48 * HOUR -> 6 * HOUR
+                else -> 12 * HOUR
             }
             val zone = ZoneId.systemDefault()
             val offset = zone.rules.getOffset(Instant.ofEpochMilli(t0)).totalSeconds * 1000L
             var t = (floor((t0 + offset).toDouble() / stepMs).toLong() + 1) * stepMs - offset
+            // Подпись, которая налезла бы на предыдущую, пропускаем (узкий экран, длинный поход)
+            var lastRight = Float.NEGATIVE_INFINITY
             while (t < t1) {
                 val xx = x(t)
                 val tl = measurer.measure(Fmt.time(t), axisStyle)
-                if (xx - tl.size.width / 2 > left && xx + tl.size.width / 2 < left + w) {
-                    drawText(tl, topLeft = Offset(xx - tl.size.width / 2, top + h + 4.dp.toPx()))
+                val l = xx - tl.size.width / 2
+                if (l > left && xx + tl.size.width / 2 < left + w && l > lastRight + 6.dp.toPx()) {
+                    drawText(tl, topLeft = Offset(l, top + h + 4.dp.toPx()))
+                    lastRight = l + tl.size.width
                 }
                 t += stepMs
             }
