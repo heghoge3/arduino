@@ -12,7 +12,7 @@ private const val MIN = 60_000L
 
 /**
  * Что происходило в походе — из самих точек трека:
- * — «привал»: шагов не прибавилось 10 мин и дольше;
+ * — «привал»: шагов не прибавилось 20 мин и дольше;
  * — «GPS выкл»: GPS выключен кнопкой (едем на машине) — датчики пишутся, координат нет;
  * — «нет записи»: между точками больше 5 мин (гаджет выключен).
  * Подмену здесь не показываем: датчики в это время пишут верно, а для позиции есть карта.
@@ -47,7 +47,7 @@ fun chartBands(track: List<TrackPoint>): List<ChartBand> {
         if (end) {
             val a = track[runStart].tsUtcMs
             val b = track[i - 1].tsUtcMs
-            if (b - a >= 10 * MIN) out += ChartBand(a, b, "привал", Palette.Good)
+            if (b - a >= 20 * MIN) out += ChartBand(a, b, "привал", Palette.Good)
             runStart = i
         }
     }
