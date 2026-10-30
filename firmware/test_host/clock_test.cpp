@@ -93,6 +93,7 @@ int main() {
   fakeUtc = utc + 7;
   assert(clockx::resync() == -7);
   assert(clockx::now() == utc);
+  assert(clockx::uptimeS() == 7); // сверка RTC не отменяет 7 реально прошедших секунд
   puts("PASS: RTC resync reports clock jump for recording deadlines");
 
   fakeUtc += 60;
@@ -100,6 +101,17 @@ int main() {
   assert(clockx::trusted());
   assert(clockx::now() == utc + 60);
   puts("PASS: wake keeps system time instead of stale RTC or build time");
+  assert(clockx::uptimeS() == 67);
+  clockx::setFromPhone(utc + 60 - 10800);
+  assert(clockx::uptimeS() == 67);
+  clockx::setFromPhone(utc + 60);
+  assert(clockx::uptimeS() == 67);
+  // Движение разбудило через 6 с, хотя таймер могли ставить на 120 с.
+  fakeUtc += 6;
+  assert(clockx::begin(false));
+  assert(clockx::uptimeS() == 73);
+  fakeUtc -= 6; // остальные сценарии продолжаются от utc + 60
+  puts("PASS: uptime survives sleep and ignores phone clock correction");
 
   // Сбой/остановка внешних часов во сне не отменяет уже проверенное системное время.
   regs[0] |= 0x80;
@@ -119,6 +131,7 @@ int main() {
   assert(clockx::now() == utc + 60);
   puts("PASS: wake without DS1302 preserves internal time and trust");
   assert(!clockx::begin(true));
+  assert(clockx::uptimeS() == 0);
   assert(!clockx::rtcPresent());
   assert(!clockx::trusted());
   puts("PASS: disconnected DS1302 is not detected");

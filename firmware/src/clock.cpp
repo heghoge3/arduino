@@ -29,6 +29,7 @@ bool g_present = false;
 RTC_DATA_ATTR bool g_trusted = false;
 RTC_DATA_ATTR Source g_source = SRC_NONE;
 RTC_DATA_ATTR bool g_sysValid = false;  // системное время уже ставили (до сна)
+RTC_DATA_ATTR uint32_t g_bootUtc = 0;   // начало работы, сохраняется во сне и сдвигается вместе с часами
 
 void writeByte(uint8_t v, bool reading = false) {
   pinMode(PIN_RTC_DAT, OUTPUT);
@@ -135,6 +136,8 @@ void writeClock(uint32_t utc) {
 }
 
 void setBase(uint32_t utc) {
+  if (g_bootUtc) g_bootUtc += utc - static_cast<uint32_t>(time(nullptr));
+  else g_bootUtc = utc;
   timeval tv{static_cast<time_t>(utc), 0};
   settimeofday(&tv, nullptr);
   g_sysValid = true;
@@ -153,6 +156,7 @@ uint32_t buildTime() {
 }  // namespace
 
 bool begin(bool cold) {
+  if (cold) g_bootUtc = 0;
   pinMode(PIN_RTC_CLK, OUTPUT);
   pinMode(PIN_RTC_RST, OUTPUT);
   digitalWrite(PIN_RTC_RST, LOW);
@@ -206,6 +210,10 @@ bool begin(bool cold) {
 }
 
 uint32_t now() { return static_cast<uint32_t>(time(nullptr)); }
+uint32_t uptimeS() {
+  uint32_t t = now();
+  return g_bootUtc && t >= g_bootUtc ? t - g_bootUtc : 0;
+}
 
 bool trusted() { return g_trusted; }
 Source source() { return g_source; }

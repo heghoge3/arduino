@@ -44,7 +44,6 @@ uint32_t g_awakeUntil = 0;       // не спать до (окно после в
 uint32_t g_lastAccelMs = 0, g_lastSecondMs = 0;
 uint32_t g_lastEnvMs = 0, g_lastSelftestMs = 0, g_lastResyncMs = 0;
 uint32_t g_tick = 0;
-uint32_t g_powerOnUtc = 0;
 // Записи с этих номеров сделаны по непроверенным часам (с включения) — сдвинуть, когда придёт время
 constexpr uint32_t NO_SHIFT = 0xFFFFFFFF;
 RTC_DATA_ATTR uint32_t g_shiftFromPoint = NO_SHIFT, g_shiftFromMark = NO_SHIFT;  // переживают сон
@@ -136,7 +135,6 @@ void onClockJump(int32_t d) {
   shiftTime(P.goodTime, d);
   shiftTime(P.spoofAlertUntil, d);
   shiftTime(P.pressHistAt, d);
-  shiftTime(g_powerOnUtc, d);
   P.power.shiftTime(d);
   P.pulse.shiftTime(d);
   P.alerts.shiftTime(d);
@@ -310,7 +308,7 @@ void sendInfo() {
   info.fwPatch = FW_PATCH;
   String chip = ESP.getChipModel();
   info.chip = chip.indexOf("S3") >= 0 ? 1 : (chip.indexOf("C3") >= 0 ? 2 : 0);
-  info.uptime = N.now - g_powerOnUtc;
+  info.uptime = clockx::uptimeS();
   ensureStorage();
   info.sdTotalMb = storage::totalMb();
   info.sdFreeMb = storage::freeMb();
@@ -1338,7 +1336,6 @@ void setup() {
 #endif
     );
     ui::splash(ESP.getChipModel());
-    g_powerOnUtc = N.now;
     ensureStorage();
     {
       const sensors::Presence& pr = sensors::presence();
