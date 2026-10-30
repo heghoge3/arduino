@@ -1123,7 +1123,7 @@ void console() {
     } else if (!strcmp(line, "motion on")) {
       rtc_gpio_deinit((gpio_num_t)PIN_MPU_INT);
       pinMode(PIN_MPU_INT, INPUT);
-      Serial.println(sensors::armMotion() ? "Детектор движения включён; наклони MPU и введи motion" : "MPU6050 недоступен");
+      Serial.println(sensors::armMotion(true) ? "Тест движения: порог 2 мг, 1 мс; наклони MPU и введи motion" : "MPU6050 недоступен");
     } else if (!strcmp(line, "motion off")) {
       sensors::stopMotion();
       Serial.println("Проверка движения выключена");
@@ -1133,6 +1133,8 @@ void console() {
       if (sensors::readMotion(m)) {
         Serial.printf("MPU INT GPIO%d=%d MOT=%u ENABLE=0x%02X CFG=0x%02X PWR=0x%02X STATUS=0x%02X\n",
                       PIN_MPU_INT, level, (m.status & 0x40) != 0, m.enabled, m.config, m.power, m.status);
+        Serial.printf("MPU WHO_AM_I=0x%02X ACCEL_CFG=0x%02X MOT_THR=%u MOT_DUR=%u MOT_CTRL=0x%02X\n",
+                      m.who, m.accel, m.threshold, m.duration, m.control);
       } else Serial.println("MPU6050 недоступен");
     } else if (!strcmp(line, "accel")) {
       float ax, ay, az;

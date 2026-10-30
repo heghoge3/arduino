@@ -43,8 +43,8 @@ Power readPower();
 bool readAccel(float& ax, float& ay, float& az);
 
 // Проверка защёлкнутого прерывания движения без сна ESP32.
-bool armMotion();
-struct MotionStatus { uint8_t enabled, config, power, status; };
+bool armMotion(bool sensitive = false);
+struct MotionStatus { uint8_t enabled, config, power, status, who, accel, threshold, duration, control; };
 bool readMotion(MotionStatus& out);  // чтение INT_STATUS сбрасывает защёлку
 void stopMotion();
 

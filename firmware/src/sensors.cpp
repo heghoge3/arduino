@@ -238,7 +238,7 @@ bool readAccel(float& ax, float& ay, float& az) {
 #endif
 }
 
-bool armMotion() {
+bool armMotion(bool sensitive) {
 #ifndef FAKE_SENSORS
   if (!g_pres.mpu) return false;
   mpuInit();
@@ -246,14 +246,15 @@ bool armMotion() {
   // Редкие отсчёты могли пропускать короткое движение; экономию вернём после замеров.
   delay(100);
   writeReg(ADDR_MPU, 0x1C, 0x04);  // ACCEL_HPF 0,63 Гц
-  writeReg(ADDR_MPU, 0x1F, 20);    // MOT_THR: 40 мг (2 мг/LSB)
-  writeReg(ADDR_MPU, 0x20, 20);    // MOT_DUR: 20 мс
+  writeReg(ADDR_MPU, 0x1F, sensitive ? 1 : 20);  // тест: 2 мг; сон: 40 мг
+  writeReg(ADDR_MPU, 0x20, sensitive ? 1 : 20);  // тест: 1 мс; сон: 20 мс
   writeReg(ADDR_MPU, 0x37, 0x20);  // активный HIGH, защёлка до чтения INT_STATUS
   delay(100);
   readReg(ADDR_MPU, 0x3A);
   writeReg(ADDR_MPU, 0x38, 0x40);  // MOT_INT
   return true;
 #else
+  (void)sensitive;
   return false;
 #endif
 }
@@ -264,6 +265,11 @@ bool readMotion(MotionStatus& out) {
   out.enabled = readReg(ADDR_MPU, 0x38);
   out.config = readReg(ADDR_MPU, 0x37);
   out.power = readReg(ADDR_MPU, 0x6B);
+  out.who = readReg(ADDR_MPU, 0x75);
+  out.accel = readReg(ADDR_MPU, 0x1C);
+  out.threshold = readReg(ADDR_MPU, 0x1F);
+  out.duration = readReg(ADDR_MPU, 0x20);
+  out.control = readReg(ADDR_MPU, 0x69);
   out.status = readReg(ADDR_MPU, 0x3A);
   return true;
 #else
