@@ -24,6 +24,16 @@ class BlacklistSettingsTest {
         }
     }
 
+    @Test fun legacyDefaultIsFiveKmButExplicitCustomRadiusSurvives() {
+        val prefs=RuntimeEnvironment.getApplication().getSharedPreferences("migration",Context.MODE_PRIVATE)
+        prefs.edit().clear().putInt("radius_60.1161_31.3864",1000).commit()
+        val point=BlacklistPoint(60.1161,31.3864,5000,"known")
+        val settings=BlacklistSettings(prefs)
+        assertEquals(5000,settings.load(listOf(point)).single().radiusM)
+        settings.save(listOf(point.copy(radiusM=1000)))
+        assertEquals(1000,BlacklistSettings(prefs).load(listOf(point)).single().radiusM)
+    }
+
     @Test
     fun diameterSurvivesRestartAndBelongsToCoordinates() {
         val prefs = RuntimeEnvironment.getApplication().getSharedPreferences("blacklist_test", Context.MODE_PRIVATE)

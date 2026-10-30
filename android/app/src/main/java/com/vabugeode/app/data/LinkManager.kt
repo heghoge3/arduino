@@ -26,9 +26,10 @@ interface LinkPrefs {
 }
 
 class SharedLinkPrefs(context: Context) : LinkPrefs {
+    private val defaultSource=if(com.vabugeode.app.BuildConfig.APPLICATION_ID.endsWith(".hike")) Source.GADGET else Source.EMULATOR
     private val sp = context.getSharedPreferences("link", Context.MODE_PRIVATE)
     override var source: Source
-        get() = runCatching { Source.valueOf(sp.getString("source", Source.EMULATOR.name)!!) }.getOrDefault(Source.EMULATOR)
+        get() = runCatching { Source.valueOf(sp.getString("source", defaultSource.name)!!) }.getOrDefault(defaultSource)
         set(v) = sp.edit().putString("source", v.name).apply()
     override var gadgetId: String?
         get() = sp.getString("gadget", null)

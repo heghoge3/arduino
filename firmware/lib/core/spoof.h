@@ -70,6 +70,11 @@ class Detector {
   void setPhone(double lat, double lon, float accuracyM, uint32_t time);
   void clearPhone() { phoneValid_ = false; }
   bool blacklisted(double lat, double lon) const;
+  void restoreLastGood(double lat,double lon,uint32_t time) {
+    if (lat>=-90&&lat<=90&&lon>=-180&&lon<=180&&!blacklisted(lat,lon)) {
+      lastGoodValid_=true;lastGoodLat_=lat;lastGoodLon_=lon;lastGoodTime_=time;
+    }
+  }
   // Забыть последнюю достоверную точку (эмуляция перенесла трек — иначе это «невозможный скачок»)
   void forgetLastGood() { lastGoodValid_ = false; stillValid_ = false; }
   // Часы переставили на d секунд: сдвинуть запомненные моменты (иначе «возраст» точек врёт)
@@ -110,6 +115,7 @@ class Detector {
   bool episode_ = false;
   uint32_t cleanSince_ = 0, cleanLast_ = 0;
   uint8_t cleanCount_ = 0;
+  double cleanLat_=0,cleanLon_=0;
 };
 
 }  // namespace spoof

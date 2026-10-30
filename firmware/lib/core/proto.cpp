@@ -104,6 +104,7 @@ size_t encodeInfo(const Info& m, uint8_t* out, size_t cap) {
   for (uint8_t i = 0; i < n; i++) {
     w.u8(m.checks[i].id); w.u8(m.checks[i].level); w.u8(m.checks[i].code); w.u8(m.checks[i].addr);
   }
+  if (m.hasSettings) { w.i16(m.tempOffset100); w.u16(m.strideCm); }
   return w.done();
 }
 
@@ -121,7 +122,7 @@ size_t encodePoint(const Point& m, uint8_t* out, size_t cap) {
   Writer w(out, cap);
   w.header(MSG_POINT);
   w.u32(m.time); w.i32(m.lat7); w.i32(m.lon7);
-  w.u8((m.src & 0x03) | (m.spoof ? 0x04 : 0)); w.u8(m.spoofMask);
+  w.u8((m.src & 0x03) | (m.spoof ? 0x04 : 0) | (m.startAnchor ? 0x08 : 0)); w.u8(m.spoofMask);
   w.i32(m.spoofLat7); w.i32(m.spoofLon7);
   w.i16(m.tempRaw100); w.i16(m.tempCorr100);
   w.u16(m.hum100); w.u32(m.pressPa);
@@ -184,7 +185,7 @@ bool decodePoint(const uint8_t* in, size_t len, Point& m) {
   if (r.u8() != VERSION || r.u8() != MSG_POINT) return false;
   m.time = r.u32(); m.lat7 = r.i32(); m.lon7 = r.i32();
   uint8_t fl = r.u8();
-  m.src = fl & 0x03; m.spoof = (fl & 0x04) != 0;
+  m.src = fl & 0x03; m.spoof = (fl & 0x04) != 0; m.startAnchor = (fl & 0x08) != 0;
   m.spoofMask = r.u8(); m.spoofLat7 = r.i32(); m.spoofLon7 = r.i32();
   m.tempRaw100 = r.i16(); m.tempCorr100 = r.i16();
   m.hum100 = r.u16(); m.pressPa = r.u32();
@@ -224,7 +225,10 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
   c.code = r.u8();
   switch (c.code) {
     case CMD_SET_TIME: c.time = r.u32(); c.tzMin = r.i16(); break;
-    case CMD_PHONE_POS: c.lat7 = r.i32(); c.lon7 = r.i32(); c.accuracyM = r.u16(); break;
+    case CMD_PHONE_POS:
+      c.lat7=r.i32(); c.lon7=r.i32(); c.accuracyM=r.u16();
+      if (r.atEnd()&&(c.lat7 < -900000000 || c.lat7 > 900000000 || c.lon7 < -1800000000 || c.lon7 > 1800000000 || c.accuracyM==0)) return ACK_BAD_ARGS;
+      break;
     case CMD_CALIB_COMPASS:
       c.flag = r.u8();
       return r.atEnd() && c.flag <= 1 ? ACK_OK : ACK_BAD_ARGS;
@@ -249,11 +253,13 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
       if (r.atEnd() && (c.a < 1 || c.a > 3600 || c.b < 1 || c.b > 3600)) return ACK_BAD_ARGS;
       break;
     case CMD_CALIB_ALT: c.altDm = r.i16(); break;
+    case CMD_BLACKLIST_V2:
     case CMD_BLACKLIST:
       c.blCount = r.u8();
       if (c.blCount > MAX_BLACKLIST) return ACK_BAD_ARGS;
       for (uint8_t i = 0; i < c.blCount; i++) {
         c.bl[i].lat7 = r.i32(); c.bl[i].lon7 = r.i32(); c.bl[i].radiusM = r.u16();
+        if (c.bl[i].lat7 < -900000000 || c.bl[i].lat7 > 900000000 || c.bl[i].lon7 < -1800000000 || c.bl[i].lon7 > 1800000000 || c.bl[i].radiusM < 100 || c.bl[i].radiusM > 50000) return ACK_BAD_ARGS;
       }
       break;
     case CMD_SET_GPS_MODE:
@@ -263,6 +269,14 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
     case CMD_SET_RADIO:
       c.a = r.u16();
       if (r.atEnd() && c.a != 0 && (c.a < 10 || c.a > 600)) return ACK_BAD_ARGS;
+      break;
+    case CMD_TEMP_OFFSET:
+      c.altDm=r.i16();
+      if (r.atEnd()&&(c.altDm < -2000 || c.altDm > 2000)) return ACK_BAD_ARGS;
+      break;
+    case CMD_SET_START:
+      c.time=r.u32(); c.lat7=r.i32(); c.lon7=r.i32();
+      if (r.atEnd()&&(c.lat7 < -900000000 || c.lat7 > 900000000 || c.lon7 < -1800000000 || c.lon7 > 1800000000 || !c.time)) return ACK_BAD_ARGS;
       break;
     case CMD_PDR_SETTINGS:
       c.a = r.u16(); c.altDm = r.i16(); c.flag = r.u8();

@@ -43,12 +43,6 @@ Power readPower();
 bool readAccel(float& ax, float& ay, float& az);
 struct MotionSample { float ax, ay, az, gx, gy, gz; bool gyro; };
 bool readMotionSample(MotionSample& sample);
-void feedNavigation(const MotionSample& sample, uint32_t steps, uint32_t ms);
-void offerNavigationGps(double lat, double lon, uint32_t steps, uint32_t ms);
-float travelHeading();
-uint8_t navigationState();
-bool navigationKeepAwake();
-void resetNavigation();
 // Дополнительный магнитный компас; для автоматического PDR не требуется.
 // Пока поддерживается QMC5883P. Для направления плата компаса должна быть горизонтальна.
 void pollCompass(float offsetDeg, bool inverted);
@@ -71,6 +65,7 @@ void clearMotion();
 // Калибровка высоты по известной точке; давление на уровне моря хранится в NVS
 void calibrateAltitude(float knownAltM);
 void setSeaLevel(float hpa);
+void setTemperatureOffset(int16_t hundredths);
 float seaLevel();
 
 bool i2cProbe(uint8_t addr);

@@ -9,6 +9,9 @@ import com.vabugeode.app.data.isRoutePoint
 import com.vabugeode.app.data.routeSegments
 import com.vabugeode.app.data.correctedRoute
 import androidx.compose.ui.platform.LocalDensity
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,12 +32,14 @@ import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -92,6 +97,24 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String)
     val marks by vm.repo.marks.collectAsStateWithLifecycle()
     val status by vm.repo.status.collectAsStateWithLifecycle()
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
+    val link by vm.repo.link.collectAsStateWithLifecycle()
+    val settingBusy by vm.repo.settingBusy.collectAsStateWithLifecycle()
+    var choosing by remember { mutableStateOf(false) }
+    var startDialog by remember { mutableStateOf(false) }
+    var latitude by remember { mutableStateOf("") }
+    var longitude by remember { mutableStateOf("") }
+    val canStart=link==com.vabugeode.app.model.LinkState.CONNECTED && vm.repo.supportsEconomy() &&
+        status?.recording==true && status?.positionSource!=PositionSource.GPS
+    if (startDialog) {
+        BackHandler { startDialog=false }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(contentPadding).padding(16.dp)) {
+            ManualStartForm(latitude,longitude,canStart&&!settingBusy,
+                onCancel={startDialog=false},onMap={startDialog=false;choosing=true},onConfirm={la,lo ->
+                    vm.setManualStart(la,lo,onAdded);startDialog=false;choosing=false
+                })
+        }
+        return
+    }
 
     Column(Modifier.fillMaxSize().padding(contentPadding)) {
         Box(Modifier.weight(1.1f).fillMaxWidth()) {
@@ -99,7 +122,8 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String)
             TrackMap(
                 track, marks, Modifier.fillMaxSize(),
                 me = st?.lat?.let { la -> st.lon?.let { lo -> la to lo } },
-                topInset = 100,
+                topInset = 130,
+                onPickStart = if(choosing&&canStart) { la,lo -> latitude=la.toString();longitude=lo.toString();startDialog=true;choosing=false } else null,
             )
             // Сводка и легенда
             Panel(
@@ -121,6 +145,13 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String)
                     }
                 }
                 MapLegend(track.count { it.spoof })
+                if (canStart) TextButton(onClick={if(choosing) choosing=false else startDialog=true}) {
+                    Text(if(choosing) "Нажмите стартовую точку на карте · отмена" else "Задать старт без GPS")
+                }
+                if(st!=null && st.positionSource!=PositionSource.GPS) Text(
+                    if(st.positionSource==PositionSource.START) "Старт задан · текущая позиция неизвестна" else "Текущая позиция неизвестна · шаги сохраняются",
+                    fontSize=10.sp,color=Palette.TextDim)
+
             }
         }
         MarksPanel(vm, marks, start, onAdded, Modifier.weight(1f).fillMaxWidth())
@@ -131,7 +162,7 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String)
 fun MapLegend(spoofCount: Int) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
         Text("━ GPS", color = Palette.Geo, fontSize = 11.sp)
-        Text("┅ ≈ шаги", color = Palette.Pdr, fontSize = 11.sp)
+        Text("┅ без GPS", color = Palette.Pdr, fontSize = 11.sp)
         Text(if (spoofCount > 0) "● подмена $spoofCount" else "● подмена", color = Palette.Bad, fontSize = 11.sp)
         Text("● метки", color = Palette.Text, fontSize = 11.sp)
     }
@@ -155,6 +186,7 @@ fun TrackMap(
     modifier: Modifier = Modifier,
     me: Pair<Double, Double>? = null,
     topInset: Int = 40,
+    onPickStart: ((Double,Double)->Unit)? = null,
 ) {
     if (!mapAvailable) {
         Box(modifier.border(1.dp, Palette.Outline), contentAlignment = Alignment.Center) {
@@ -162,6 +194,7 @@ fun TrackMap(
         }
         return
     }
+    val pickStart by rememberUpdatedState(onPickStart)
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember {
@@ -190,6 +223,10 @@ fun TrackMap(
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) mapView.onResume()
         mapView.getMapAsync { m ->
             map = m
+            m.addOnMapClickListener { point ->
+                val pick=pickStart
+                if(pick!=null) { pick(point.latitude,point.longitude); true } else false
+            }
             m.uiSettings.isRotateGesturesEnabled = false
             m.uiSettings.isLogoEnabled = false
         }
@@ -224,10 +261,10 @@ fun TrackMap(
     }
 
     // Обновляем слои при новых точках
-    LaunchedEffect(style, track.size, marks.size) {
+    LaunchedEffect(style, track, marks) {
         val s = style ?: return@LaunchedEffect
         updateLayers(s, track, marks)
-        if (!fitted && track.size > 1) {
+        if (!fitted && track.any { it.isRoutePoint() }) {
             fitted = true
             fitTrack(map, track, topPx)
         }
@@ -296,6 +333,10 @@ private fun setupLayers(s: Style) {
     s.addSource(GeoJsonSource("spoof"))
     s.addSource(GeoJsonSource("marks"))
     s.addSource(GeoJsonSource("me"))
+    s.addSource(GeoJsonSource("starts"))
+    s.addLayer(CircleLayer("start-points","starts").withProperties(
+        PropertyFactory.circleColor(hex(Palette.Pdr)),PropertyFactory.circleRadius(8f),
+        PropertyFactory.circleStrokeColor("#FFFFFF"),PropertyFactory.circleStrokeWidth(2f)))
 
     s.addLayer(
         LineLayer("track-gps", "track").withProperties(
@@ -362,7 +403,7 @@ private fun setupLayers(s: Style) {
 private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
     val segments = routeSegments(track).map { segment ->
         lineFeature(segment.points.map { Point.fromLngLat(it.lon, it.lat) },
-            if (segment.source == PositionSource.PDR) "pdr" else "gps")
+            if (segment.source == PositionSource.GPS) "gps" else "pdr")
     }
     s.getSourceAs<GeoJsonSource>("track")?.setGeoJson(FeatureCollection.fromFeatures(segments))
 
@@ -380,7 +421,12 @@ private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
     }
     s.getSourceAs<GeoJsonSource>("marks")?.setGeoJson(FeatureCollection.fromFeatures(mk))
 
+    s.getSourceAs<GeoJsonSource>("starts")?.setGeoJson(FeatureCollection.fromFeatures(
+        track.filter { it.src==PositionSource.START&&it.isRoutePoint() }.map { Feature.fromGeometry(Point.fromLngLat(it.lon,it.lat)) }))
     val me = correctedRoute(track).lastOrNull { it.isRoutePoint() }
+    val positionColor=hex(if(me?.src==PositionSource.START) Palette.Pdr else Palette.Geo)
+    s.getLayerAs<CircleLayer>("me-dot")?.setProperties(PropertyFactory.circleColor(positionColor))
+    s.getLayerAs<CircleLayer>("me-halo")?.setProperties(PropertyFactory.circleColor(positionColor))
     s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(FeatureCollection.fromFeatures(
         me?.let { listOf(Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat))) } ?: emptyList()))
 }
@@ -394,7 +440,7 @@ private fun fitTrack(map: MapLibreMap?, track: List<TrackPoint>, top: Int) {
 }
 
 private fun fitSpoof(map: MapLibreMap?, track: List<TrackPoint>, top: Int) {
-    val pts = track.mapNotNull { p -> p.spoofLat?.let { LatLng(it, p.spoofLon!!) } }
+    val pts = track.mapNotNull { p -> p.spoofLat?.let { la -> p.spoofLon?.let { lo -> if(la in -90.0..90.0 && lo in -180.0..180.0) LatLng(la,lo) else null } } }
     fitPoints(map, pts, top)
 }
 

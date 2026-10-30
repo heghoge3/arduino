@@ -33,7 +33,7 @@ class PdrRouteTest {
         val track = listOf(p(0, 60.0, 0), p(10, 60.0001, 10, spoof = true), p(20, 61.0, 20, Src.GPS, true))
         assertEquals(track, correctedRoute(track))
         assertEquals(1, routeSegments(track).size)
-        assertEquals(0.01112, trackKm(track), 0.001)
+        assertEquals(0.01862, trackKm(track), 0.001) // plus ten unlocated steps after the PDR segment
     }
     @Test fun largeGpsMismatchDoesNotStretchOrJoinEstimatedRoute() {
         val track = listOf(p(0, 60.0, 0, Src.GPS), p(10, 60.0001, 10), p(20, 60.0002, 20), p(30, 61.0, 30, Src.GPS), p(40, 61.0001, 40, Src.GPS))
@@ -45,7 +45,7 @@ class PdrRouteTest {
         for (src in listOf(Src.NONE, Src.PAUSE)) {
             val track = listOf(p(0, 60.0, 0), p(10, 60.0001, 10), p(20, 60.0, 20, src), p(30, 60.001, 30, Src.GPS))
             assertEquals(track, correctedRoute(track))
-            assertEquals(0.01112, trackKm(track), 0.001)
+            assertEquals(if(src==Src.NONE) 0.02612 else 0.01112, trackKm(track), 0.001)
         }
     }
     @Test fun longSamplingGapAndCounterResetBreakCorrection() {

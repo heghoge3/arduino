@@ -72,8 +72,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val repo = ProtocolDeviceRepository(
         viewModelScope, virtualTransport,
         blacklistSettings.load(listOf(
-            BlacklistPoint(60.0346, 30.5693, 1000, "Лес у ручья Генерального"),
-            BlacklistPoint(60.1161, 31.3864, 1000, "Ладога, о. Кареджи"),
+            BlacklistPoint(60.0346, 30.5693, 5000, "Лес у ручья Генерального"),
+            BlacklistPoint(60.1161, 31.3864, 5000, "Ладога, о. Кареджи"),
         )),
         store = dao,
     )
@@ -105,12 +105,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (fix == null || fix.accuracyM > 1000) {
                 pdrAnchorMessage.value = "Нет свежей позиции телефона. Проверьте геолокацию и разрешение; начало маршрута пока неизвестно."
             } else {
-                repo.anchorFromPhone(fix.lat, fix.lon, fix.accuracyM)
-                pdrAnchorMessage.value = "Передана позиция телефона с точностью ±${fix.accuracyM} м. Начало задаётся, если у трекера ещё нет позиции."
+                val ok=repo.setStart(fix.lat,fix.lon)
+                pdrAnchorMessage.value = if (ok) "Старт задан по телефону, точность ±${fix.accuracyM} м" else "Старт не подтверждён гаджетом"
             }
         }
     }
 
+    fun setTemperatureOffset(value: Int) { viewModelScope.launch { repo.setTemperatureOffset(value) } }
+    fun setManualStart(lat: Double,lon: Double,onResult: (String)->Unit) {
+        viewModelScope.launch { onResult(if (repo.setStart(lat,lon)) "Старт задан вручную" else "Не удалось задать старт") }
+    }
     private var bleScanner: GadgetScanner? = null
 
     val link = LinkManager(
@@ -196,17 +200,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Походы ----
 
     private val summaryCache = HashMap<Pair<String, Long>, Pair<Int, HikeSummary>>()
+    private var summaryConfig: Pair<List<BlacklistPoint>,Int>?=null
 
     /** Все сохранённые походы. Сводку пересчитываем только у тех, где прибавились точки */
     @OptIn(ExperimentalCoroutinesApi::class)
     val hikes: StateFlow<List<HikeSummary>?> = combine(dao.hikeKeys(), dao.hikeNames()) { keys, names -> keys to names }
-        .mapLatest { (keys, names) ->
+        .combine(repo.blacklist) { pair, zones -> Triple(pair.first,pair.second,zones) }
+        .combine(pdrSettings) { inputs, settings -> inputs to settings.strideCm }
+        .mapLatest { (inputs, strideCm) ->
+            val (keys,names,zones)=inputs
+            if(summaryConfig != (zones to strideCm)) {summaryCache.clear();summaryConfig=zones to strideCm}
             val named = names.associate { (it.device to it.hike) to it.name }
             keys.map { k ->
                 val id = k.device to k.hike
                 val cached = summaryCache[id]
                 val sum = if (cached != null && cached.first == k.n) cached.second
-                else summarize(k.device, k.hike, null, dao.loadTrack(k.device, k.hike), dao.loadMarks(k.device, k.hike))
+                else summarize(k.device, k.hike, null, com.vabugeode.app.data.excludeBlacklisted(dao.loadTrack(k.device, k.hike),zones), dao.loadMarks(k.device, k.hike),strideCm/100.0)
                     .also { summaryCache[id] = k.n to it }
                 sum.copy(name = named[id])
             }
@@ -215,7 +224,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     suspend fun loadHike(device: String, hike: Long): Pair<List<TrackPoint>, List<Mark>> = withContext(Dispatchers.IO) {
-        dao.loadTrack(device, hike) to dao.loadMarks(device, hike)
+        com.vabugeode.app.data.excludeBlacklisted(dao.loadTrack(device, hike),repo.blacklist.value) to com.vabugeode.app.data.excludeBlacklistedMarks(dao.loadMarks(device, hike),repo.blacklist.value)
     }
 
     /** Поход, который сейчас пишет подключённый гаджет — его не удаляем, он тут же скачается снова */

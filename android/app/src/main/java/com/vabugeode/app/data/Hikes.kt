@@ -37,7 +37,7 @@ data class HikeSummary(
  */
 fun TrackPoint.isRoutePoint(): Boolean = lat.isFinite() && lon.isFinite() &&
     lat in -90.0..90.0 && lon in -180.0..180.0 &&
-    (src == PositionSource.PDR || (src == PositionSource.GPS && !spoof))
+    (src == PositionSource.START || src == PositionSource.PDR || (src == PositionSource.GPS && !spoof))
 
 data class RouteSegment(val points: List<TrackPoint>, val source: PositionSource)
 
@@ -111,19 +111,51 @@ fun routeSegments(track: List<TrackPoint>): List<RouteSegment> {
         cur += p
     }
     flush()
+    out += gapSegments(track)
     return out
 }
 
-fun trackKm(track: List<TrackPoint>): Double {
-    var m = 0.0
-    for (segment in routeSegments(track)) {
-        var prev = segment.points.first()
+/** Пунктир — только связь известных привязок, а не измеренные промежуточные координаты. */
+fun gapSegments(track: List<TrackPoint>): List<RouteSegment> {
+    val out=ArrayList<RouteSegment>()
+    var anchor: TrackPoint?=null
+    var previous: TrackPoint?=null
+    var missing=false
+    for (p in track) {
+        val prev=previous
+        if (p.src==PositionSource.PAUSE || (prev!=null &&
+            (p.tsUtcMs-prev.tsUtcMs !in 0..180_000 || p.steps<prev.steps))) { anchor=null; missing=false }
+        previous=p
+        if (p.src==PositionSource.START && p.isRoutePoint()) { anchor=p; missing=true; continue }
+        if (p.src==PositionSource.GPS && p.isRoutePoint()) {
+            val a=anchor
+            if (a!=null && missing && p.steps>=a.steps &&
+                distanceM(a.lat,a.lon,p.lat,p.lon)<=(p.steps-a.steps)*1.5+50) {
+                out+=RouteSegment(listOf(a,p),PositionSource.NONE)
+            }
+            anchor=p; missing=false
+        } else if (p.src==PositionSource.NONE || p.spoof) missing=true
+        else if (p.src==PositionSource.PDR) { anchor=null; missing=false }
+    }
+    return out
+}
+
+fun trackKm(track: List<TrackPoint>, strideM: Double = .75): Double {
+    var meters=0.0
+    for (segment in routeSegments(track).filter { it.source!=PositionSource.NONE }) {
+        var prev=segment.points.first()
         for (p in segment.points.drop(1)) {
-            val d = distanceM(prev.lat, prev.lon, p.lat, p.lon)
-            if (d >= 3.0) { m += d; prev = p }
+            val d=distanceM(prev.lat,prev.lon,p.lat,p.lon)
+            if (d>=3) { meters+=d; prev=p }
         }
     }
-    return m / 1000.0
+    val stride=strideM.takeIf { it.isFinite() && it in .3..1.5 } ?: .75
+    for ((a,b) in track.zipWithNext()) {
+        if (a.src==PositionSource.PAUSE || b.src==PositionSource.PAUSE || b.steps<a.steps || b.tsUtcMs-a.tsUtcMs !in 0..180_000) continue
+        if (a.src==PositionSource.NONE || b.src==PositionSource.NONE || a.src==PositionSource.START ||
+            (a.src==PositionSource.GPS&&a.spoof) || (b.src==PositionSource.GPS&&b.spoof)) meters+=(b.steps-a.steps)*stride
+    }
+    return meters/1000
 }
 
 fun distanceM(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -132,17 +164,17 @@ fun distanceM(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val dLon = Math.toRadians(lon2 - lon1)
     val a = sin(dLat / 2).let { it * it } +
         cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).let { it * it }
-    return 2 * r * asin(sqrt(a))
+    return 2 * r * asin(sqrt(a.coerceIn(0.0,1.0)))
 }
 
-fun summarize(device: String, hike: Long, name: String?, track: List<TrackPoint>, marks: List<Mark>): HikeSummary {
+fun summarize(device: String, hike: Long, name: String?, track: List<TrackPoint>, marks: List<Mark>, strideM: Double = .75): HikeSummary {
     val temps = track.map { it.tempCorr }.filter { !it.isNaN() }
     return HikeSummary(
         device = device, hike = hike, name = name,
         startMs = hike * 1000,
         // Конец не раньше начала (старые записи по неверным часам)
         endMs = maxOf(track.lastOrNull()?.tsUtcMs ?: 0L, hike * 1000),
-        km = trackKm(track),
+        km = trackKm(track,strideM),
         tempMin = temps.minOrNull() ?: Double.NaN,
         tempMax = temps.maxOrNull() ?: Double.NaN,
         marks = marks.size,

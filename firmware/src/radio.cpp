@@ -28,6 +28,7 @@ uint32_t g_advUntilMs = 0;
 uint32_t g_lastRxMs = 0;
 uint32_t g_windowUntilMs = 0;
 volatile bool g_disconnected = false;
+volatile uint32_t g_clientEpoch=0;
 volatile bool g_dropSecured = false;  // оборвалась связь с сопряжённым телефоном
 bool g_selfDisconnect = false;        // рвём сами (BYE, тайм-аут) — окно потом не нужно
 
@@ -43,6 +44,7 @@ uint16_t advUnits(uint16_t ms) { return ms * 1000 / 625; }
 class ServerCB : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer* s, ble_gap_conn_desc* desc) override {
     g_conn = desc->conn_handle;
+    g_clientEpoch++;
     g_state = State::CONNECTED;
     g_live = false;
     g_secured = desc->sec_state.encrypted && desc->sec_state.bonded;
@@ -147,6 +149,7 @@ void stopAdv() {
 }  // namespace
 
 State state() { return g_state; }
+uint32_t clientEpoch() { return g_clientEpoch; }
 bool connected() { return g_state == State::CONNECTED; }
 bool live() { return connected() && g_live; }
 bool secured() { return connected() && g_secured; }

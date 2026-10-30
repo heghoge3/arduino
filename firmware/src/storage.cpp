@@ -8,6 +8,7 @@
 
 #include "pins.h"
 #include "hike_files.h"
+#include "blacklist_defaults.h"
 using hikefiles::pathsForHike;
 
 namespace storage {
@@ -134,7 +135,7 @@ bool appendPoint(const proto::Point& p, const CsvExtra& extra) {
   fmtScaled(tr, sizeof(tr), p.tempRaw100, 100, 2, p.tempRaw100 == proto::NA16);
   fmtScaled(tc, sizeof(tc), p.tempCorr100, 100, 2, p.tempCorr100 == proto::NA16);
   fmtScaled(hd, sizeof(hd), p.hdop10, 10, 1, p.hdop10 == proto::HDOP_NA);
-  const char* src = p.src == 1 ? "gps" : (p.src == 2 ? "pdr" : (p.src == proto::SRC_PAUSE ? "pause" : "none"));
+  const char* src = p.startAnchor ? "start" : p.src == 1 ? "gps" : (p.src == 2 ? "pdr" : (p.src == proto::SRC_PAUSE ? "pause" : "none"));
   char line[256];
   int n = snprintf(line, sizeof(line), "%s,%.7f,%.7f,%s,%u,%s,%.1f,%.1f,%d,%u,%s,%s,%.2f,%.2f,%s,%.3f,%.1f,%lu,%.1f,%s,",
                    ts, p.lat7 / 1e7, p.lon7 / 1e7, altG, p.sats, hd, p.speed10 / 10.0, extra.courseDeg, p.spoof ? 1 : 0,
@@ -181,6 +182,18 @@ uint32_t lastPointTime() {
   proto::Point p;
   uint32_t n = pointCount();
   return n && readPoint(n - 1, p) ? p.time : 0;
+}
+
+void forEachPoint(void (*visit)(const proto::Point&)) {
+  if (g_sd) {
+    File f=SD.open(g_trackBin,FILE_READ); if (!f) return;
+    uint8_t bytes[proto::POINT_SIZE]; proto::Point p{};
+    while (f.read(bytes,sizeof(bytes))==sizeof(bytes)) { if (proto::decodePoint(bytes,sizeof(bytes),p)) visit(p); }
+    f.close();
+  } else {
+    uint32_t first=g_ramPointCount>RAM_POINTS?g_ramPointCount-RAM_POINTS:0;
+    for (uint32_t i=first;i<g_ramPointCount;i++) { proto::Point p{}; if (readPoint(i,p)) visit(p); }
+  }
 }
 
 bool appendMark(const proto::Mark& m) {
@@ -317,25 +330,7 @@ bool loadBlacklist(proto::BlEntry* out, uint8_t& n) {
   // Простой формат: [[lat,lon,radius],...] — разбираем числа подряд
   String s = f.readString();
   f.close();
-  const char* p = s.c_str();
-  while (*p && n < proto::MAX_BLACKLIST) {
-    while (*p && *p != '[') p++;
-    if (!*p) break;
-    p++;
-    if (*p == '[') continue;  // внешняя скобка
-    char* end;
-    double lat = strtod(p, &end);
-    if (end == p || *end != ',') break;
-    p = end + 1;
-    double lon = strtod(p, &end);
-    if (end == p || *end != ',') break;
-    p = end + 1;
-    long r = strtol(p, &end, 10);
-    if (end == p) break;
-    p = end;
-    out[n++] = proto::BlEntry{(int32_t)lround(lat * 1e7), (int32_t)lround(lon * 1e7), (uint16_t)r};
-  }
-  return true;
+  return blacklistdefaults::parse(s.c_str(),out,n);
 }
 
 bool saveBlacklist(const proto::BlEntry* in, uint8_t n) {

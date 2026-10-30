@@ -38,6 +38,7 @@ uint32_t pointCount();
 bool readPoint(uint32_t index, proto::Point& out);
 uint32_t firstPointSince(uint32_t utc);
 uint32_t lastPointTime();
+void forEachPoint(void (*visit)(const proto::Point&));
 
 bool appendMark(const proto::Mark& m);
 uint32_t markCount();

@@ -9,6 +9,8 @@
 #include <set>
 #include "hike_files.h"
 #include "pdr.h"
+#include "walk_distance.h"
+#include "blacklist_defaults.h"
 #include "compass.h"
 #include "inertial.h"
 
@@ -911,6 +913,85 @@ void test_inertial_unknown_and_discontinuity() {
   TEST_ASSERT_FALSE(s.nav.aligned());
 }
 
+
+void test_economy_distance_without_gps_or_double_chord() {
+  walking::Distance d; d.reset();
+  d.update(100,0,true,true,60,30,1,.75);
+  d.update(110,130,true,true,60.0009,30,1,.75);
+  double first=d.meters(); TEST_ASSERT_DOUBLE_WITHIN(1,100,first);
+  d.update(120,230,true,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,first+75,d.meters());
+  d.update(125,250,true,true,60.0018,30,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,first+90,d.meters()); // no GPS chord after loss
+  double before=d.meters();
+  d.update(126,1000,false,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,before,d.meters());
+  d.update(127,1000,true,true,61,31,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,before,d.meters()); // no car transfer on resume
+  d.update(128,5,true,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,before,d.meters()); // counter reset is not 2^32 steps
+  d.update(129,15,true,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,before+7.5,d.meters());
+  walking::Distance noPosition; noPosition.reset();
+  noPosition.update(100,40,true,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,30,noPosition.meters());
+}
+void test_final_commands_and_start_packet() {
+  uint8_t temp[]={proto::VERSION,proto::CMD_TEMP_OFFSET,0xA2,0xFE};
+  proto::Command c{};
+  TEST_ASSERT_EQUAL(proto::ACK_OK,proto::decodeCommand(temp,sizeof(temp),c));
+  TEST_ASSERT_EQUAL(-350,c.altDm);
+  temp[2]=0xFF;temp[3]=0x7F;
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS,proto::decodeCommand(temp,sizeof(temp),c));
+  uint8_t start[14]={proto::VERSION,proto::CMD_SET_START};
+  uint32_t id=1793000000; int32_t lat=601000000,lon=303000000;
+  memcpy(start+2,&id,4);memcpy(start+6,&lat,4);memcpy(start+10,&lon,4);
+  TEST_ASSERT_EQUAL(proto::ACK_OK,proto::decodeCommand(start,sizeof(start),c));
+  TEST_ASSERT_EQUAL(lat,c.lat7); TEST_ASSERT_EQUAL(lon,c.lon7);
+  lat=910000000;memcpy(start+6,&lat,4);
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS,proto::decodeCommand(start,sizeof(start),c));
+  proto::Point point{}; point.startAnchor=true; point.spoof=true; point.steps=123;
+  uint8_t bytes[proto::POINT_SIZE];proto::encodePoint(point,bytes,sizeof(bytes));
+  TEST_ASSERT_EQUAL(0x0C,bytes[14]);
+  proto::Point decoded{}; TEST_ASSERT_TRUE(proto::decodePoint(bytes,sizeof(bytes),decoded));
+  TEST_ASSERT_TRUE(decoded.startAnchor); TEST_ASSERT_TRUE(decoded.spoof); TEST_ASSERT_EQUAL(123,decoded.steps);
+  proto::Info info{}; info.hasSettings=true;info.tempOffset100=-350;info.strideCm=82;
+  uint8_t packet[128];size_t n=proto::encodeInfo(info,packet,sizeof(packet));
+  TEST_ASSERT_EQUAL(33,n); TEST_ASSERT_EQUAL(0xA2,packet[n-4]);TEST_ASSERT_EQUAL(82,packet[n-2]);
+}
+void test_blacklist_defaults_and_observed_false_position() {
+  proto::BlEntry parsed[proto::MAX_BLACKLIST];uint8_t count=0;
+  TEST_ASSERT_TRUE(blacklistdefaults::parse("[\n  [60.0346000,30.5693000,5000],\n [60.1161000,31.3864000,2250]\n]",parsed,count));
+  TEST_ASSERT_EQUAL(2,count); TEST_ASSERT_EQUAL(601161000,parsed[1].lat7);TEST_ASSERT_EQUAL(2250,parsed[1].radiusM);
+  TEST_ASSERT_FALSE(blacklistdefaults::parse("[[NaN,30,5000]]",parsed,count));
+  TEST_ASSERT_FALSE(blacklistdefaults::parse("[[60,30,0]]",parsed,count));
+  proto::BlEntry known={601161000,313864000,1000};
+  TEST_ASSERT_TRUE(blacklistdefaults::migrate(known)); TEST_ASSERT_EQUAL(5000,known.radiusM);
+  known.radiusM=2250; TEST_ASSERT_FALSE(blacklistdefaults::migrate(known));
+  proto::BlEntry custom={601000000,300000000,1000};TEST_ASSERT_FALSE(blacklistdefaults::migrate(custom));
+  double lat[]={60.1161},lon[]={31.3864};uint16_t radius[]={5000};
+  spoof::Detector detector;detector.setBlacklist(lat,lon,radius,1);
+  TEST_ASSERT_TRUE(detector.blacklisted(60.11741,31.36770));
+  spoof::Input input{};input.now=100;input.lat=60.11741;input.lon=31.36770;
+  for(unsigned t=100;t<140;t++) {input.now=t;auto r=detector.check(input);TEST_ASSERT_TRUE(r.spoof);TEST_ASSERT_BITS_HIGH(spoof::R_BLACKLIST,r.mask);}
+  input.lat=NAN; TEST_ASSERT_TRUE(detector.check(input).spoof);
+}
+void test_recovery_requires_coherent_positions() {
+  double la[]={60},lo[]={30};uint16_t radius[]={1000};
+  spoof::Detector detector;detector.setBlacklist(la,lo,radius,1);
+  spoof::Input input{};input.now=100;input.lat=60;input.lon=30;
+  TEST_ASSERT_TRUE(detector.check(input).spoof);
+  input.lon=31;
+  for (unsigned t=101;t<131;t++) {
+    input.now=t;input.lat=60+(t-101)*.001; // no trusted reference, fake 100 m/s drift
+    TEST_ASSERT_TRUE(detector.check(input).spoof);
+  }
+  input.lat=61;
+  bool clean=false;
+  for(unsigned t=131;t<146;t++) {input.now=t;clean=!detector.check(input).spoof;}
+  TEST_ASSERT_TRUE(clean);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   loadVectors();
@@ -947,6 +1028,10 @@ int main(int, char**) {
   RUN_TEST(test_inertial_unknown_and_discontinuity);
   RUN_TEST(test_inertial_upside_down_left_turn_and_bias);
   RUN_TEST(test_pdr_commands_validation);
+  RUN_TEST(test_economy_distance_without_gps_or_double_chord);
+  RUN_TEST(test_final_commands_and_start_packet);
+  RUN_TEST(test_blacklist_defaults_and_observed_false_position);
+  RUN_TEST(test_recovery_requires_coherent_positions);
   RUN_TEST(test_delete_archived_hike_files);
   RUN_TEST(test_log_vector);
   RUN_TEST(test_log_ring);

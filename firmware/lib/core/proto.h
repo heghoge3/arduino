@@ -56,6 +56,9 @@ enum CmdCode : uint8_t {
   CMD_NEW_HIKE = 0x15,
   CMD_DELETE_HIKE = 0x16,
   CMD_PDR_SETTINGS = 0x17,
+  CMD_TEMP_OFFSET = 0x18,
+  CMD_SET_START = 0x19,
+  CMD_BLACKLIST_V2=0x1A,
 };
 
 enum AckResult : uint8_t {
@@ -152,6 +155,9 @@ struct Info {
   uint16_t gpsPulseS, beaconS;
   uint8_t nChecks;
   Check checks[MAX_CHECKS];
+  bool hasSettings=false;
+  int16_t tempOffset100=0;
+  uint16_t strideCm=75;
 };
 
 struct Mark {
@@ -168,6 +174,7 @@ struct Point {
   int32_t lat7, lon7;
   uint8_t src;
   bool spoof;
+  bool startAnchor = false;
   uint8_t spoofMask;
   int32_t spoofLat7, spoofLon7;
   int16_t tempRaw100, tempCorr100;

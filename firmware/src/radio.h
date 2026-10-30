@@ -11,6 +11,7 @@ namespace radio {
 enum class State : uint8_t { OFF, BEACON, WINDOW, CONNECTED };
 
 State state();
+uint32_t clientEpoch();
 bool connected();
 bool live();            // живой сеанс: STATUS раз в секунду
 bool secured();         // связь зашифрована и телефон сопряжён — можно слать данные

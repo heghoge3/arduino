@@ -545,6 +545,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     fun firstMarkSince(sinceSec: Long): Int = markList.indexOfFirst { it.tsUtcMs >= sinceSec * 1000 }.let { if (it < 0) markList.size else it }
 
     private fun srcCode(s: PositionSource) = when (s) {
+        PositionSource.START -> 4
         PositionSource.PAUSE -> 3
         PositionSource.NONE -> 0
         PositionSource.GPS -> 1
@@ -577,6 +578,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             is Cmd.CalibAlt -> {}
             is Cmd.CalibCompass -> {}
             is Cmd.PdrSettings -> {}
+            is Cmd.TemperatureOffset, is Cmd.SetStart -> return Proto.ACK_UNSUPPORTED
             is Cmd.Blacklist -> blacklist = cmd.points
             Cmd.GetInfo, is Cmd.SyncTrack, is Cmd.SyncMarks, is Cmd.SyncLog -> {} // ответы шлёт транспорт
             is Cmd.SetDebug -> debug = cmd.on

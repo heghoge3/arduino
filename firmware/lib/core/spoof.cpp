@@ -11,6 +11,7 @@ double distanceM(double lat1, double lon1, double lat2, double lon2) {
   double dLon = (lon2 - lon1) * k;
   double a = sin(dLat / 2) * sin(dLat / 2) +
              cos(lat1 * k) * cos(lat2 * k) * sin(dLon / 2) * sin(dLon / 2);
+  a=fmax(0,fmin(1,a));
   return 2 * R * atan2(sqrt(a), sqrt(1 - a));
 }
 
@@ -21,9 +22,13 @@ void Detector::setBlacklist(const double* lat, const double* lon, const uint16_t
     blLon_[i] = lon[i];
     blR_[i] = radiusM[i];
   }
+  if (lastGoodValid_ && blacklisted(lastGoodLat_,lastGoodLon_)) {
+    lastGoodValid_=false;stillValid_=false;episode_=true;cleanCount_=0;
+  }
 }
 
 void Detector::setPhone(double lat, double lon, float accuracyM, uint32_t time) {
+  if (!isfinite(lat)||!isfinite(lon)||lat < -90||lat>90||lon < -180||lon>180||!isfinite(accuracyM)||accuracyM<=0||blacklisted(lat,lon)) { phoneValid_=false; return; }
   phoneValid_ = true;
   phoneLat_ = lat;
   phoneLon_ = lon;
@@ -44,6 +49,9 @@ bool Detector::blacklisted(double lat, double lon) const {
 
 Result Detector::check(const Input& in) {
   uint8_t mask = 0;
+  if (!isfinite(in.lat)||!isfinite(in.lon)||in.lat < -90||in.lat>90||in.lon < -180||in.lon>180) {
+    episode_=true; cleanCount_=0; return {true,R_JUMP};
+  }
 
   // 1. Чёрный список
   for (size_t i = 0; i < blN_; i++) {
@@ -87,7 +95,7 @@ Result Detector::check(const Input& in) {
     stillLon_ = in.lon;
     stillTime_ = in.now;
     stillSteps_ = in.steps;
-  } else if (in.now - stillTime_ >= cfg_.accelWindowS && in.steps - stillSteps_ >= cfg_.stepsWhileStill) {
+  } else if (in.now >= stillTime_ && in.steps >= stillSteps_ && in.now - stillTime_ >= cfg_.accelWindowS && in.steps - stillSteps_ >= cfg_.stepsWhileStill) {
     mask |= R_ACCEL;
   }
 
@@ -105,7 +113,9 @@ Result Detector::check(const Input& in) {
   } else if (episode_) {
     // Один чистый фикс между ложными не должен попадать в трек и становиться опорной точкой.
     // После долгого перерыва подтверждение начинаем заново, а не считаем время без сигнала чистым.
-    if (!cleanCount_ || in.now < cleanLast_ || in.now - cleanLast_ > 3) {
+    if (!cleanCount_ || in.now < cleanLast_ || in.now - cleanLast_ > 3 ||
+        distanceM(cleanLat_,cleanLon_,in.lat,in.lon)>30+3.5*(in.now-cleanSince_)) {
+      cleanLat_=in.lat; cleanLon_=in.lon;
       cleanSince_ = in.now;
       cleanCount_ = 1;
     } else if (in.now > cleanLast_ && cleanCount_ < 255) {

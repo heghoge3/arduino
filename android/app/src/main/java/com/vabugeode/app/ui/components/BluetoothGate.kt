@@ -30,15 +30,24 @@ import com.vabugeode.app.ui.theme.Palette
 /** Разрешения для работы с гаджетом: поиск и подключение по Bluetooth, геолокация телефона. */
 fun blePermissions(): Array<String> =
     if (Build.VERSION.SDK_INT >= 31) {
-        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION)
+        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
     } else {
-        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
-fun hasBlePermissions(ctx: Context) =
-    blePermissions().all { ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED }
+fun hasBlePermissions(ctx: Context): Boolean {
+    fun granted(permission:String)=ContextCompat.checkSelfPermission(ctx,permission)==PackageManager.PERMISSION_GRANTED
+    val location=granted(Manifest.permission.ACCESS_FINE_LOCATION) ||
+        (Build.VERSION.SDK_INT>=31 || Build.VERSION.SDK_INT<29) && granted(Manifest.permission.ACCESS_COARSE_LOCATION)
+    return location && (Build.VERSION.SDK_INT<31 ||
+        granted(Manifest.permission.BLUETOOTH_SCAN)&&granted(Manifest.permission.BLUETOOTH_CONNECT))
+}
 
-fun bluetoothOn(ctx: Context) = ctx.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
+fun bluetoothOn(ctx: Context): Boolean {
+    if(Build.VERSION.SDK_INT>=31 && ContextCompat.checkSelfPermission(ctx,Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED) return false
+    return try { ctx.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled==true }
+    catch (_:SecurityException) {false}
+}
 
 /**
  * Проверяет разрешения и включённый Bluetooth. Всё в порядке — показывает content,

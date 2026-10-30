@@ -136,7 +136,7 @@ fun HomeScreen(
             StatTile(
                 Icons.Filled.Speed, "Скорость", Fmt.num(if (st.mode == PowerMode.MOVING) st.gps.speedKmh else 0.0, 1), "км/ч", Palette.Cold,
                 Modifier.weight(1f),
-                sub = if (st.headingDeg.isFinite()) "компас ${Fmt.compass(st.headingDeg)} ${st.headingDeg.toInt()}°" else "компас: нет направления",
+                sub = if (st.positionSource == com.vabugeode.app.model.PositionSource.GPS && st.gps.speedKmh >= 1) "курс GPS ${Fmt.compass(st.gps.courseDeg)} ${st.gps.courseDeg.toInt()}°" else "курс GPS неизвестен",
                 sub2 = if (st.mode == PowerMode.MOVING) "в движении" else "стоим",
             )
         }

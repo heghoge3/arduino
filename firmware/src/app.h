@@ -8,9 +8,9 @@
 #include "sensors.h"
 #include "spoof.h"
 #include "steps.h"
-#include "pdr.h"
+#include "walk_distance.h"
 
-constexpr uint32_t PERSIST_MAGIC = 0x56424735;  // «VBG5»: счисление по шагам
+constexpr uint32_t PERSIST_MAGIC = 0x56424736;  // «VBG6»: экономный режим и ручной старт
 constexpr uint8_t CAMP_BUF = 15;                // записей на стоянке до сброса на SD
 
 // Настройки (NVS): меняются командами с телефона
@@ -25,6 +25,7 @@ struct Settings {
   bool baroCalibrated;
   bool debug;           // подробный журнал (отладка): по умолчанию включён на первые походы
   float strideM, headingOffset;
+  int16_t tempOffset100;
   bool compassInverted;
 };
 
@@ -40,8 +41,9 @@ struct Persist {
   logic::Alerts alerts;
   spoof::Detector spoof;
   steps::Detector stepDet;
-  pdr::Tracker pdr;
-  bool pdrEstimated = false;
+  walking::Distance distance;
+  bool startAnchor=false;
+  double startLat=0,startLon=0;
 
   // Последняя достоверная позиция (для записи на стоянке и меток)
   bool haveGood;

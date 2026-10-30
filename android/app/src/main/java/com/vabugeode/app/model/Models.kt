@@ -16,6 +16,7 @@ enum class PowerMode(val title: String) {
 /** Источник позиции точки трека. */
 enum class PositionSource(val title: String) {
     GPS("GPS"),
+    START("Старт задан"),
     PDR("По шагам"),
     PAUSE("GPS выкл"),   // GPS выключен кнопкой (переезд): датчики пишутся, координат нет
     NONE("Нет"),

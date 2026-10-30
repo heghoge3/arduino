@@ -12,7 +12,6 @@
 #include "config.h"
 #include "pins.h"
 #include "compass.h"
-#include "inertial.h"
 
 namespace sensors {
 
@@ -29,15 +28,13 @@ Adafruit_BME280 bme;
 Adafruit_INA219 ina(ADDR_INA);
 Presence g_pres{};
 float g_seaLevel = DEF_SEA_LEVEL_HPA;
+float g_temperatureOffset=0;
 compass::Calibration g_compassCal;
 compass::Recorder g_compassRecorder;
 bool g_calibrating = false;
 uint32_t g_calStarted = 0, g_headingAt = 0;
 float g_heading = NAN;
-inertial::Navigator g_navigation;
-bool g_gyroRunning = false;
-RTC_DATA_ATTR uint32_t g_gyroBiasMagic = 0;
-RTC_DATA_ATTR float g_savedGyroBias[3] = {};
+bool g_gyroRunning=false;
 
 uint8_t readReg(uint8_t addr, uint8_t reg) {
   Wire.beginTransmission(addr);
@@ -58,9 +55,9 @@ void writeReg(uint8_t addr, uint8_t reg, uint8_t v) {
 void mpuInit() {
   writeReg(ADDR_MPU, 0x6B, 0x00);  // PWR_MGMT_1: проснуться
   delay(5);
-  writeReg(ADDR_MPU, 0x6C, 0x00);  // все оси во время работы
+  writeReg(ADDR_MPU, 0x6C, 0x07);  // экономный режим: гироскоп выключен
   writeReg(ADDR_MPU, 0x1B, 0x08);  // GYRO_CONFIG: ±500 °/с
-  g_gyroRunning = true;
+  g_gyroRunning = false;
   writeReg(ADDR_MPU, 0x1A, 0x03);  // CONFIG: DLPF 44 Гц
   writeReg(ADDR_MPU, 0x1C, 0x00);  // ACCEL_CONFIG: ±2 g
   writeReg(ADDR_MPU, 0x38, 0x00);  // прерывания выкл, пока не спим
@@ -115,9 +112,6 @@ bool i2cProbe(uint8_t addr) {
 
 void begin(bool coldBoot) {
   Wire.begin(PIN_SDA, PIN_SCL, 400000);
-  g_navigation.reset();
-  if (coldBoot) g_gyroBiasMagic=0;
-  if (g_gyroBiasMagic==0x47595231) g_navigation.restoreBias(g_savedGyroBias);
 #ifdef FAKE_SENSORS
   g_pres = Presence{true, true, true, true, i2cProbe(ADDR_OLED), true, 0x76, ADDR_QMC, 0x60};
   (void)coldBoot;
@@ -137,9 +131,8 @@ void begin(bool coldBoot) {
     writeReg(ADDR_QMC, 0x09, 0x00);
   }
   if (g_pres.compass && g_pres.compassAddr == ADDR_QMC_P) {
-    // QMC5883P: ±2 G, set/reset включён; normal mode, 10 Гц.
-    writeReg(ADDR_QMC_P, 0x0B, 0x0C);
-    writeReg(ADDR_QMC_P, 0x0A, 0x01);
+    // Экономный режим: магнитометр не нужен для GPS/шагов.
+    writeReg(ADDR_QMC_P, 0x0A, 0x00);
     Preferences prefs;
     if (prefs.begin("compass", true)) {
       if (prefs.getBytesLength("cal") == sizeof(g_compassCal)) prefs.getBytes("cal", &g_compassCal, sizeof(g_compassCal));
@@ -192,6 +185,7 @@ Env readEnv() {
   if (heat < 0 || isnan(heat)) heat = 0;
   e.tempCorr = e.tempRaw - heat;
 #endif
+  e.tempCorr += g_temperatureOffset;
   e.altBaro = 44330.0f * (1.0f - powf(e.pressHpa / g_seaLevel, 1.0f / 5.255f));
   return e;
 }
@@ -277,22 +271,6 @@ bool readMotionSample(MotionSample& s) {
   return true;
 #endif
 }
-void feedNavigation(const MotionSample& s,uint32_t steps,uint32_t ms) {
-  if (!s.gyro) { resetNavigation(); return; }
-  g_navigation.feed(s.ax,s.ay,s.az,s.gx,s.gy,s.gz,steps,ms);
-  if (g_navigation.copyBias(g_savedGyroBias)) g_gyroBiasMagic=0x47595231;
-}
-void offerNavigationGps(double lat,double lon,uint32_t steps,uint32_t ms) {
-  if (g_navigation.offerGps(lat,lon,steps,ms)) LOGD(M_SENS,"направление ходьбы уточнено по GPS");
-}
-float travelHeading() { return g_navigation.heading(millis()); }
-uint8_t navigationState() { return g_navigation.state(millis()); }
-bool navigationKeepAwake() { return g_navigation.keepAwake(millis()); }
-void resetNavigation() {
-  g_navigation.reset();
-  if (g_gyroBiasMagic==0x47595231) g_navigation.restoreBias(g_savedGyroBias);
-}
-
 void pollCompass(float offset, bool inverted) {
 #ifndef FAKE_SENSORS
   if (g_calibrating && millis() - g_calStarted > 180000) {
@@ -405,6 +383,8 @@ void clearMotion() {
   }
 #endif
 }
+
+void setTemperatureOffset(int16_t hundredths) { g_temperatureOffset=hundredths/100.0f; }
 
 void setSeaLevel(float hpa) { g_seaLevel = hpa; }
 float seaLevel() { return g_seaLevel; }

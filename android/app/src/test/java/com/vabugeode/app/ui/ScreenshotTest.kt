@@ -9,6 +9,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.AnnotatedString
 import com.vabugeode.app.App
 import com.vabugeode.app.ui.theme.VabuTheme
 import org.junit.Before
@@ -110,19 +115,36 @@ class ScreenshotTest {
         val vm = AppViewModel(RuntimeEnvironment.getApplication())
         vm.repo.use(com.vabugeode.app.transport.NoTransport)
         vm.repo.compassState.value = 3
-        vm.repo.info.value = com.vabugeode.app.model.DeviceInfo("vabuGEOde", "ESP32-S3", "0.1.15", 10, 7600, 7500, "GPS", emptyList())
-        vm.repo.navigationState.value = 0
+        vm.repo.info.value = com.vabugeode.app.model.DeviceInfo("vabuGEOde", "ESP32-S3", "0.1.16", 10, 7600, 7500, "GPS", emptyList())
+        vm.repo.navigationState.value = 19
         compose.setContent { VabuTheme {
             androidx.compose.foundation.layout.Column(
                 androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
             ) { com.vabugeode.app.ui.screens.CompassPanel(vm) }
         } }
         shot("11_compass_settings")
-        compose.onNodeWithText("Готов к приблизительной записи без GPS").assertExists()
+        compose.onNodeWithText("GPS И ШАГИ").assertExists()
         compose.onNodeWithText("Сохранить калибровку").assertDoesNotExist()
         compose.onNodeWithText("Дополнительные настройки").performClick()
         shot("12_navigation_advanced")
         compose.onNodeWithText("Сохранить длину шага").assertExists()
+    }
+
+    @Test
+    fun manualStartFormValidatesCoordinates() {
+        compose.mainClock.autoAdvance=true
+        var result:Pair<Double,Double>?=null
+        compose.setContent { VabuTheme {
+            com.vabugeode.app.ui.screens.ManualStartForm("","",true,{},{} ) {lat,lon -> result=lat to lon}
+        } }
+        compose.onNodeWithText("Широта").performSemanticsAction(SemanticsActions.SetText) {it(AnnotatedString("91"))}
+        compose.onNodeWithText("Долгота").performSemanticsAction(SemanticsActions.SetText) {it(AnnotatedString("30.2"))}
+        compose.onNodeWithText("Задать старт").assertIsNotEnabled()
+        compose.onNodeWithText("Широта").performSemanticsAction(SemanticsActions.SetText) {it(AnnotatedString("60.1"))}
+        compose.onNodeWithText("Задать старт").assertIsEnabled()
+        shot("13_manual_start_form")
+        compose.onNodeWithText("Задать старт").performClick()
+        org.junit.Assert.assertEquals(60.1 to 30.2,result)
     }
 
     /** Вечер: после заката, идёт подмена GPS (сценарий, минута ~255). */

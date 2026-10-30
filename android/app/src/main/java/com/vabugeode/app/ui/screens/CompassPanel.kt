@@ -20,50 +20,39 @@ import kotlin.math.roundToInt
 fun CompassPanel(vm: AppViewModel) {
     val settings by vm.pdrSettings.collectAsStateWithLifecycle()
     val nav by vm.repo.navigationState.collectAsStateWithLifecycle()
-    val compass by vm.repo.compassState.collectAsStateWithLifecycle()
-    val status by vm.repo.status.collectAsStateWithLifecycle()
+    val offset by vm.repo.temperatureOffset100.collectAsStateWithLifecycle()
+    val busy by vm.repo.settingBusy.collectAsStateWithLifecycle()
     val link by vm.repo.link.collectAsStateWithLifecycle()
-    val info by vm.repo.info.collectAsStateWithLifecycle()
     val anchorMessage by vm.pdrAnchorMessage.collectAsStateWithLifecycle()
     var advanced by rememberSaveable { mutableStateOf(false) }
     var stride by rememberSaveable(settings) { mutableStateOf((settings.strideCm / 100.0).toString()) }
     val strideM = stride.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it in 0.30..1.50 }
-    val fw = info?.firmware?.split('.')?.mapNotNull { it.toIntOrNull() }.orEmpty()
-    val supported = fw.size == 3 && (fw[0] > 0 || fw[1] > 1 || (fw[1] == 1 && fw[2] >= 15))
-    val connected = link == LinkState.CONNECTED && supported
+    val connected = link==LinkState.CONNECTED && vm.repo.supportsEconomy()
+    var temperature by rememberSaveable(offset) { mutableStateOf(((offset ?: 0)/100.0).toString()) }
+    val correction=temperature.replace(',','.').toDoubleOrNull()?.takeIf { it.isFinite() && it in -20.0..20.0 }
     Panel(accent = Palette.Pdr) {
-        SectionLabel("Маршрут по шагам", color = Palette.Pdr)
-        Spacer(Modifier.height(6.dp))
-        Text("Автоматически. Держать горизонтально или выбирать переднюю сторону не нужно. Шаги считаются при любом положении корпуса.", style = MaterialTheme.typography.bodyMedium, color = Palette.Text)
-        Text("Перед входом в здание пройдите немного с нормальным GPS — обычно достаточно 10–20 метров. Трекер сам подстроит направление по ходьбе. Внутри нарисует приблизительный пунктир, после выхода поправит его по GPS, прошедшему проверку подмены.", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
-        Text(when {
-            !supported -> "Нужна прошивка 0.1.15 или новее"
-            nav == 0 -> "Готов к приблизительной записи без GPS"
-            nav == 14 -> "Ожидаю прогулку с достоверным GPS"
-            nav == 15 -> "Автоподстройка гироскопа: выполнится в короткий момент покоя"
-            nav == 16 -> "Ожидаю устойчивое направление ходьбы"
-            nav == 17 -> "Долго без GPS — ошибка накапливается"
-            else -> "Подключите гаджет для проверки готовности"
-        }, color = Palette.Pdr, style = MaterialTheme.typography.bodyMedium)
-        Text("Это грубая оценка, а не план помещений. Резкие перекладывания, развороты на месте и необычные движения могут исказить её. Если направление определить не удаётся, линия прервётся; шаги продолжат считаться. После долгой стоянки со сном может снова понадобиться GPS.", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
-        TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Скрыть дополнительные настройки" else "Дополнительные настройки") }
+        SectionLabel("GPS и шаги", color = Palette.Pdr)
+        Text("Экономный режим: гироскоп и компас выключены. Шаги считаются при любом положении корпуса, обучение не требуется.", color=Palette.Text)
+        Text("Без GPS сохраняются шаги и датчики. Когда достоверная позиция вернётся, привязки соединятся пунктиром. Пунктир не показывает повороты внутри здания; расстояние оценивается по шагам.", color=Palette.TextDim,style=MaterialTheme.typography.labelMedium)
+        if (nav!=19) Text("Обновите гаджет до прошивки 0.1.16",color=Palette.Pdr)
+        Text("Без GPS старт можно задать на вкладке «Карта» или по позиции телефона.",color=Palette.TextDim,style=MaterialTheme.typography.labelMedium)
+        OutlinedButton(enabled=connected&&!busy,onClick={vm.seedPdrFromPhone()}) { Text("Начало от телефона") }
+        anchorMessage?.let { Text(it,color=Palette.TextDim,style=MaterialTheme.typography.labelMedium) }
+        TextButton(onClick={advanced=!advanced}) { Text(if(advanced) "Скрыть дополнительные настройки" else "Дополнительные настройки") }
         if (advanced) {
-            OutlinedTextField(value = stride, onValueChange = { stride = it }, label = { Text("Длина одного шага, м (0,30–1,50)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, isError = strideM == null, modifier = Modifier.fillMaxWidth())
-            OutlinedButton(enabled = strideM != null, onClick = { vm.setPdrSettings((strideM!! * 100).roundToInt(), settings.headingOffset10, settings.inverted) }) { Text("Сохранить длину шага") }
-            Text("Позиция телефона может задать начало, но направление автоматического маршрута всё равно настраивается по ходьбе с GPS.", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
-            OutlinedButton(enabled = connected, onClick = { vm.seedPdrFromPhone() }) { Text("Начало от телефона") }
-            anchorMessage?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Palette.TextDim) }
-            HorizontalDivider(color = Palette.Outline)
-            Text("Дополнительный магнитный компас", color = Palette.Text)
-            Text("Для автоматического маршрута калибровка компаса не нужна. Здесь можно отдельно настроить его показания: нажать «Начать», 30–60 секунд вращать собранный корпус по всем трём осям вдали от металла и магнитов, затем положить платой компаса горизонтально и сохранить. Шаги на время этого теста не считаются.", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
-            Text(when (compass) { 0 -> "Компас откалиброван"; 13 -> "Калибровка идёт"; else -> "Компас не откалиброван" }, color = Palette.TextDim)
-            val heading = status?.headingDeg
-            if (heading != null && heading.isFinite()) Text("Магнитный компас: ${heading.roundToInt()}°", color = Palette.TextDim)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(enabled = connected && compass != 13, onClick = { vm.repo.calibrateCompass(true) }) { Text("Начать") }
-                OutlinedButton(enabled = connected && compass == 13, onClick = { vm.repo.calibrateCompass(false) }) { Text("Сохранить калибровку") }
-            }
+            OutlinedTextField(value=stride,onValueChange={stride=it},label={Text("Длина одного шага, м (0,30–1,50)")},
+                keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,isError=strideM==null,modifier=Modifier.fillMaxWidth())
+            OutlinedButton(enabled=strideM!=null,onClick={vm.setPdrSettings((strideM!!*100).roundToInt(),settings.headingOffset10,settings.inverted)}) { Text("Сохранить длину шага") }
+            Text("Сохраняется на телефоне и передаётся при подключении. Километраж по шагам приблизительный.",color=Palette.TextDim,style=MaterialTheme.typography.labelMedium)
         }
+    }
+    Panel(accent=Palette.Temp) {
+        SectionLabel("Поправка температуры")
+        Text("Прибавляется к показанию датчика. Например, если гаджет завышает на 3 °C, введите −3. Исходное показание сохраняется отдельно.",color=Palette.TextDim,style=MaterialTheme.typography.labelMedium)
+        OutlinedTextField(value=temperature,onValueChange={temperature=it},label={Text("Поправка, °C (−20…+20)")},
+            keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,isError=correction==null,modifier=Modifier.fillMaxWidth())
+        OutlinedButton(enabled=connected&&!busy&&correction!=null,onClick={vm.setTemperatureOffset((correction!!*10).roundToInt()*10)}) { Text("Сохранить на гаджете") }
+        Text("Действует на новые измерения и без телефона. Старый график не пересчитывается. Настраивайте по термометру рядом после стабилизации показаний.",color=Palette.TextDim,style=MaterialTheme.typography.labelMedium)
+        if(!connected) Text("Для изменения подключите гаджет с прошивкой 0.1.16",color=Palette.TextDim,style=MaterialTheme.typography.labelSmall)
     }
 }

@@ -19,6 +19,7 @@ const nmea::Parser& parser();
 bool takeNewFix();
 // Идёт ли NMEA (последнее предложение не старше 3 с)
 bool alive();
+bool fixFresh();
 // Секунд с включения
 uint32_t onSeconds();
 
