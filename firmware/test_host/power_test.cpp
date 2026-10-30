@@ -1,10 +1,25 @@
 #include "sensors.h"
 #include "logic.h"
+#include "gps_override.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
 
 int main() {
+  GpsOverride gps;
+  assert(!gps.wanted(false, false, 0));
+  gps.set(true, 100);
+  assert(gps.wanted(false, false, 101));  // на стоянке не выключается следующим тиком
+  assert(!gps.wanted(false, true, 102));  // защита аккумулятора важнее консоли
+  assert(!gps.wanted(false, false, 600100));
+  gps.set(false, 700000);
+  assert(!gps.wanted(true, false, 700001));
+  gps.clear();
+  assert(gps.wanted(true, false, 700002));
+  gps.set(true, UINT32_MAX - 100);
+  assert(gps.wanted(false, false, 100));
+  assert(!gps.wanted(false, false, 600000));
+  puts("PASS: manual GPS survives camp policy, expires across millis wrap and respects critical battery");
   sensors::Power p{true, 0.0f, 0.0f, 0};
   logic::PowerLogic policy;
   assert(!p.batteryKnown());

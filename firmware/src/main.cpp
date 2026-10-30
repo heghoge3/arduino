@@ -15,6 +15,7 @@
 #include "config.h"
 #include "dlog.h"
 #include "gps.h"
+#include "gps_override.h"
 #include "nmea.h"
 #include "pins.h"
 #include "proto.h"
@@ -36,6 +37,7 @@ RTC_DATA_ATTR uint8_t g_rtcBlob[sizeof(Persist)];
 Preferences g_prefs;
 bool g_storageReady = false;
 bool g_sdError = false;
+GpsOverride g_consoleGps;
 uint32_t g_bootMs = 0;
 uint32_t g_motionCheckUntil = 0;
 uint32_t g_awakeUntil = 0;       // не спать до (окно после включения и т. п.)
@@ -935,6 +937,7 @@ void secondTick() {
   bool wantGps = P.recording && (P.power.gpsContinuous((logic::GpsMode)S.gpsMode) ||
                                  (P.power.gpsPulsed((logic::GpsMode)S.gpsMode) &&
                                   P.pulse.update(N.now, N.fix, newFixThisSecond)));
+  wantGps = g_consoleGps.wanted(wantGps, P.power.critical(), ms);
   if (!wantGps) P.pulse.stop();
   gps::power(wantGps);
   N.gpsOn = gps::isOn();
@@ -1094,7 +1097,7 @@ void console() {
     // Кто-то сидит в мониторе порта — 10 мин не уходим в глубокий сон (иначе USB пропадёт)
     if ((int32_t)(millis() + 600000 - g_awakeUntil) > 0) g_awakeUntil = millis() + 600000;
     if (!strcmp(line, "help")) {
-      Serial.println("st — состояние; i2c — сканер шины; gps on|off|echo — GPS; pcas <тело> — команда модулю;"
+      Serial.println("st — состояние; i2c — сканер шины; gps on|off|auto|echo — GPS; pcas <тело> — команда модулю;"
                      " win — окно BLE; info — чип и SD; log — сбросить журнал на SD; debug on|off — подробный журнал");
       Serial.println("Проверки: sleep <с> — глубокий сон (USB пропадёт, монитор переоткрыть); jump <±с> — переставить"
                      " часы, как телефон; newhike — начать новый поход");
@@ -1121,9 +1124,16 @@ void console() {
         if (sensors::i2cProbe(a)) Serial.printf("I2C 0x%02X\n", a);
       }
     } else if (!strcmp(line, "gps on")) {
-      gps::power(true);
+      g_consoleGps.set(true, millis());
+      gps::power(!P.power.critical());
+      Serial.println(P.power.critical() ? "GPS выключен: критический заряд" : "GPS включён вручную на 10 мин; gps auto — автоматика");
     } else if (!strcmp(line, "gps off")) {
+      g_consoleGps.set(false, millis());
       gps::power(false);
+      Serial.println("GPS выключен вручную на 10 мин; gps auto — автоматика");
+    } else if (!strcmp(line, "gps auto")) {
+      g_consoleGps.clear();
+      Serial.println("GPS: автоматика восстановлена");
     } else if (!strcmp(line, "gps echo")) {
       static bool echo = false;
       echo = !echo;
