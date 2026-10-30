@@ -176,10 +176,10 @@ bool begin(bool cold) {
   g_present = first && readReg(probeReg) == 0xA5;
   writeReg(probeReg, saved);
   writeReg(REG_WP, 0x80);
-  if (!g_present && !cold && g_sysValid) {
-    // Проснулись, а DS1302 не ответил (контакт, сбой чтения): внутренние часы шли во сне — верим им,
-    // доверие прежнее. Иначе время откатилось бы на время сборки посреди похода
-    return false;
+  if (!cold && g_sysValid) {
+    // Внутренние часы идут во сне. Не заменяем их ни старым RTC, ни временем сборки:
+    // __TIME__ может быть в местном часовом поясе компьютера, а здесь нужен UTC.
+    return g_present;
   }
   if (!g_present) {
     g_trusted = false;
@@ -187,8 +187,8 @@ bool begin(bool cold) {
     setBase(buildTime());
     return false;
   }
-  if (!readClock(utc, halted) || utc < buildTime()) {
-    // Часы показывают прошлое (новый модуль, 2000 год) — точно не проверены
+  if (!readClock(utc, halted) || utc < 1700000000UL) {
+    // Отбрасываем дату нового модуля, но не сравниваем UTC с локальным временем сборки.
     halted = true;
     utc = buildTime();
   }
@@ -228,11 +228,14 @@ int32_t offerGps(uint32_t utc, bool spoofSuspected) {
   return delta;
 }
 
-void resync() {
-  if (!g_present) return;
+int32_t resync() {
+  if (!g_present || !g_trusted || readReg(REG_RAM0) != RAM_MAGIC) return 0;
   uint32_t utc;
   bool halted;
-  if (readClock(utc, halted) && !halted) setBase(utc);
+  if (!readClock(utc, halted) || halted || utc < 1700000000UL) return 0;
+  int32_t delta = static_cast<int32_t>(utc - now());
+  setBase(utc);
+  return delta;
 }
 
 }  // namespace clockx

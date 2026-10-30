@@ -80,7 +80,8 @@ int main() {
   assert(!contention);
   puts("PASS: new DS1302 detected, RAM preserved, charger off, no bus contention");
 
-  uint32_t utc = nmea::toUnix(2030, 10, 30, 12, 34, 56);
+  // Проверенное время может быть раньше __DATE__/__TIME__: локальная сборка не обязана быть в UTC.
+  uint32_t utc = nmea::toUnix(2024, 10, 30, 0, 34, 56);
   clockx::setFromPhone(utc);
   assert(clockx::trusted());
   assert(clockx::begin(true));
@@ -88,6 +89,28 @@ int main() {
   assert(clockx::now() == utc);  // чтение burst и запись всех байтов
   assert(!contention);
   puts("PASS: phone time survives restart and burst read");
+
+  fakeUtc = utc + 7;
+  assert(clockx::resync() == -7);
+  assert(clockx::now() == utc);
+  puts("PASS: RTC resync reports clock jump for recording deadlines");
+
+  fakeUtc += 60;
+  assert(clockx::begin(false));
+  assert(clockx::trusted());
+  assert(clockx::now() == utc + 60);
+  puts("PASS: wake keeps system time instead of stale RTC or build time");
+
+  // Сбой/остановка внешних часов во сне не отменяет уже проверенное системное время.
+  regs[0] |= 0x80;
+  fakeUtc += 60;
+  assert(clockx::begin(false));
+  assert(clockx::trusted());
+  assert(clockx::now() == utc + 120);
+  assert(clockx::resync() == 0);
+  assert(clockx::now() == utc + 120);
+  puts("PASS: halted RTC cannot overwrite trusted system time");
+  clockx::setFromPhone(utc);
 
   present = false;
   fakeUtc += 60;
@@ -99,4 +122,15 @@ int main() {
   assert(!clockx::rtcPresent());
   assert(!clockx::trusted());
   puts("PASS: disconnected DS1302 is not detected");
+
+  // Без метки доверия RTC не должен возвращать время сборки поверх синхронизации.
+  present = true;
+  regs[32] = 0;
+  assert(clockx::begin(true));
+  assert(!clockx::trusted());
+  fakeUtc += 3600;
+  time_t before = fakeUtc;
+  assert(clockx::resync() == 0);
+  assert(clockx::now() == before);
+  puts("PASS: untrusted RTC is not used for periodic resync");
 }

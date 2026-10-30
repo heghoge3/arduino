@@ -142,6 +142,7 @@ void onClockJump(int32_t d) {
   // Записанное с включения по неверным часам — туда же (иначе в приложении данные «из будущего»,
   // а докачка «с последней точки» пропускает новые). Телефон шлёт время первой командой, до докачки
   if ((d > 60 || d < -60) && g_shiftFromPoint != NO_SHIFT) {
+    ensureStorage();  // после сна SD ещё может быть не открыта: иначе старые точки не сдвинутся
     storage::shiftTimes(g_shiftFromPoint, g_shiftFromMark, d);
     proto::Point p;
     for (uint8_t i = 0; i < P.campN; i++) {
@@ -1007,7 +1008,8 @@ void secondTick() {
   }
   if (ms - g_lastResyncMs >= 600000) {
     g_lastResyncMs = ms;
-    clockx::resync();
+    int32_t delta = clockx::resync();
+    if (delta) onClockJump(delta);
   }
 
   watchState();
