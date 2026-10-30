@@ -1100,7 +1100,8 @@ void console() {
       Serial.println("st — состояние; i2c — сканер шины; gps on|off|auto|echo — GPS; pcas <тело> — команда модулю;"
                      " win — окно BLE; info — чип и SD; log — сбросить журнал на SD; debug on|off — подробный журнал");
       Serial.println("Проверки: sleep <с> — глубокий сон (USB пропадёт, монитор переоткрыть); jump <±с> — переставить"
-                     " часы, как телефон; newhike — начать новый поход; accel — ускорения MPU6050 в g");
+                     " часы, как телефон; newhike — начать новый поход; accel — ускорения MPU6050 в g;"
+                     " motion on|off — проверка детектора; motion — INT и регистры (сброс защёлки)");
     } else if (!strcmp(line, "log")) {
       uint32_t n = dlog::pending();
       flushLog();
@@ -1119,6 +1120,20 @@ void console() {
       Serial.printf("GPS вкл=%d фикс=%d %.6f,%.6f спутн=%u/%u HDOP=%.1f подмена=%d маска=0x%02X NMEA=%lu ошибок=%lu\n",
                     N.gpsOn, N.fix, N.lat, N.lon, N.satsUsed, N.satsView, N.hdop, N.spoof, N.spoofMask,
                     (unsigned long)gps::parser().sentences(), (unsigned long)gps::parser().checksumErrors());
+    } else if (!strcmp(line, "motion on")) {
+      rtc_gpio_deinit((gpio_num_t)PIN_MPU_INT);
+      pinMode(PIN_MPU_INT, INPUT);
+      Serial.println(sensors::armMotion() ? "Детектор движения включён; наклони MPU и введи motion" : "MPU6050 недоступен");
+    } else if (!strcmp(line, "motion off")) {
+      sensors::stopMotion();
+      Serial.println("Проверка движения выключена");
+    } else if (!strcmp(line, "motion")) {
+      int level = digitalRead(PIN_MPU_INT);  // до чтения INT_STATUS: оно сбросит защёлку
+      sensors::MotionStatus m{};
+      if (sensors::readMotion(m)) {
+        Serial.printf("MPU INT GPIO%d=%d MOT=%u ENABLE=0x%02X CFG=0x%02X PWR=0x%02X STATUS=0x%02X\n",
+                      PIN_MPU_INT, level, (m.status & 0x40) != 0, m.enabled, m.config, m.power, m.status);
+      } else Serial.println("MPU6050 недоступен");
     } else if (!strcmp(line, "accel")) {
       float ax, ay, az;
       if (sensors::readAccel(ax, ay, az)) {

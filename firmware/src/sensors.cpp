@@ -238,20 +238,45 @@ bool readAccel(float& ax, float& ay, float& az) {
 #endif
 }
 
+bool armMotion() {
+#ifndef FAKE_SENSORS
+  if (!g_pres.mpu) return false;
+  mpuInit();
+  // Сначала проверяем обычный motion detector без CYCLE/LP_WAKE 1,25 Гц.
+  // Редкие отсчёты могли пропускать короткое движение; экономию вернём после замеров.
+  delay(100);
+  writeReg(ADDR_MPU, 0x1C, 0x04);  // ACCEL_HPF 0,63 Гц
+  writeReg(ADDR_MPU, 0x1F, 20);    // MOT_THR: 40 мг (2 мг/LSB)
+  writeReg(ADDR_MPU, 0x20, 20);    // MOT_DUR: 20 мс
+  writeReg(ADDR_MPU, 0x37, 0x20);  // активный HIGH, защёлка до чтения INT_STATUS
+  delay(100);
+  readReg(ADDR_MPU, 0x3A);
+  writeReg(ADDR_MPU, 0x38, 0x40);  // MOT_INT
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool readMotion(MotionStatus& out) {
+#ifndef FAKE_SENSORS
+  if (!g_pres.mpu) return false;
+  out.enabled = readReg(ADDR_MPU, 0x38);
+  out.config = readReg(ADDR_MPU, 0x37);
+  out.power = readReg(ADDR_MPU, 0x6B);
+  out.status = readReg(ADDR_MPU, 0x3A);
+  return true;
+#else
+  (void)out;
+  return false;
+#endif
+}
+
+void stopMotion() { clearMotion(); }
+
 void prepareSleep() {
 #ifndef FAKE_SENSORS
-  if (g_pres.mpu) {
-    // Прерывание движения в циклическом режиме (порядок по InvenSense AN; проверить на железе):
-    writeReg(ADDR_MPU, 0x6B, 0x00);
-    writeReg(ADDR_MPU, 0x1C, 0x01);  // ACCEL_HPF 5 Гц — реагировать на изменение, не на гравитацию
-    writeReg(ADDR_MPU, 0x1F, 3);     // MOT_THR: ~96 мг
-    writeReg(ADDR_MPU, 0x20, 1);     // MOT_DUR: 1 мс
-    writeReg(ADDR_MPU, 0x37, 0x20);  // INT: активный HIGH, защёлка до чтения INT_STATUS
-    writeReg(ADDR_MPU, 0x38, 0x40);  // включить только MOT_INT
-    readReg(ADDR_MPU, 0x3A);         // сбросить старое
-    writeReg(ADDR_MPU, 0x6C, 0x07);  // LP_WAKE 1,25 Гц, гироскоп выкл
-    writeReg(ADDR_MPU, 0x6B, 0x28);  // CYCLE=1, датчик температуры выкл
-  }
+  armMotion();
   if (g_pres.ina) ina.powerSave(true);
 #endif
 }

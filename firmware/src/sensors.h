@@ -42,6 +42,12 @@ Power readPower();
 // Ускорение в g. false — MPU6050 не отвечает
 bool readAccel(float& ax, float& ay, float& az);
 
+// Проверка защёлкнутого прерывания движения без сна ESP32.
+bool armMotion();
+struct MotionStatus { uint8_t enabled, config, power, status; };
+bool readMotion(MotionStatus& out);  // чтение INT_STATUS сбрасывает защёлку
+void stopMotion();
+
 // Перед глубоким сном: MPU6050 в режим «будить при движении», остальное в сон
 void prepareSleep();
 // Сбросить защёлку прерывания движения (после пробуждения)
