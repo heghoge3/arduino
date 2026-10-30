@@ -2,6 +2,7 @@ package com.vabugeode.app.data
 
 import com.vabugeode.app.demo.DemoDevice
 import com.vabugeode.app.model.LinkState
+import com.vabugeode.app.model.BlacklistPoint
 import com.vabugeode.app.model.MarkType
 import com.vabugeode.app.transport.VirtualTransport
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,10 +21,24 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class VirtualLinkTest {
 
-    private class Rig(scope: TestScope) {
+    private class Rig(scope: TestScope, blacklist: List<BlacklistPoint> = emptyList()) {
         val dev = DemoDevice(scope.backgroundScope)
         val transport = VirtualTransport(scope.backgroundScope, dev)
-        val repo = ProtocolDeviceRepository(scope.backgroundScope, transport, emptyList())
+        val repo = ProtocolDeviceRepository(scope.backgroundScope, transport, blacklist)
+    }
+
+    @Test
+    fun blacklistRadiusUpdatesOfflineAndDuringConnection() = runTest {
+        val r = Rig(this, listOf(BlacklistPoint(60.1161, 31.3864, 1000, "Ложная точка")))
+        r.repo.setBlacklistRadius(0, 2000)
+        assertEquals(2000, r.repo.blacklist.value.single().radiusM)
+        r.repo.connect()
+        advanceTimeBy(5_000)
+        assertEquals(2000, r.dev.blacklist.single().radiusM)
+        r.repo.setBlacklistRadius(0, 3000)
+        advanceTimeBy(1_000)
+        assertEquals(3000, r.dev.blacklist.single().radiusM)
+        assertEquals(60.1161, r.dev.blacklist.single().lat, 0.000001)
     }
 
     /** Трек в приложении совпадает с «SD-картой» устройства: все точки, без дублей. */

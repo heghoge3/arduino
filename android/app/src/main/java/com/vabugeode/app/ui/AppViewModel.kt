@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vabugeode.app.astro.SunSchedule
 import com.vabugeode.app.data.LinkManager
+import com.vabugeode.app.data.BlacklistSettings
 import com.vabugeode.app.log.AppLog
 import com.vabugeode.app.log.LogText
 import com.vabugeode.app.data.PhoneLocation
@@ -66,15 +67,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val virtualTransport = VirtualTransport(viewModelScope, demo)
 
     private val dao = StoreDb.get(app).dao().also { AppLog.start(it) }
+    private val blacklistSettings = BlacklistSettings(app.getSharedPreferences("blacklist", 0))
 
     val repo = ProtocolDeviceRepository(
         viewModelScope, virtualTransport,
-        listOf(
+        blacklistSettings.load(listOf(
             BlacklistPoint(60.0346, 30.5693, 1000, "Лес у ручья Генерального"),
             BlacklistPoint(60.1161, 31.3864, 1000, "Ладога, о. Кареджи"),
-        ),
+        )),
         store = dao,
     )
+
+    fun setBlacklistRadius(index: Int, radiusM: Int) {
+        repo.setBlacklistRadius(index, radiusM)
+        blacklistSettings.save(repo.blacklist.value)
+    }
 
     private var bleScanner: GadgetScanner? = null
 

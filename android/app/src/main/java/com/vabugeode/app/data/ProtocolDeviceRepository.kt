@@ -347,6 +347,14 @@ class ProtocolDeviceRepository(
     }
     override fun findDevice() = send(Cmd.Find)
 
+    fun setBlacklistRadius(index: Int, radiusM: Int) {
+        require(index in blacklist.value.indices && radiusM in 100..50000)
+        blacklist.value = blacklist.value.mapIndexed { i, p -> if (i == index) p.copy(radiusM = radiusM) else p }
+        if (link.value == LinkState.CONNECTED) {
+            send(Cmd.Blacklist(blacklist.value.map { Cmd.Blacklist.Entry(it.lat, it.lon, it.radiusM) }))
+        }
+    }
+
     fun refreshInfo() = send(Cmd.GetInfo)
 
     private fun onConnected() = scope.launch {
