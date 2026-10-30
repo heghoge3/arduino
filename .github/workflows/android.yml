@@ -19,25 +19,18 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      # Debug-only signing key cache: preserve update compatibility while this cache exists.
-      # Production distribution still needs a durable signing key in repository secrets.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: vabugeode-debug-signing-v1
       - uses: gradle/actions/setup-gradle@v4
-      - name: Сборка и тесты
-        run: ./gradlew --no-daemon assembleDebug assembleHike testDebugUnitTest
+      - name: Тестовая сборка и тесты
+        run: ./gradlew --no-daemon --max-workers=4 assembleDebug testDebugUnitTest
+      - name: Подписанный APK с постоянным ключом
+        env:
+          ANDROID_SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
+        run: python3 tools/build_signed_apk.py
       - name: APK для телефона
         uses: actions/upload-artifact@v4
         with:
           name: vabugeode-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-      - name: APK Поход (устанавливается рядом со старой версией)
-        uses: actions/upload-artifact@v4
-        with:
-          name: vabugeode-hike-apk
-          path: android/app/build/outputs/apk/hike/app-hike.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
       - name: Скриншоты экранов
         if: always()
         uses: actions/upload-artifact@v4

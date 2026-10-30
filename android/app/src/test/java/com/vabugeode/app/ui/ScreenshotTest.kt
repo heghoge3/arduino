@@ -58,6 +58,9 @@ class ScreenshotTest {
     @Before
     fun moscowTime() {
         TimeZone.setDefault(TimeZone.getTimeZone("Europe/Moscow"))
+        // Demo screenshots choose their fixture explicitly; a fresh install now uses the real gadget.
+        androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getSharedPreferences("link", 0).edit().putString("source", "EMULATOR").commit()
         // Пример прогноза — чтобы на снимке было окошко погоды (в тесте интернета нет)
         androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
             .getSharedPreferences("weather", 0).edit()

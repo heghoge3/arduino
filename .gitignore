@@ -9,3 +9,9 @@ captures/
 # PlatformIO
 .pio/
 .vscode/
+# Private Android signing material must stay outside version control
+*.jks
+*.keystore
+*.p12
+keystore.properties
+signing.properties

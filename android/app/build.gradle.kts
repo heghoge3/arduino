@@ -5,6 +5,11 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val releaseStorePath = providers.environmentVariable("VABUGEODE_KEYSTORE_PATH").orNull
+val releaseStorePassword = providers.environmentVariable("VABUGEODE_STORE_PASSWORD").orNull
+val releaseKeyPassword = providers.environmentVariable("VABUGEODE_KEY_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("VABUGEODE_KEY_ALIAS").orElse("vabugeode").get()
+
 android {
     namespace = "com.vabugeode.app"
     compileSdk = 35
@@ -13,18 +18,25 @@ android {
         applicationId = "com.vabugeode.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.9.8"
+        versionCode = 22
+        versionName = "0.9.9"
         // Только ARM: телефоны (Infinix Note 30 — arm64). Уменьшает APK из-за нативной карты
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
+    signingConfigs {
+        create("release") {
+            releaseStorePath?.let { storeFile = file(it) }
+            storeType = "PKCS12"
+            storePassword = releaseStorePassword
+            keyPassword = releaseKeyPassword
+            keyAlias = releaseKeyAlias
+        }
+    }
+
     buildTypes {
-        create("hike") {
-            initWith(getByName("debug"))
-            applicationIdSuffix = ".hike"
-            matchingFallbacks += listOf("debug")
-            resValue("string", "app_name", "vabuGEOde Поход")
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -44,6 +56,17 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 }
+
+val requireReleaseSigning by tasks.registering {
+    doLast {
+        check(!releaseStorePath.isNullOrBlank() && file(releaseStorePath).isFile &&
+            !releaseStorePassword.isNullOrBlank() && !releaseKeyPassword.isNullOrBlank()) {
+            "Release signing is required. See docs/android-signing.md; unsigned/debug fallback is disabled."
+        }
+    }
+}
+tasks.matching { it.name == "validateSigningRelease" || it.name == "packageRelease" }
+    .configureEach { dependsOn(requireReleaseSigning) }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
