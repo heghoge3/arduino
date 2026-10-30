@@ -107,6 +107,9 @@ object AchievementCatalog {
         b("s1","Шаги сквозь тишину","Накопить 1 км по шагам на записанных участках без достоверного GPS.",signal,u,"offlineKm",1,"км")
         b("s2","Чистая линия","Записать непрерывный достоверный GPS-участок длиной 10 км.",signal,r,"gpsRunKm",10,"км")
         b("s3","Снова на связи со спутниками","10 раз дождаться достоверного GPS после записанного поиска от 5 минут с движением.",signal,r,"recoveries",10,"раз")
+        addAll(expeditionPublicCatalog())
     }
-    internal val all: List<Achievement> = public + hiddenCatalog()
+    internal val all: List<Achievement> = public + hiddenCatalog() + expeditionHiddenCatalog()
+    val total: Int get() = all.size
+    val secretCount: Int get() = all.count {it.secret}
 }

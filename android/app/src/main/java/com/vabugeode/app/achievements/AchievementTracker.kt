@@ -19,7 +19,7 @@ class AchievementTracker(private val dao: StoreDao, scope: CoroutineScope,
     private val lock=Mutex()
     private var known=emptyMap<String,AchievementUnlock>()
     private val seenNow=mutableSetOf<String>()
-    private data class Cached(val key:AchievementKey,val facts:TrailFacts)
+    private data class Cached(val key:AchievementKey,val facts:TrailFacts,val lastMarkMs:Long)
     private val cache=mutableMapOf<Pair<String,Long>,Cached>()
     @OptIn(FlowPreview::class)
     val job=scope.launch(Dispatchers.IO) {
@@ -38,7 +38,8 @@ class AchievementTracker(private val dao: StoreDao, scope: CoroutineScope,
                         if(cache[id]?.key!=key || latest[key.device]==key.hike){
                             val raw=dao.loadTrack(key.device,key.hike)
                             val track=excludeBlacklisted(raw,zones)
-                            cache[id]=Cached(key,TrailAnalyzer.analyze(track,dao.loadMarks(key.device,key.hike),key.hike*1000,zone,step,now()))
+                            val marks=excludeBlacklistedMarks(dao.loadMarks(key.device,key.hike),zones)
+                            cache[id]=Cached(key,TrailAnalyzer.analyze(track,marks,key.hike*1000,zone,step,now()),marks.maxOfOrNull{it.tsUtcMs}?:0L)
                         }
                     }
                     cache.keys.retainAll(keys.map{it.device to it.hike}.toSet())
@@ -59,7 +60,10 @@ class AchievementTracker(private val dao: StoreDao, scope: CoroutineScope,
                         val unchangedSelection=keys.map{it.device to it.hike}.toSet()==previousKeys.map{it.device to it.hike}.toSet()
                         val changed=if(initialized&&unchangedSelection)keys.filter{k->
                             val prev=previousKeys.find{it.device==k.device&&it.hike==k.hike}
-                            prev!=null&&k.last>prev.last&&k.last*1000 in (now()-120_000)..(now()+10_000)
+                            val point=prev!=null&&k.last>prev.last&&k.last*1000 in (now()-120_000)..(now()+10_000)
+                            val mark=prev!=null&&(k.marks>prev.marks||k.lastMark>prev.lastMark)&&
+                                (cache[k.device to k.hike]?.lastMarkMs?:0L) in (now()-120_000)..(now()+10_000)
+                            point||mark
                         }.map{it.device to it.hike}.toSet() else emptySet()
                         notices.tryEmit(AchievementEvent(fresh,changed))
                     }

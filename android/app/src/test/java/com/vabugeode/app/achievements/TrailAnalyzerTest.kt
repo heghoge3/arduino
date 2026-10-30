@@ -12,11 +12,11 @@ class TrailAnalyzerTest {
     private fun p(n:Int,steps:Int=n*100,src:PositionSource=PositionSource.NONE,lat:Double=60.0,lon:Double=30.0)=TrackPoint(
         start+n*60_000L,lat,lon,100.0,8,1.0,4.0,false,0,null,null,10.0,10.0,50.0,1013.0,100.0,4.0,80.0,80,steps,0.0,src,null)
     private fun analyze(t:List<TrackPoint>)=TrailAnalyzer.analyze(t,emptyList(),start,zone,nowMs=start+10*86_400_000)
-    @Test fun catalogueIsExactly100With80PublicAnd20Hidden(){
-        assertEquals(80,AchievementCatalog.public.size)
-        assertEquals(100,AchievementCatalog.all.size)
-        assertEquals(20,AchievementCatalog.all.count{it.secret})
-        assertEquals(100,AchievementCatalog.all.map{it.id}.distinct().size)
+    @Test fun catalogueIsExactly150With115PublicAnd35Hidden(){
+        assertEquals(115,AchievementCatalog.public.size)
+        assertEquals(150,AchievementCatalog.all.size)
+        assertEquals(35,AchievementCatalog.all.count{it.secret})
+        assertEquals(150,AchievementCatalog.all.map{it.id}.distinct().size)
         assertTrue(AchievementCatalog.all.all{it.target>0&&it.target.isFinite()})
     }
     @Test fun stepsWithoutGpsCountButGiveNoGeography(){

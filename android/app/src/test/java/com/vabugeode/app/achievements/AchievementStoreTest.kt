@@ -53,6 +53,20 @@ class AchievementStoreTest {
         val dao=db.dao();dao.putPoints(points("tracker"));dao.deleteHike("tracker",base)
         assertTrue(dao.points("tracker",base).isEmpty())
     }
+    @Test fun freshMarkCanTriggerALiveOpeningWithoutANewPoint()=runBlocking {
+        val dao=db.dao();dao.putPoints(points("tracker"));dao.includeAchievementHike("tracker",base)
+        val now=(base+1300)*1000
+        fun mark(id:Int,time:Long)=MarkRow("tracker",base,id,Codec.encode(MarkMsg(id,time,0,null,null,"")))
+        dao.putMarks((1..9).map{mark(it,base+it*60)})
+        val t=AchievementTracker(dao,scope,MutableStateFlow(emptyList()),MutableStateFlow(.75),{now})
+        val events=kotlinx.coroutines.channels.Channel<AchievementEvent>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+        val observer=scope.launch{t.notices.collect{events.send(it)}}
+        withTimeout(7000){t.ready.first{it}}
+        dao.putMarks(listOf(mark(10,now/1000-1)))
+        val event=withTimeout(7000){var event=events.receive();while(event.unlocked.none{it.id=="m1"})event=events.receive();event}
+        assertTrue(("tracker" to base) in event.liveHikes)
+        observer.cancelAndJoin();t.job.cancelAndJoin()
+    }
     @Test fun v3MigrationKeepsHikesAndStartsWithAllFlagsOff()=runBlocking {
         val context=RuntimeEnvironment.getApplication();val name="achievement-migration.db"
         context.deleteDatabase(name)

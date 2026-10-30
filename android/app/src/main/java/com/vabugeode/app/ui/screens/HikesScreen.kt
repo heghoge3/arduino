@@ -92,7 +92,7 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues, onAchievements:
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            Panel(Modifier.fillMaxWidth().clickable(onClick=onAchievements),accent=Palette.Warn,title="Достижения",titleRight="${achievements.count{it.unlocked}} / 100") {
+            Panel(Modifier.fillMaxWidth().clickable(onClick=onAchievements),accent=Palette.Warn,title="Достижения",titleRight="${achievements.count{it.unlocked}} / ${com.vabugeode.app.achievements.AchievementCatalog.total}") {
                 Text("Полевой архив →",style=MaterialTheme.typography.titleMedium,color=Palette.Warn)
                 Text("${achievements.count{it.new}} новых · маршруты, шаги, сезоны и тайны",style=MaterialTheme.typography.labelSmall,color=Palette.TextDim)
             }

@@ -158,7 +158,7 @@ class ScreenshotTest {
             com.vabugeode.app.achievements.AchievementProgress(it,it.target*.25)
         }
         compose.setContent {VabuTheme {com.vabugeode.app.ui.screens.AchievementCollection(all,true,androidx.compose.foundation.layout.PaddingValues())}}
-        compose.onNodeWithText("0 / 100").assertExists()
+        compose.onNodeWithText("0 / 150").assertExists()
         shot("14_achievements")
         compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction()).performScrollToNode(
             androidx.compose.ui.test.hasText("Секретный архив",ignoreCase=true))

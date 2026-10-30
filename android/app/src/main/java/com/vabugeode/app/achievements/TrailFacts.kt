@@ -18,7 +18,7 @@ data class TrailFacts(val values: Map<String,Double> = emptyMap(), val days: Map
 
 object TrailAnalyzer {
     private val additive = setOf("km","steps","movingHours","recordedHours","nightKm","nightHours","hikes",
-        "marks","found","sync","offlineKm","recoveries") + (0..7).map { "dir$it" }
+        "marks","found","sync","offlineKm","recoveries") + (0..7).map { "dir$it" } + ExpeditionAnalyzer.additiveKeys
     fun aggregate(parts: Collection<TrailFacts>): Map<String,Double> {
         val out=mutableMapOf<String,Double>(); val days=mutableMapOf<LocalDate,DayFacts>(); val sets=mutableMapOf<String,MutableSet<String>>()
         parts.forEach { f ->
@@ -39,6 +39,7 @@ object TrailAnalyzer {
         listOf("cells","markTypes","sunrises","sunsets").forEach {out[it]=(sets[it]?.size?:0).toDouble()}
         out["bothSun"]=(sets["sunrises"].orEmpty() intersect sets["sunsets"].orEmpty()).size.toDouble()
         out["directions"]=(0..7).count {(out["dir$it"]?:0.0)>=.1}.toDouble()
+        ExpeditionAnalyzer.aggregate(out,days,sets)
         return out
     }
     fun gps(p: TrackPoint) = p.src==PositionSource.GPS && !p.spoof && p.sats>=4 && p.hdop in .1..5.0 &&
@@ -59,6 +60,7 @@ object TrailAnalyzer {
         fun temp(p:TrackPoint)=p.tempCorr.isFinite()&&p.tempRaw.isFinite()&&p.tempCorr in -50.0..65.0&&p.tempRaw in -50.0..85.0
         fun pressure(p:TrackPoint)=p.pressureHpa.isFinite()&&p.pressureHpa in 300.0..1100.0
         val sunCache=mutableMapOf<String,SunCalc.SunTimes>()
+        val acceptedGps=mutableSetOf<Long>()
         var recordingRun=0.0; var gpsRun=0.0; var lost=0.0;var lostSteps=0.0;var firstGps:TrackPoint?=null
         var geographicAnchor:TrackPoint?=null
         var pressureStart:TrackPoint?=null;var stableStart:TrackPoint?=null;var stableLow=0.0;var stableHigh=0.0
@@ -73,6 +75,7 @@ object TrailAnalyzer {
             val good=gps(p) && (ref==null || age==null || age>180 ||
                 distanceM(ref.lat,ref.lon,p.lat,p.lon)<=age*15+10)
             if(good){
+                acceptedGps+=p.tsUtcMs
                 geographicAnchor=p
                 if(firstGps==null) firstGps=p
                 val a=firstGps!!
@@ -169,6 +172,7 @@ object TrailAnalyzer {
         v["hikeKm"]=v["km"]?:0.0
         v["hikes"]=if((v["km"]?:0.0)>=1 && (v["movingHours"]?:0.0)>=5.0/60)1.0 else 0.0
         finalizeHiddenFacts(v,track,filteredMarks,zone)
-        return TrailFacts(v,days,sets)
+        val expedition=ExpeditionAnalyzer.analyze(track,filteredMarks,acceptedGps,days,v,zone,stepM)
+        return TrailFacts(v+expedition.values,days,sets+expedition.sets)
     }
 }

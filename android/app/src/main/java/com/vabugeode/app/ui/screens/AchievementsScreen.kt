@@ -33,9 +33,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private fun Rarity.color():Color=when(this){
-    Rarity.COMMON->Palette.TextDim;Rarity.UNCOMMON->Palette.Good;Rarity.RARE->Palette.Geo
-    Rarity.EPIC->Palette.Pressure;Rarity.LEGENDARY->Palette.Warn
+internal fun Rarity.color():Color=when(this){
+    Rarity.COMMON->Color(0xFFA8ADB5);Rarity.UNCOMMON->Color(0xFF57D68D);Rarity.RARE->Color(0xFFFF7866)
+    Rarity.EPIC->Color(0xFFC080FF);Rarity.LEGENDARY->Color(0xFFFFC247)
 }
 private fun BadgeGroup.icon()=when(this){
     BadgeGroup.ROUTE->Icons.Default.Route;BadgeGroup.STEPS->Icons.Default.DirectionsWalk
@@ -58,23 +58,23 @@ internal fun AchievementCollection(all:List<AchievementProgress>,ready:Boolean,p
     var filter by rememberSaveable {mutableStateOf(0)}
     val public=all.filter{!it.badge.secret}.sortedWith(compareBy({it.badge.rarity.ordinal},{AchievementCatalog.public.indexOf(it.badge)}))
     val secrets=all.filter{it.badge.secret&&it.unlocked}.sortedBy{it.badge.rarity.ordinal}
-    val unlocked=all.count{it.unlocked};val secretTotal=20
+    val unlocked=all.count{it.unlocked};val secretTotal=AchievementCatalog.secretCount;val total=AchievementCatalog.total
     val context=LocalContext.current
     var permission by remember {mutableStateOf(Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)}
     val launcher=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){permission=it}
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,padding.calculateTopPadding()+10.dp,16.dp,padding.calculateBottomPadding()+24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item{
-            Panel(accent=Palette.Warn,title="Полевой архив",titleRight="100 знаков"){
+            Panel(accent=Palette.Warn,title="Полевой архив",titleRight="$total знаков"){
                 Row(verticalAlignment=Alignment.CenterVertically){
                     Icon(Icons.Default.EmojiEvents,null,tint=Palette.Warn,modifier=Modifier.size(44.dp))
                     Spacer(Modifier.width(16.dp))
                     Column{
-                        Text("$unlocked / 100",fontFamily=Fonts.Pixel,fontSize=48.sp,color=Palette.Text)
+                        Text("$unlocked / $total",fontFamily=Fonts.Pixel,fontSize=48.sp,color=Palette.Text)
                         Text("${all.count{it.new}} новых · ${public.count{it.unlocked}} открытых · ${secrets.size} секретных",style=MaterialTheme.typography.labelSmall,color=Palette.TextDim)
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(progress={unlocked/100f},modifier=Modifier.fillMaxWidth().height(4.dp),color=Palette.Warn,trackColor=Palette.Outline)
+                LinearProgressIndicator(progress={unlocked.toFloat()/total},modifier=Modifier.fillMaxWidth().height(4.dp),color=Palette.Warn,trackColor=Palette.Outline)
                 Spacer(Modifier.height(12.dp))
                 Text("Учитываются только походы с включённой галочкой «Учитывать в статистике». Эмулятор не участвует.",style=MaterialTheme.typography.bodySmall,color=Palette.TextDim)
             }
@@ -113,10 +113,10 @@ internal fun AchievementCollection(all:List<AchievementProgress>,ready:Boolean,p
 @Composable
 private fun AchievementCard(p:AchievementProgress,onRead:(String)->Unit){
     val b=p.badge;val color=b.rarity.color()
-    Panel(Modifier.fillMaxWidth().clickable(enabled=p.new){onRead(b.id)},accent=if(p.unlocked)color else null){
+    Panel(Modifier.fillMaxWidth().clickable(enabled=p.new){onRead(b.id)},accent=if(p.unlocked)color else color.copy(alpha=.6f)){
         Row(verticalAlignment=Alignment.Top){
-            Box(Modifier.size(44.dp).background(if(p.unlocked)color.copy(alpha=.12f) else Palette.SurfaceHigh).border(1.dp,if(p.unlocked)color else Palette.Outline),contentAlignment=Alignment.Center){
-                Icon(if(b.secret)Icons.Default.AutoAwesome else b.group.icon(),null,tint=if(p.unlocked)color else Palette.TextFaint,modifier=Modifier.size(25.dp))
+            Box(Modifier.size(44.dp).background(color.copy(alpha=if(p.unlocked).12f else .05f)).border(1.dp,color.copy(alpha=if(p.unlocked)1f else .6f)),contentAlignment=Alignment.Center){
+                Icon(if(b.secret)Icons.Default.AutoAwesome else b.group.icon(),null,tint=color,modifier=Modifier.size(25.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)){
