@@ -6,6 +6,8 @@
 #include <string.h>
 
 #include <string>
+#include <set>
+#include "hike_files.h"
 
 #include "logbuf.h"
 #include "logic.h"
@@ -698,6 +700,51 @@ void test_sunset() {
   TEST_ASSERT_FALSE(sun::sunset(nmea::toUnix(2026, 12, 20, 12, 0, 0), 68.97, 33.07, t));
 }
 
+void test_hike_commands() {
+  uint8_t cmd[] = {proto::VERSION, proto::CMD_DELETE_HIKE, 0x40, 0x02, 0xDF, 0x6A};
+  proto::Command c{};
+  TEST_ASSERT_EQUAL(proto::ACK_OK, proto::decodeCommand(cmd, sizeof(cmd), c));
+  TEST_ASSERT_EQUAL_UINT32(1793000000, c.time);
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(cmd, sizeof(cmd) - 1, c));
+  cmd[1] = proto::CMD_NEW_HIKE;
+  TEST_ASSERT_EQUAL(proto::ACK_OK, proto::decodeCommand(cmd, sizeof(cmd), c));
+  uint8_t out[8];
+  TEST_ASSERT_EQUAL(8, proto::encodeHikeResult(proto::CMD_DELETE_HIKE, proto::ACK_OK, 1793000000, out, sizeof(out)));
+  TEST_ASSERT_EQUAL(proto::MSG_HIKE_RESULT, out[1]);
+  TEST_ASSERT_EQUAL_MEMORY(cmd + 2, out + 4, 4);
+}
+
+static std::set<std::string> testFiles;
+static std::string failRemove;
+static bool fileExists(const char* p) { return testFiles.count(p); }
+static bool fileRemove(const char* p) { if (failRemove == p) return false; return testFiles.erase(p); }
+void test_delete_archived_hike_files() {
+  const uint32_t old = 1793000000, current = old + 60;
+  char paths[4][40], other[4][40];
+  hikefiles::pathsForHike(old, paths[0], paths[1], paths[2], paths[3]);
+  TEST_ASSERT_EQUAL_STRING("/tracks/20261026_073320.csv", paths[0]);
+  TEST_ASSERT_EQUAL_STRING("/tracks/20261026_073320.bin", paths[1]);
+  TEST_ASSERT_EQUAL_STRING("/marks/20261026_073320.csv", paths[2]);
+  TEST_ASSERT_EQUAL_STRING("/marks/20261026_073320.bin", paths[3]);
+  hikefiles::pathsForHike(current, other[0], other[1], other[2], other[3]);
+  testFiles.clear(); failRemove.clear();
+  for (auto& p : paths) testFiles.insert(p);
+  for (auto& p : other) testFiles.insert(p);
+  testFiles.insert("/blacklist.json"); testFiles.insert("/logs/all.bin");
+  TEST_ASSERT_FALSE(hikefiles::removeArchived(current, current, true, fileExists, fileRemove));
+  TEST_ASSERT_FALSE(hikefiles::removeArchived(old, current, false, fileExists, fileRemove));
+  TEST_ASSERT_EQUAL(10, testFiles.size());
+  failRemove = paths[0];
+  TEST_ASSERT_FALSE(hikefiles::removeArchived(old, current, true, fileExists, fileRemove));
+  TEST_ASSERT_TRUE(fileExists(paths[0]));
+  failRemove.clear();
+  TEST_ASSERT_TRUE(hikefiles::removeArchived(old, current, true, fileExists, fileRemove));
+  TEST_ASSERT_TRUE(hikefiles::removeArchived(old, current, true, fileExists, fileRemove)); // повтор после потери ответа
+  TEST_ASSERT_EQUAL(6, testFiles.size());
+  for (auto& p : other) TEST_ASSERT_TRUE(fileExists(p));
+  TEST_ASSERT_TRUE(fileExists("/blacklist.json"));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   loadVectors();
@@ -727,6 +774,8 @@ int main(int, char**) {
   RUN_TEST(test_steps_noise_and_bumps);
   RUN_TEST(test_steps_gentle_and_resume);
   RUN_TEST(test_sunset);
+  RUN_TEST(test_hike_commands);
+  RUN_TEST(test_delete_archived_hike_files);
   RUN_TEST(test_log_vector);
   RUN_TEST(test_log_ring);
   RUN_TEST(test_log_format_and_days);

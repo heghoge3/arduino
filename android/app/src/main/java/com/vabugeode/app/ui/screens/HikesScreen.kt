@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,8 +62,17 @@ private fun HikeSummary.title() = name ?: "Поход ${dateOf(startMs).substrin
 @Composable
 fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     val hikes by vm.hikes.collectAsStateWithLifecycle()
+    val busy by vm.repo.hikeBusy.collectAsStateWithLifecycle()
+    val currentStart by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
+    var newHike by rememberSaveable { mutableStateOf(false) }
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     val list = hikes ?: return Waiting(contentPadding, "Читаем базу походов")
+    if (newHike) AlertDialog(
+        onDismissRequest = { newHike = false }, title = { Text("Завершить и начать новый поход?") },
+        text = { Text("Текущий поход сохранится. Начнётся новая запись; предыдущий поход после этого можно удалить с телефона и SD.") },
+        confirmButton = { TextButton(enabled = !busy, onClick = { vm.newHike(); newHike = false }) { Text("Начать новый") } },
+        dismissButton = { TextButton(onClick = { newHike = false }) { Text("Отмена") } },
+    )
 
     val open = openId?.let { id -> list.firstOrNull { it.id() == id } }
     if (open != null) {
@@ -81,6 +91,9 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { SectionLabel("Сохранено в телефоне | ${list.size}") }
+        if (currentStart != null) item {
+            TextButton(enabled = !busy, onClick = { newHike = true }) { Text("Завершить и начать новый поход", color = Palette.Geo) }
+        }
         if (list.isEmpty()) item {
             Text(
                 "Походов пока нет. Они появятся после первой связи с гаджетом.",
@@ -135,7 +148,12 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
     }
     var rename by remember { mutableStateOf(false) }
     var delete by remember { mutableStateOf(false) }
-    val current = vm.isCurrent(h)
+    var fromSd by remember(h.device, h.hike) { mutableStateOf(!h.demo) }
+    var newHike by remember { mutableStateOf(false) }
+    val currentStart by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
+    val busy by vm.repo.hikeBusy.collectAsStateWithLifecycle()
+    val link by vm.repo.link.collectAsStateWithLifecycle()
+    val current = vm.repo.currentTransport.key == h.device && currentStart == h.hike * 1000
 
     Column(
         Modifier
@@ -173,7 +191,8 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
             if (!current) TermButton("✕ Удалить", Palette.Bad) { delete = true }
         }
         if (current) {
-            Text("Поход идёт сейчас — удалить можно после завершения.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+            TextButton(enabled = !busy, onClick = { newHike = true }) { Text("Завершить и начать новый поход", color = Palette.Geo) }
+            Text("Для удаления текущего похода сначала начните новый.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
         }
 
         val d = data
@@ -215,11 +234,28 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
         AlertDialog(
             onDismissRequest = { delete = false },
             title = { Text("Удалить поход?") },
-            text = { Text("«${h.title()}» удалится только из телефона. Файл на SD-карте гаджета останется.") },
+            text = { Column {
+                Text("Удалить «${h.title()}»? Отменить удаление нельзя.")
+                if (!h.demo) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = fromSd, onCheckedChange = { fromSd = it }, enabled = !busy)
+                    Text("Также удалить трек и метки с SD гаджета")
+                }
+                if (fromSd && (vm.repo.currentTransport.key != h.device || link != com.vabugeode.app.model.LinkState.CONNECTED))
+                    Text("Подключите тот гаджет, который записал поход.", color = Palette.Warn)
+                if (!fromSd) Text("Копия на SD останется.")
+            } },
             confirmButton = {
-                TextButton(onClick = { vm.deleteHike(h); delete = false; onClose() }) { Text("Удалить", color = Palette.Bad) }
+                TextButton(enabled = !busy && !current && (!fromSd ||
+                    (vm.repo.currentTransport.key == h.device && link == com.vabugeode.app.model.LinkState.CONNECTED)),
+                    onClick = { vm.deleteHike(h, fromSd) { delete = false; onClose() } }) { Text(if (busy) "Удаление…" else "Удалить", color = Palette.Bad) }
             },
             dismissButton = { TextButton(onClick = { delete = false }) { Text("Отмена") } },
         )
     }
+    if (newHike) AlertDialog(
+        onDismissRequest = { newHike = false }, title = { Text("Начать новый поход?") },
+        text = { Text("Этот поход сохранится и станет доступен для удаления. Начнётся новый поход.") },
+        confirmButton = { TextButton(enabled = !busy, onClick = { vm.newHike(); newHike = false }) { Text("Начать новый") } },
+        dismissButton = { TextButton(onClick = { newHike = false }) { Text("Отмена") } },
+    )
 }

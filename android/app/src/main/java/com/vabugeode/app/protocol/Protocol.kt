@@ -31,6 +31,7 @@ object Proto {
     const val MSG_ACK = 0x07
     const val MSG_ALERT = 0x08
     const val MSG_LOG = 0x09
+    const val MSG_HIKE_RESULT = 0x0A
 
     // Команды телефона
     const val CMD_SET_TIME = 0x01
@@ -53,6 +54,8 @@ object Proto {
     const val CMD_ACK_ALERT = 0x12
     const val CMD_SYNC_LOG = 0x13
     const val CMD_SET_DEBUG = 0x14
+    const val CMD_NEW_HIKE = 0x15
+    const val CMD_DELETE_HIKE = 0x16
 
     // Результаты ACK
     const val ACK_OK = 0
@@ -230,7 +233,11 @@ data class BeaconMsg(
 // Команды телефона → устройство
 // ---------------------------------------------------------------------------
 
+data class HikeResultMsg(val cmd: Int, val result: Int, val hike: Long) : DeviceMsg
+
 sealed interface Cmd {
+    data class NewHike(val expectedHike: Long) : Cmd
+    data class DeleteHike(val hike: Long) : Cmd
     data class SetTime(val timeUtc: Long, val tzOffsetMin: Int) : Cmd
     data class PhonePos(val lat: Double, val lon: Double, val accuracyM: Int) : Cmd
     data class Record(val on: Boolean) : Cmd
@@ -264,6 +271,8 @@ object Codec {
     // ---- Телефон: команды → байты ----
 
     fun encode(cmd: Cmd): ByteArray = when (cmd) {
+        is Cmd.NewHike -> packet(Proto.CMD_NEW_HIKE, 4) { u32(cmd.expectedHike) }
+        is Cmd.DeleteHike -> packet(Proto.CMD_DELETE_HIKE, 4) { u32(cmd.hike) }
         is Cmd.SetTime -> packet(Proto.CMD_SET_TIME, 6) { u32(cmd.timeUtc); i16(cmd.tzOffsetMin) }
         is Cmd.PhonePos -> packet(Proto.CMD_PHONE_POS, 10) { coord(cmd.lat); coord(cmd.lon); u16(cmd.accuracyM) }
         is Cmd.Record -> packet(Proto.CMD_RECORD, 1) { u8(if (cmd.on) 1 else 0) }
@@ -300,6 +309,8 @@ object Codec {
     fun decodeCmd(data: ByteArray): Cmd {
         val r = reader(data)
         return when (val code = r.u8()) {
+            Proto.CMD_NEW_HIKE -> Cmd.NewHike(r.u32())
+            Proto.CMD_DELETE_HIKE -> Cmd.DeleteHike(r.u32())
             Proto.CMD_SET_TIME -> Cmd.SetTime(r.u32(), r.i16())
             Proto.CMD_PHONE_POS -> Cmd.PhonePos(r.coordRaw(), r.coordRaw(), r.u16())
             Proto.CMD_RECORD -> Cmd.Record(r.u8() != 0)
@@ -386,6 +397,7 @@ object Codec {
             u32(m.steps); u16(scaled(m.headingDeg, 10.0)); u16(scaled(m.speedKmh, 10.0))
         }
         is SyncDoneMsg -> packet(Proto.MSG_SYNC_DONE, 5) { u8(m.what); u32(m.count) }
+        is HikeResultMsg -> packet(Proto.MSG_HIKE_RESULT, 6) { u8(m.cmd); u8(m.result); u32(m.hike) }
         is AckMsg -> packet(Proto.MSG_ACK, 2) { u8(m.cmd); u8(m.result) }
         is AlertMsg -> packet(Proto.MSG_ALERT, 8) { u32(m.timeUtc); u8(m.alerts); u8(m.fresh); u8(m.battPct); u8(m.spoofMask) }
         is LogMsg -> {
@@ -450,6 +462,7 @@ object Codec {
                 )
             }
             Proto.MSG_SYNC_DONE -> SyncDoneMsg(r.u8(), r.u32())
+            Proto.MSG_HIKE_RESULT -> HikeResultMsg(r.u8(), r.u8(), r.u32())
             Proto.MSG_ACK -> AckMsg(r.u8(), r.u8())
             Proto.MSG_ALERT -> AlertMsg(r.u32(), r.u8(), r.u8(), r.u8(), r.u8())
             Proto.MSG_LOG -> {

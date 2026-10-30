@@ -40,6 +40,10 @@ import com.vabugeode.app.store.saveState
 import com.vabugeode.app.transport.Packet
 import com.vabugeode.app.transport.Transport
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
+import com.vabugeode.app.protocol.HikeResultMsg
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -325,6 +329,44 @@ class ProtocolDeviceRepository(
 
     // BLE не принимает параллельные записи — команды строго по очереди
     private val sendLock = Mutex()
+    private val hikeLock = Mutex()
+    private var hikeReply: Triple<Int, Long, CompletableDeferred<Int>>? = null
+    val hikeBusy = MutableStateFlow(false)
+
+    suspend fun manageHike(hike: Long, delete: Boolean): Boolean = hikeLock.withLock {
+        val selected = transport
+        if (link.value != LinkState.CONNECTED || stats.value.syncing) {
+            _notices.tryEmit("Подключитесь к гаджету и дождитесь окончания синхронизации")
+            return@withLock false
+        }
+        val code = if (delete) Proto.CMD_DELETE_HIKE else Proto.CMD_NEW_HIKE
+        val cmd = if (delete) Cmd.DeleteHike(hike) else Cmd.NewHike(hike)
+        val reply = CompletableDeferred<Int>()
+        hikeBusy.value = true
+        hikeReply = Triple(code, hike, reply)
+        try {
+            val sent = sendLock.withLock { selected.send(Codec.encode(cmd)) }
+            val result = if (sent) withTimeoutOrNull(15_000) { reply.await() } else null
+            if (transport !== selected || result != Proto.ACK_OK) {
+                _notices.tryEmit(when (result) {
+                    Proto.ACK_UNSUPPORTED -> "Обновите прошивку до 0.1.13 для управления походами"
+                    Proto.ACK_BUSY -> "Гаджет занят, поход ещё текущий или SD недоступна. Дождитесь синхронизации и повторите"
+                    else -> "Нет подтверждения гаджета. Поход в телефоне не удалён; переподключитесь перед повтором"
+                })
+                return@withLock false
+            }
+            persist(force = true)
+            true
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLog.e("HIKE", "операция с походом не завершена: ${e.message}")
+            _notices.tryEmit("Не удалось завершить операцию. Копия в телефоне не удалена")
+            false
+        } finally {
+            hikeReply = null
+            hikeBusy.value = false
+        }
+    }
 
     private fun send(cmd: Cmd) {
         scope.launch {
@@ -432,7 +474,13 @@ class ProtocolDeviceRepository(
                     )
                 }
             }
+            is HikeResultMsg -> {
+                hikeReply?.let { (code, hike, reply) ->
+                    if (code == msg.cmd && hike == msg.hike) reply.complete(msg.result)
+                }
+            }
             is AckMsg -> if (msg.result != Proto.ACK_OK) {
+                hikeReply?.let { (code, _, reply) -> if (code == msg.cmd) reply.complete(msg.result) }
                 AppLog.w("BLE", "гаджет отклонил ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
                 _notices.tryEmit("Устройство отклонило ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
             }
@@ -599,6 +647,7 @@ class ProtocolDeviceRepository(
         }
 
         fun msgName(m: Any): String = when (m) {
+            is HikeResultMsg -> "HIKE_RESULT ${m.hike}: ${ackText(m.result)}"
             is StatusMsg -> "STATUS #${m.seq}"
             is SatsMsg -> "SATS ×${m.sats.size}"
             is InfoMsg -> "INFO"
@@ -614,6 +663,8 @@ class ProtocolDeviceRepository(
         fun cmdName(bytes: ByteArray) = cmdNameByCode(Codec.cmdCode(bytes))
 
         fun cmdNameByCode(code: Int) = when (code) {
+            Proto.CMD_NEW_HIKE -> "NEW_HIKE"
+            Proto.CMD_DELETE_HIKE -> "DELETE_HIKE"
             Proto.CMD_SET_TIME -> "SET_TIME"
             Proto.CMD_PHONE_POS -> "PHONE_POS"
             Proto.CMD_RECORD -> "RECORD"

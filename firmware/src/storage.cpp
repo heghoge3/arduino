@@ -7,6 +7,8 @@
 #include <string.h>
 
 #include "pins.h"
+#include "hike_files.h"
+using hikefiles::pathsForHike;
 
 namespace storage {
 
@@ -29,21 +31,8 @@ uint16_t g_markId = 0;
 
 uint32_t g_sdPointCount = 0, g_sdMarkCount = 0;
 
-void fileNames(uint32_t t) {
-  // Unix → YYYYMMDD_HHMMSS
-  long z = t / 86400 + 719468, era = z / 146097;
-  unsigned doe = z - era * 146097, yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-  unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
-  unsigned d = doy - (153 * mp + 2) / 5 + 1, m = mp < 10 ? mp + 3 : mp - 9;
-  int y = yoe + era * 400 + (m <= 2);
-  uint32_t s = t % 86400;
-  char base[24];
-  snprintf(base, sizeof(base), "%04d%02u%02u_%02lu%02lu%02lu", y, m, d, s / 3600, (s / 60) % 60, s % 60);
-  snprintf(g_trackCsv, sizeof(g_trackCsv), "/tracks/%s.csv", base);
-  snprintf(g_trackBin, sizeof(g_trackBin), "/tracks/%s.bin", base);
-  snprintf(g_markCsv, sizeof(g_markCsv), "/marks/%s.csv", base);
-  snprintf(g_markBin, sizeof(g_markBin), "/marks/%s.bin", base);
-}
+
+void fileNames(uint32_t t) { pathsForHike(t, g_trackCsv, g_trackBin, g_markCsv, g_markBin); }
 
 void isoTime(uint32_t t, char* out, size_t cap) {
   long z = t / 86400 + 719468, era = z / 146097;
@@ -118,6 +107,12 @@ void openHike(uint32_t hikeStart) {
 }
 
 uint32_t hikeStart() { return g_hike; }
+
+bool deleteHike(uint32_t hike) {
+  return hikefiles::removeArchived(hike, g_hike, g_sd,
+      [](const char* path) { return SD.exists(path); },
+      [](const char* path) { return SD.remove(path); });
+}
 
 bool appendPoint(const proto::Point& p, const CsvExtra& extra) {
   uint8_t pkt[proto::POINT_SIZE];

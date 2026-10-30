@@ -66,6 +66,7 @@ class CodecTest {
             MarkMsg(8, 1_793_000_200, 5, null, null, ""),
             SyncDoneMsg(Proto.CMD_SYNC_TRACK, 1234),
             AckMsg(Proto.CMD_MARK, Proto.ACK_BAD_ARGS),
+            HikeResultMsg(Proto.CMD_DELETE_HIKE, Proto.ACK_OK, 1_793_000_000),
             AlertMsg(1_793_000_300, 3, 1, 14, 5),
             InfoMsg(0, 1, 0, 1, 10, 0, 0, 0, null, emptyList(), gpsMode = 1, gpsPulseS = 60, beaconS = 0),
         )
@@ -76,6 +77,7 @@ class CodecTest {
     fun commandsRoundTrip() {
         val cmds = listOf(
             Cmd.SetTime(1_793_000_000, 180),
+            Cmd.NewHike(1_793_000_000), Cmd.DeleteHike(1_793_000_001),
             Cmd.PhonePos(59.9386, 30.3141, 25),
             Cmd.Record(true), Cmd.Record(false),
             Cmd.Mark(4, "Старая водонапорная башня"),

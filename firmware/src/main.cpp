@@ -168,11 +168,23 @@ void newHike(uint32_t start) {
   // Без проверенных часов каждое включение стартует с одного времени (сборки) — номер повторил бы
   // прошлый поход, и на SD точки дописались бы в его файлы. Номер нового всегда больше прошлого
   uint32_t prev = g_prefs.getULong("hike", 0);
-  if (!clockx::trusted() && start <= prev) start = prev + 1;
+  if (start <= prev) start = prev + 1;
   P.hikeStart = start;
   g_hikeUntrusted = !clockx::trusted();
   P.distM = 0;
   P.stepDet.setCount(0);
+  P.stepDet.resume();
+  P.haveGood = false;
+  P.goodTime = 0;
+  P.spoof.forgetLastGood();
+  P.power = logic::PowerLogic();
+  P.pulse = logic::GpsPulse();
+  applySettings();
+  P.power.update(N.now, N.pwr.controlPercent(), 0);
+  N.src = 0;
+  N.haveLat = false;
+  N.lat = N.lon = 0;
+  g_shiftFromPoint = g_shiftFromMark = clockx::trusted() ? NO_SHIFT : 0;
   P.campN = 0;
   P.lastPointTime = 0;
   g_prefs.putULong("hike", start);
@@ -654,6 +666,24 @@ void handleCommand(const uint8_t* data, size_t len) {
       }
 #endif
       break;
+    case proto::CMD_NEW_HIKE:
+      if (g_sync.active || c.time != P.hikeStart) { res = proto::ACK_BUSY; break; }
+      ensureStorage();
+      if (!storage::sdOk()) { res = proto::ACK_BUSY; break; }
+      flushCamp();
+      if (g_sdError) { res = proto::ACK_BUSY; break; }
+      newHike(N.now);
+      P.recording = true;
+      P.nextLogAt = N.now;
+      g_shiftFromPoint = clockx::trusted() ? NO_SHIFT : 0;
+      g_shiftFromMark = clockx::trusted() ? NO_SHIFT : 0;
+      break;
+    case proto::CMD_DELETE_HIKE:
+      if (!c.time) { res = proto::ACK_BAD_ARGS; break; }
+      if (g_sync.active || c.time == P.hikeStart) { res = proto::ACK_BUSY; break; }
+      ensureStorage();
+      if (!storage::deleteHike(c.time)) res = proto::ACK_BUSY;
+      break;
     case proto::CMD_RECORD:
       if (c.flag && !P.recording && (P.hikeStart == 0 || (int32_t)(N.now - P.lastPointTime) > 6 * 3600)) newHike(N.now);
       P.recording = c.flag;
@@ -731,8 +761,10 @@ void handleCommand(const uint8_t* data, size_t len) {
       P.alerts.ack(c.flag);
       break;
   }
-  sendPacketEvent(b, proto::encodeAck(code, res, b, sizeof(b)));
-  if (c.code == proto::CMD_GET_INFO) sendInfo();
+  if (code == proto::CMD_NEW_HIKE || code == proto::CMD_DELETE_HIKE)
+    sendPacketEvent(b, proto::encodeHikeResult(code, res, c.time, b, sizeof(b)));
+  else sendPacketEvent(b, proto::encodeAck(code, res, b, sizeof(b)));
+  if (c.code == proto::CMD_GET_INFO || c.code == proto::CMD_NEW_HIKE) sendInfo();
   if (c.code == proto::CMD_BYE) radio::disconnect();
 }
 

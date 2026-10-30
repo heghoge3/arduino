@@ -556,6 +556,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     fun handle(cmd: Cmd): Int {
         logLine(3, 9, "команда ${cmd::class.simpleName}")
         when (cmd) {
+            is Cmd.NewHike, is Cmd.DeleteHike -> return Proto.ACK_UNSUPPORTED // история демо хранится в телефоне
             is Cmd.SetTime -> {
                 if (!timeSynced) logLine(2, 6, "время с телефона, часы проверены")
                 timeSynced = true // время в демо ускорено — телефонное не применяем

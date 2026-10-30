@@ -145,6 +145,13 @@ size_t encodeAck(uint8_t cmd, uint8_t result, uint8_t* out, size_t cap) {
   return w.done();
 }
 
+size_t encodeHikeResult(uint8_t cmd, uint8_t result, uint32_t hike, uint8_t* out, size_t cap) {
+  Writer w(out, cap);
+  w.header(MSG_HIKE_RESULT);
+  w.u8(cmd); w.u8(result); w.u32(hike);
+  return w.done();
+}
+
 size_t encodeAlert(uint32_t time, uint8_t alerts, uint8_t fresh, uint8_t battPct, uint8_t spoofMask, uint8_t* out, size_t cap) {
   Writer w(out, cap);
   w.header(MSG_ALERT);
@@ -257,7 +264,9 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
       break;
     case CMD_SYNC_TRACK:
     case CMD_SYNC_MARKS:
-    case CMD_SYNC_LOG: c.time = r.u32(); break;
+    case CMD_SYNC_LOG:
+    case CMD_NEW_HIKE:
+    case CMD_DELETE_HIKE: c.time = r.u32(); break;
     default: return ACK_UNSUPPORTED;
   }
   return r.atEnd() ? ACK_OK : ACK_BAD_ARGS;

@@ -198,9 +198,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun deleteHike(h: HikeSummary) {
+    fun newHike() {
+        if (repo.hikeBusy.value) return
+        if (repo.currentTransport.key == VIRTUAL_ID) { demo.restart(); return }
+        val hike = repo.hikeStartMs.value?.div(1000) ?: return
+        viewModelScope.launch { repo.manageHike(hike, delete = false) }
+    }
+
+    fun deleteHike(h: HikeSummary, fromSd: Boolean, onDeleted: () -> Unit) {
         if (isCurrent(h)) return
-        viewModelScope.launch(Dispatchers.IO) { dao.deleteHike(h.device, h.hike) }
+        viewModelScope.launch {
+            if (fromSd) {
+                if (repo.currentTransport.key != h.device || !repo.manageHike(h.hike, delete = true)) return@launch
+            }
+            withContext(Dispatchers.IO) { dao.deleteHike(h.device, h.hike) }
+            onDeleted()
+        }
     }
 
     /** Эмулятор: пара прошлых походов в базе, чтобы список не был пустым */

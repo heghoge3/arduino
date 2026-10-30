@@ -28,6 +28,7 @@ enum Msg : uint8_t {
   MSG_ACK = 0x07,
   MSG_ALERT = 0x08,
   MSG_LOG = 0x09,
+  MSG_HIKE_RESULT = 0x0A,
 };
 
 // Команды телефона
@@ -52,6 +53,8 @@ enum CmdCode : uint8_t {
   CMD_ACK_ALERT = 0x12,
   CMD_SYNC_LOG = 0x13,
   CMD_SET_DEBUG = 0x14,
+  CMD_NEW_HIKE = 0x15,
+  CMD_DELETE_HIKE = 0x16,
 };
 
 enum AckResult : uint8_t {
@@ -201,6 +204,7 @@ size_t encodeMark(const Mark& m, uint8_t* out, size_t cap);
 size_t encodePoint(const Point& m, uint8_t* out, size_t cap);
 size_t encodeSyncDone(uint8_t what, uint32_t count, uint8_t* out, size_t cap);
 size_t encodeAck(uint8_t cmd, uint8_t result, uint8_t* out, size_t cap);
+size_t encodeHikeResult(uint8_t cmd, uint8_t result, uint32_t hike, uint8_t* out, size_t cap);
 size_t encodeAlert(uint32_t time, uint8_t alerts, uint8_t fresh, uint8_t battPct, uint8_t spoofMask, uint8_t* out, size_t cap);
 size_t encodeLog(const LogLine& m, uint8_t* out, size_t cap);
 // Сводка маячка — 18 байт (без company id)
