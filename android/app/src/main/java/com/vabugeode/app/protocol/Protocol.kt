@@ -59,6 +59,7 @@ object Proto {
     const val CMD_TEMP_OFFSET = 0x18
     const val CMD_SET_START = 0x19
     const val CMD_BLACKLIST_V2 = 0x1A
+    const val CMD_ACHIEVEMENT = 0x1B
     const val CMD_PDR_SETTINGS = 0x17
 
     // Результаты ACK
@@ -251,6 +252,7 @@ sealed interface Cmd {
     data class Mark(val type: Int, val text: String) : Cmd
     data object Clap : Cmd
     data object Find : Cmd
+    data object AchievementChime : Cmd
     data class SetIntervals(val movingSec: Int, val idleSec: Int) : Cmd
     data class CalibAlt(val altM: Double) : Cmd
     data class CalibCompass(val start: Boolean) : Cmd
@@ -305,6 +307,7 @@ object Codec {
                 cmd.points.forEach { coord(it.lat); coord(it.lon); u16(it.radiusM) }
             }
         }
+        Cmd.AchievementChime -> packet(Proto.CMD_ACHIEVEMENT, 0) {}
         Cmd.GetInfo -> packet(Proto.CMD_GET_INFO, 0) {}
         is Cmd.Session -> packet(Proto.CMD_SESSION, 1) { u8(if (cmd.live) 1 else 0) }
         Cmd.Bye -> packet(Proto.CMD_BYE, 0) {}
@@ -335,6 +338,7 @@ object Codec {
             }
             Proto.CMD_CLAP -> Cmd.Clap
             Proto.CMD_FIND -> Cmd.Find
+            Proto.CMD_ACHIEVEMENT -> Cmd.AchievementChime
             Proto.CMD_SET_INTERVALS -> Cmd.SetIntervals(r.u16(), r.u16())
             Proto.CMD_CALIB_ALT -> Cmd.CalibAlt(r.i16() / 10.0)
             Proto.CMD_TEMP_OFFSET -> Cmd.TemperatureOffset(r.i16())

@@ -725,6 +725,15 @@ void handleCommand(const uint8_t* data, size_t len) {
     case proto::CMD_FIND:
       ui::play(ui::Sound::FIND);
       break;
+    case proto::CMD_ACHIEVEMENT: {
+      static uint32_t lastSound = 0;
+      const uint32_t nowMs = millis();
+      if (!P.recording || P.power.state() == logic::CRITICAL || ui::busy() ||
+          (lastSound && nowMs - lastSound < 60000)) { res = proto::ACK_BUSY; break; }
+      ui::play(ui::Sound::ACHIEVEMENT);
+      lastSound = nowMs;
+      break;
+    }
     case proto::CMD_SET_INTERVALS:
       S.logMovingS = c.a;
       S.logCampS = c.b;

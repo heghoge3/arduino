@@ -570,6 +570,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             }
             Cmd.Clap -> addMarkInternal(MarkType.SYNC, "")
             Cmd.Find -> {} // пищать нечему
+            Cmd.AchievementChime -> {}
             is Cmd.SetIntervals -> {
                 if (cmd.movingSec !in 1..3600 || cmd.idleSec !in 1..3600) return Proto.ACK_BAD_ARGS
                 movingIntervalMs = cmd.movingSec * 1000L

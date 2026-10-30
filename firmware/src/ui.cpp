@@ -55,6 +55,10 @@ Button pollButton(Btn& b, Button shortEv, Button longEv) {
 struct Step {
   uint16_t onMs, offMs;
   uint8_t r, g, b;
+  uint16_t hz;
+  constexpr Step(uint16_t on, uint16_t off, uint8_t red, uint8_t green, uint8_t blue,
+                 uint16_t frequency = BUZZER_TONE_HZ)
+      : onMs(on), offMs(off), r(red), g(green), b(blue), hz(frequency) {}
 };
 const Step* g_pattern = nullptr;
 uint8_t g_patLen = 0, g_patIdx = 0;
@@ -70,12 +74,13 @@ const Step P_FIND[] = {{200, 300, 40, 0, 40}, {200, 300, 40, 0, 40}, {200, 300, 
                        {200, 300, 40, 0, 40}, {200, 300, 40, 0, 40}, {200, 300, 40, 0, 40},
                        {200, 300, 40, 0, 40}, {200, 300, 40, 0, 40}, {200, 300, 40, 0, 40}, {200, 0, 40, 0, 40}};
 const Step P_WINDOW[] = {{60, 100, 0, 0, 50}, {60, 0, 0, 0, 50}};
+const Step P_ACHIEVEMENT[] = {{60, 60, 0, 15, 25, 1568}, {80, 60, 0, 25, 35, 1976}, {120, 0, 0, 30, 40, 2350}};
 
-void buzzer(bool on) {
+void buzzer(bool on, uint16_t hz = BUZZER_TONE_HZ) {
 #if BUZZER_ACTIVE
   digitalWrite(PIN_BUZZER, on ? HIGH : LOW);
 #else
-  ledcWriteTone(0, on ? BUZZER_TONE_HZ : 0);
+  ledcWriteTone(0, on ? hz : 0);
 #endif
 }
 
@@ -96,7 +101,7 @@ void tickPattern() {
       return;
     }
     const Step& n = g_pattern[g_patIdx];
-    buzzer(true);
+    buzzer(true, n.hz);
     led(n.r, n.g, n.b);
     g_patOn = true;
     g_patAt = now;
@@ -239,10 +244,11 @@ void play(Sound s) {
     case Sound::ALERT_BATT: g_pattern = P_BATT; g_patLen = 2; break;
     case Sound::FIND: g_pattern = P_FIND; g_patLen = 10; break;
     case Sound::WINDOW: g_pattern = P_WINDOW; g_patLen = 2; break;
+    case Sound::ACHIEVEMENT: g_pattern = P_ACHIEVEMENT; g_patLen = 3; break;
   }
   g_patIdx = 0;
   const Step& st = g_pattern[0];
-  buzzer(true);
+  buzzer(true, st.hz);
   led(st.r, st.g, st.b);
   g_patOn = true;
   g_patAt = millis();

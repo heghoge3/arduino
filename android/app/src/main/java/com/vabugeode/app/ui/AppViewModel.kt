@@ -55,6 +55,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -127,6 +128,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         bleTransport = { id, name -> BleTransport(app, viewModelScope, id, name) },
     )
 
+    private val achievementStride = pdrSettings.map {it.strideCm/100.0}
+        .stateIn(viewModelScope, SharingStarted.Eagerly, pdrSettings.value.strideCm/100.0)
+    val achievements = com.vabugeode.app.achievements.AchievementTracker(dao,viewModelScope,repo.blacklist,achievementStride)
+    val achievementHikes = dao.achievementSelections().stateIn(viewModelScope,SharingStarted.Eagerly,emptyList())
+    val achievementNotices = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity=8)
+    private val statisticsLock=kotlinx.coroutines.sync.Mutex()
+    fun includesStatistics(h:HikeSummary) = achievementHikes.value.any {it.device==h.device&&it.hike==h.hike}
+    fun includeStatistics(h:HikeSummary) {
+        if(h.demo||repo.hikeBusy.value)return
+        viewModelScope.launch(Dispatchers.IO){statisticsLock.withLock{if(!repo.hikeBusy.value)dao.includeAchievementHike(h.device,h.hike)}}
+    }
+    fun seeAchievement(id:String){viewModelScope.launch(Dispatchers.IO){achievements.see(id)}}
+
     /** Последний маячок выбранного гаджета и где был телефон («где гаджет») — из базы */
     @OptIn(ExperimentalCoroutinesApi::class)
     val where: StateFlow<GadgetRow?> = link.selectedId
@@ -158,6 +172,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val weather = MutableStateFlow(com.vabugeode.app.data.Weather.cached(app))
 
     init {
+        viewModelScope.launch {
+            var lastChime=0L
+            achievements.notices.collect {event ->
+                com.vabugeode.app.achievements.AchievementNotifications.post(app,event)
+                achievementNotices.tryEmit(event.text)
+                val current=repo.currentTransport.key to (repo.hikeStartMs.value?.div(1000)?:0L)
+                val now=System.currentTimeMillis()
+                if(current in event.liveHikes && now-lastChime>=60_000 && repo.link.value==LinkState.CONNECTED && repo.status.value?.recording==true){
+                    repo.achievementChime();lastChime=now
+                }
+            }
+        }
         AppLog.debug = debugLog.value
         repo.debugLog = debugLog.value
         repo.pdrSettings = pdrSettings.value
@@ -246,11 +272,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteHike(h: HikeSummary, fromSd: Boolean, onDeleted: () -> Unit) {
         if (isCurrent(h)) return
         viewModelScope.launch {
+          statisticsLock.withLock {
+            if (withContext(Dispatchers.IO){dao.isAchievementHike(h.device,h.hike)}) return@withLock
             if (fromSd) {
-                if (repo.currentTransport.key != h.device || !repo.manageHike(h.hike, delete = true)) return@launch
+                if (repo.currentTransport.key != h.device || !repo.manageHike(h.hike, delete = true)) return@withLock
             }
             withContext(Dispatchers.IO) { dao.deleteHike(h.device, h.hike) }
             onDeleted()
+          }
         }
     }
 

@@ -5,7 +5,7 @@
 // Версия прошивки (уходит в INFO)
 constexpr uint8_t FW_MAJOR = 0;
 constexpr uint8_t FW_MINOR = 1;
-constexpr uint8_t FW_PATCH = 16;
+constexpr uint8_t FW_PATCH = 17;
 
 // Пищалка: тип выяснится при сборке (ТЗ, раздел 2).
 // 1 — активная (просто подать HIGH), 0 — пассивная (тон через ledc)

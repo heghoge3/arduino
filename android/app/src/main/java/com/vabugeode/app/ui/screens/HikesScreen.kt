@@ -60,16 +60,17 @@ private fun HikeSummary.title() = name ?: "Поход ${dateOf(startMs).substrin
 
 /** Вкладка «Походы»: список сохранённых в телефоне походов и экран одного похода. */
 @Composable
-fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues) {
+fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues, onAchievements:()->Unit={}) {
     val hikes by vm.hikes.collectAsStateWithLifecycle()
     val busy by vm.repo.hikeBusy.collectAsStateWithLifecycle()
     val currentStart by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
+    val achievements by vm.achievements.progress.collectAsStateWithLifecycle()
     var newHike by rememberSaveable { mutableStateOf(false) }
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     val list = hikes ?: return Waiting(contentPadding, "Читаем базу походов")
     if (newHike) AlertDialog(
         onDismissRequest = { newHike = false }, title = { Text("Завершить и начать новый поход?") },
-        text = { Text("Текущий поход сохранится. Начнётся новая запись; предыдущий поход после этого можно удалить с телефона и SD.") },
+        text = { Text("Текущий поход сохранится в архиве. Начнётся новая запись.") },
         confirmButton = { TextButton(enabled = !busy, onClick = { vm.newHike(); newHike = false }) { Text("Начать новый") } },
         dismissButton = { TextButton(onClick = { newHike = false }) { Text("Отмена") } },
     )
@@ -90,6 +91,12 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         ),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        item {
+            Panel(Modifier.fillMaxWidth().clickable(onClick=onAchievements),accent=Palette.Warn,title="Достижения",titleRight="${achievements.count{it.unlocked}} / 100") {
+                Text("Полевой архив →",style=MaterialTheme.typography.titleMedium,color=Palette.Warn)
+                Text("${achievements.count{it.new}} новых · маршруты, шаги, сезоны и тайны",style=MaterialTheme.typography.labelSmall,color=Palette.TextDim)
+            }
+        }
         item { SectionLabel("Сохранено в телефоне | ${list.size}") }
         if (currentStart != null) item {
             TextButton(enabled = !busy, onClick = { newHike = true }) { Text("Завершить и начать новый поход", color = Palette.Geo) }
@@ -100,7 +107,7 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues) {
                 style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
             )
         }
-        items(list, key = { it.id() }) { h -> HikeCard(h, vm.isCurrent(h)) { openId = h.id() } }
+        items(list, key = { it.id() }) { h -> Column { HikeCard(h, vm.isCurrent(h)) { openId = h.id() };HikeStatisticsControl(vm,h) } }
     }
 }
 
@@ -142,6 +149,8 @@ private fun HikeCard(h: HikeSummary, current: Boolean, onClick: () -> Unit) {
 @Composable
 private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: PaddingValues, onClose: () -> Unit) {
     val context = LocalContext.current
+    val selected by vm.achievementHikes.collectAsStateWithLifecycle()
+    val protected=selected.any{it.device==h.device&&it.hike==h.hike}
     // Перечитываем, когда в текущий поход дописались точки
     val data by produceState<Pair<List<TrackPoint>, List<Mark>>?>(null, h.device, h.hike, h.points) {
         value = vm.loadHike(h.device, h.hike)
@@ -188,11 +197,12 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TermButton("✎ Название", Palette.Geo) { rename = true }
             TermButton("↗ CapCut", Palette.Sunset) { data?.let { shareMarks(context, it.second, h.startMs) } }
-            if (!current) TermButton("✕ Удалить", Palette.Bad) { delete = true }
+            if (!current && !protected) TermButton("✕ Удалить", Palette.Bad) { delete = true }
         }
+        HikeStatisticsControl(vm,h)
         if (current) {
             TextButton(enabled = !busy, onClick = { newHike = true }) { Text("Завершить и начать новый поход", color = Palette.Geo) }
-            Text("Для удаления текущего похода сначала начните новый.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+            if(!protected)Text("Для удаления текущего похода сначала начните новый.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
         }
 
         val d = data
@@ -230,7 +240,7 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
             dismissButton = { TextButton(onClick = { rename = false }) { Text("Отмена") } },
         )
     }
-    if (delete) {
+    if (delete && !protected) {
         AlertDialog(
             onDismissRequest = { delete = false },
             title = { Text("Удалить поход?") },
@@ -254,7 +264,7 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
     }
     if (newHike) AlertDialog(
         onDismissRequest = { newHike = false }, title = { Text("Начать новый поход?") },
-        text = { Text("Этот поход сохранится и станет доступен для удаления. Начнётся новый поход.") },
+        text = { Text("Этот поход сохранится в архиве. Начнётся новый поход.") },
         confirmButton = { TextButton(enabled = !busy, onClick = { vm.newHike(); newHike = false }) { Text("Начать новый") } },
         dismissButton = { TextButton(onClick = { newHike = false }) { Text("Отмена") } },
     )

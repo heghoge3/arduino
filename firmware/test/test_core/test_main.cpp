@@ -937,6 +937,12 @@ void test_economy_distance_without_gps_or_double_chord() {
   TEST_ASSERT_DOUBLE_WITHIN(.01,30,noPosition.meters());
 }
 void test_final_commands_and_start_packet() {
+  uint8_t chime[]={proto::VERSION,proto::CMD_ACHIEVEMENT};
+  proto::Command sound{};
+  TEST_ASSERT_EQUAL(proto::ACK_OK,proto::decodeCommand(chime,sizeof(chime),sound));
+  TEST_ASSERT_EQUAL(proto::CMD_ACHIEVEMENT,sound.code);
+  uint8_t badChime[]={proto::VERSION,proto::CMD_ACHIEVEMENT,1};
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS,proto::decodeCommand(badChime,sizeof(badChime),sound));
   uint8_t temp[]={proto::VERSION,proto::CMD_TEMP_OFFSET,0xA2,0xFE};
   proto::Command c{};
   TEST_ASSERT_EQUAL(proto::ACK_OK,proto::decodeCommand(temp,sizeof(temp),c));

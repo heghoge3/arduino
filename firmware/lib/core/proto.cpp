@@ -246,6 +246,7 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
     }
     case CMD_CLAP:
     case CMD_FIND:
+    case CMD_ACHIEVEMENT:
     case CMD_GET_INFO:
     case CMD_BYE: break;
     case CMD_SET_INTERVALS:

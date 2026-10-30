@@ -457,6 +457,11 @@ class ProtocolDeviceRepository(
     }
     override fun findDevice() = send(Cmd.Find)
 
+    fun achievementChime() {
+        val supported=lastInfo?.let {it.fwMajor>0 || it.fwMinor>1 || (it.fwMinor==1&&it.fwPatch>=17)}==true
+        if(supported && link.value==LinkState.CONNECTED && status.value?.recording==true) send(Cmd.AchievementChime)
+    }
+
     fun setBlacklistRadius(index: Int, radiusM: Int) {
         require(index in blacklist.value.indices && radiusM in 100..50000)
         dirty=true
@@ -553,7 +558,7 @@ class ProtocolDeviceRepository(
             }
             is AckMsg -> {
                 settingReply?.let { (code,reply) -> if (code==msg.cmd) reply.complete(msg.result) }
-                if (msg.result != Proto.ACK_OK) {
+                if (msg.result != Proto.ACK_OK && !(msg.cmd==Proto.CMD_ACHIEVEMENT && msg.result==Proto.ACK_BUSY)) {
                 hikeReply?.let { (code, _, reply) -> if (code == msg.cmd) reply.complete(msg.result) }
                 AppLog.w("BLE", "гаджет отклонил ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
                 _notices.tryEmit(if (msg.cmd == Proto.CMD_CALIB_COMPASS && msg.result == Proto.ACK_BAD_ARGS)
@@ -773,6 +778,7 @@ class ProtocolDeviceRepository(
             Proto.CMD_MARK -> "MARK"
             Proto.CMD_CLAP -> "CLAP"
             Proto.CMD_FIND -> "FIND"
+            Proto.CMD_ACHIEVEMENT -> "ACHIEVEMENT"
             Proto.CMD_SET_INTERVALS -> "SET_INTERVALS"
             Proto.CMD_CALIB_ALT -> "CALIB_ALT"
             Proto.CMD_CALIB_COMPASS -> "CALIB_COMPASS"

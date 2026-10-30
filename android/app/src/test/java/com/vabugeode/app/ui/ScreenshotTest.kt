@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.performSemanticsAction
@@ -148,6 +149,32 @@ class ScreenshotTest {
         shot("13_manual_start_form")
         compose.onNodeWithText("Задать старт").performClick()
         org.junit.Assert.assertEquals(60.1 to 30.2,result)
+    }
+
+    @Test
+    fun achievementsKeepLockedSecretsOutOfUi() {
+        compose.mainClock.autoAdvance=true
+        val all=com.vabugeode.app.achievements.AchievementCatalog.all.map {
+            com.vabugeode.app.achievements.AchievementProgress(it,it.target*.25)
+        }
+        compose.setContent {VabuTheme {com.vabugeode.app.ui.screens.AchievementCollection(all,true,androidx.compose.foundation.layout.PaddingValues())}}
+        compose.onNodeWithText("0 / 100").assertExists()
+        shot("14_achievements")
+        compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction()).performScrollToNode(
+            androidx.compose.ui.test.hasText("Секретный архив",ignoreCase=true))
+        shot("15_achievements_hidden")
+        all.filter{it.badge.secret}.forEachIndexed {index,p ->
+            org.junit.Assert.assertTrue("Closed secret leaked: $index",compose.onAllNodesWithText(p.badge.title).fetchSemanticsNodes().isEmpty())
+            org.junit.Assert.assertTrue("Closed condition leaked: $index",compose.onAllNodesWithText(p.badge.condition).fetchSemanticsNodes().isEmpty())
+        }
+    }
+
+    @Test
+    fun obtainedSecretBecomesVisible() {
+        val badge=com.vabugeode.app.achievements.Achievement("fixture","Тестовая награда","Условие выполнено",com.vabugeode.app.achievements.BadgeGroup.JOURNAL,com.vabugeode.app.achievements.Rarity.COMMON,"fixture",1.0,secret=true)
+        compose.setContent {VabuTheme {com.vabugeode.app.ui.screens.AchievementCollection(listOf(com.vabugeode.app.achievements.AchievementProgress(badge,1.0,1000000000000)),true,androidx.compose.foundation.layout.PaddingValues())}}
+        compose.onNodeWithText("Тестовая награда").assertExists()
+        compose.onNodeWithText("Условие выполнено").assertExists()
     }
 
     /** Вечер: после заката, идёт подмена GPS (сценарий, минута ~255). */

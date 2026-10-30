@@ -59,6 +59,7 @@ enum CmdCode : uint8_t {
   CMD_TEMP_OFFSET = 0x18,
   CMD_SET_START = 0x19,
   CMD_BLACKLIST_V2=0x1A,
+  CMD_ACHIEVEMENT=0x1B,
 };
 
 enum AckResult : uint8_t {
