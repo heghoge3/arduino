@@ -1100,7 +1100,7 @@ void console() {
       Serial.println("st — состояние; i2c — сканер шины; gps on|off|auto|echo — GPS; pcas <тело> — команда модулю;"
                      " win — окно BLE; info — чип и SD; log — сбросить журнал на SD; debug on|off — подробный журнал");
       Serial.println("Проверки: sleep <с> — глубокий сон (USB пропадёт, монитор переоткрыть); jump <±с> — переставить"
-                     " часы, как телефон; newhike — начать новый поход");
+                     " часы, как телефон; newhike — начать новый поход; accel — ускорения MPU6050 в g");
     } else if (!strcmp(line, "log")) {
       uint32_t n = dlog::pending();
       flushLog();
@@ -1119,6 +1119,19 @@ void console() {
       Serial.printf("GPS вкл=%d фикс=%d %.6f,%.6f спутн=%u/%u HDOP=%.1f подмена=%d маска=0x%02X NMEA=%lu ошибок=%lu\n",
                     N.gpsOn, N.fix, N.lat, N.lon, N.satsUsed, N.satsView, N.hdop, N.spoof, N.spoofMask,
                     (unsigned long)gps::parser().sentences(), (unsigned long)gps::parser().checksumErrors());
+    } else if (!strcmp(line, "accel")) {
+      float ax, ay, az;
+      if (sensors::readAccel(ax, ay, az)) {
+        Serial.printf("MPU6050%s X=%.3f Y=%.3f Z=%.3f |a|=%.3f g шаги=%lu\n",
+#ifdef FAKE_SENSORS
+                      " [FAKE_SENSORS]",
+#else
+                      "",
+#endif
+                      ax, ay, az, sqrtf(ax * ax + ay * ay + az * az), (unsigned long)P.stepDet.count());
+      } else {
+        Serial.println("MPU6050: ошибка чтения ускорений; проверь питание, SDA/SCL и наличие 0x68 в i2c");
+      }
     } else if (!strcmp(line, "i2c")) {
       for (uint8_t a = 1; a < 127; a++) {
         if (sensors::i2cProbe(a)) Serial.printf("I2C 0x%02X\n", a);
