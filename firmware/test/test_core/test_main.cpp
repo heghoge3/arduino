@@ -8,6 +8,8 @@
 #include <string>
 #include <set>
 #include "hike_files.h"
+#include "pdr.h"
+#include "compass.h"
 
 #include "logbuf.h"
 #include "logic.h"
@@ -714,6 +716,24 @@ void test_hike_commands() {
   TEST_ASSERT_EQUAL_MEMORY(cmd + 2, out + 4, 4);
 }
 
+void test_pdr_steps_and_missing_reference() {
+  pdr::Tracker p;
+  TEST_ASSERT_FALSE(p.advance(10, 90)); // без начальной позиции координаты не выдумываем
+  TEST_ASSERT_TRUE(p.anchor(60, 30, 0));
+  TEST_ASSERT_TRUE(p.advance(10, 0));
+  TEST_ASSERT_DOUBLE_WITHIN(0.05, 7.5, spoof::distanceM(60, 30, p.lat(), p.lon()));
+  TEST_ASSERT_DOUBLE_WITHIN(0.000001, 30, p.lon());
+  double a = p.lat(), b = p.lon();
+  TEST_ASSERT_TRUE(p.advance(20, 90));
+  TEST_ASSERT_DOUBLE_WITHIN(0.05, 7.5, spoof::distanceM(a, b, p.lat(), p.lon()));
+  TEST_ASSERT_FLOAT_WITHIN(0.001, 15, p.distance());
+  TEST_ASSERT_TRUE(p.advance(20, 180)); // без шагов нет движения
+  TEST_ASSERT_FALSE(p.advance(21, NAN));
+  TEST_ASSERT_FALSE(p.valid());
+  TEST_ASSERT_TRUE(p.anchor(60, 30, 100));
+  TEST_ASSERT_FALSE(p.advance(0, 0)); // сброс счётчика не вызывает телепортацию
+}
+
 static std::set<std::string> testFiles;
 static std::string failRemove;
 static bool fileExists(const char* p) { return testFiles.count(p); }
@@ -743,6 +763,48 @@ void test_delete_archived_hike_files() {
   TEST_ASSERT_EQUAL(6, testFiles.size());
   for (auto& p : other) TEST_ASSERT_TRUE(fileExists(p));
   TEST_ASSERT_TRUE(fileExists("/blacklist.json"));
+}
+
+void test_compass_calibration_and_rejection() {
+  compass::Recorder recorder; recorder.reset();
+  float g[3] = {0, 0, 1}, m[3]; compass::Calibration cal{};
+  TEST_ASSERT_FALSE(recorder.finish(g, cal));
+  // Full three-axis rotations in a field with axis scaling and hard-iron offsets.
+  const float offsets[] = {100, -200, 300}, radii[] = {9000, 6000, 7500};
+  for (int n = 0; n < 120; n++) {
+    for (int j = 0; j < 3; j++) m[j] = offsets[j];
+    m[n % 3] += (n % 6 < 3 ? 1 : -1) * radii[n % 3];
+    recorder.add(m);
+  }
+  TEST_ASSERT_TRUE(recorder.finish(g, cal));
+  TEST_ASSERT_TRUE(compass::valid(cal));
+  m[0] = offsets[0] + radii[0]; m[1] = offsets[1]; m[2] = offsets[2];
+  TEST_ASSERT_FLOAT_WITHIN(.01, 0, compass::heading(cal, m, g, 0));
+  m[0] = offsets[0]; m[1] += radii[1];
+  TEST_ASSERT_FLOAT_WITHIN(.01, 90, compass::heading(cal, m, g, 0));
+  TEST_ASSERT_FLOAT_WITHIN(.01, 225, compass::heading(cal, m, g, -45, true));
+  float tilted[] = {1, 0, 0};
+  TEST_ASSERT_TRUE(isnan(compass::heading(cal, m, tilted, 0)));
+  m[1] *= 4; TEST_ASSERT_TRUE(isnan(compass::heading(cal, m, g, 0)));
+  cal.field = NAN; TEST_ASSERT_FALSE(compass::valid(cal));
+  // Rotating on a flat table cannot calibrate the third axis.
+  recorder.reset();
+  for (int n = 0; n < 120; n++) {
+    float a = n * M_PI / 30; float flat[] = {(float)cos(a) * 7500, (float)sin(a) * 7500, 100};
+    recorder.add(flat);
+  }
+  TEST_ASSERT_FALSE(recorder.finish(g, cal));
+}
+void test_pdr_commands_validation() {
+  uint8_t data[] = {proto::VERSION, proto::CMD_PDR_SETTINGS, 75, 0, 0x3E, 0xFE, 1}; // -450 tenths
+  proto::Command c;
+  TEST_ASSERT_EQUAL(proto::ACK_OK, proto::decodeCommand(data, sizeof(data), c));
+  TEST_ASSERT_EQUAL(75, c.a); TEST_ASSERT_EQUAL(-450, c.altDm); TEST_ASSERT_EQUAL(1, c.flag);
+  data[2] = 0; TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(data, sizeof(data), c));
+  data[2] = 75; data[6] = 2; TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(data, sizeof(data), c));
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(data, sizeof(data) - 1, c));
+  uint8_t calibrate[] = {proto::VERSION, proto::CMD_CALIB_COMPASS, 2};
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(calibrate, sizeof(calibrate), c));
 }
 
 int main(int, char**) {
@@ -775,6 +837,9 @@ int main(int, char**) {
   RUN_TEST(test_steps_gentle_and_resume);
   RUN_TEST(test_sunset);
   RUN_TEST(test_hike_commands);
+  RUN_TEST(test_pdr_steps_and_missing_reference);
+  RUN_TEST(test_compass_calibration_and_rejection);
+  RUN_TEST(test_pdr_commands_validation);
   RUN_TEST(test_delete_archived_hike_files);
   RUN_TEST(test_log_vector);
   RUN_TEST(test_log_ring);

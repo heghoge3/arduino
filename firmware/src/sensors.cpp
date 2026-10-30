@@ -4,12 +4,14 @@
 #include <Adafruit_INA219.h>
 #include <Arduino.h>
 #include <Wire.h>
+#include <Preferences.h>
 #include <math.h>
 
 #include "clock.h"
 #include "dlog.h"
 #include "config.h"
 #include "pins.h"
+#include "compass.h"
 
 namespace sensors {
 
@@ -26,6 +28,11 @@ Adafruit_BME280 bme;
 Adafruit_INA219 ina(ADDR_INA);
 Presence g_pres{};
 float g_seaLevel = DEF_SEA_LEVEL_HPA;
+compass::Calibration g_compassCal;
+compass::Recorder g_compassRecorder;
+bool g_calibrating = false;
+uint32_t g_calStarted = 0, g_headingAt = 0;
+float g_heading = NAN;
 
 uint8_t readReg(uint8_t addr, uint8_t reg) {
   Wire.beginTransmission(addr);
@@ -120,8 +127,15 @@ void begin(bool coldBoot) {
     writeReg(ADDR_QMC, 0x09, 0x00);
   }
   if (g_pres.compass && g_pres.compassAddr == ADDR_QMC_P) {
-    // QMC5883P: другой адрес и регистр режима, пока тоже standby.
-    writeReg(ADDR_QMC_P, 0x0A, 0x00);
+    // QMC5883P: ±2 G, set/reset включён; normal mode, 10 Гц.
+    writeReg(ADDR_QMC_P, 0x0B, 0x0C);
+    writeReg(ADDR_QMC_P, 0x0A, 0x01);
+    Preferences prefs;
+    if (prefs.begin("compass", true)) {
+      if (prefs.getBytesLength("cal") == sizeof(g_compassCal)) prefs.getBytes("cal", &g_compassCal, sizeof(g_compassCal));
+      prefs.end();
+    }
+    g_heading = NAN;
   }
   (void)coldBoot;
 #endif
@@ -238,6 +252,59 @@ bool readAccel(float& ax, float& ay, float& az) {
 #endif
 }
 
+void pollCompass(float offset, bool inverted) {
+#ifndef FAKE_SENSORS
+  if (g_calibrating && millis() - g_calStarted > 180000) {
+    g_calibrating = false; LOGW(M_SENS, "калибровка компаса отменена: тайм-аут");
+  }
+  if (!g_pres.compass || g_pres.compassAddr != ADDR_QMC_P) return;
+  uint8_t status = readReg(ADDR_QMC_P, 0x09);
+  if (status & 0x02) { g_heading = NAN; return; }
+  if (!(status & 0x01)) return;
+  Wire.beginTransmission(ADDR_QMC_P); Wire.write(0x01);
+  if (Wire.endTransmission(false) || Wire.requestFrom(ADDR_QMC_P, (uint8_t)6) != 6) { g_heading = NAN; return; }
+  float m[3];
+  for (int i = 0; i < 3; i++) {
+    uint8_t lo = Wire.read(), hi = Wire.read();
+    m[i] = (int16_t)((uint16_t)hi << 8 | lo);
+    if (fabsf(m[i]) >= 32760) { g_heading = NAN; return; }
+  }
+  if (g_calibrating) {
+    g_compassRecorder.add(m);
+    g_heading = NAN;
+    return;
+  }
+  float gravity[3];
+  if (!readAccel(gravity[0], gravity[1], gravity[2])) { g_heading = NAN; return; }
+  float candidate = compass::heading(g_compassCal, m, gravity, offset, inverted);
+  if (isfinite(candidate)) { g_heading = candidate; g_headingAt = millis(); }
+#else
+  (void)offset; (void)inverted;
+#endif
+}
+
+float compassHeading() { return !g_calibrating && millis() - g_headingAt <= 2000 ? g_heading : NAN; }
+bool compassCalibrating() { return g_calibrating; }
+bool compassReady() { return g_pres.compass && g_pres.compassAddr == ADDR_QMC_P && compass::valid(g_compassCal); }
+bool calibrateCompass(bool start) {
+  if (!g_pres.compass || g_pres.compassAddr != ADDR_QMC_P) return false;
+  if (start) {
+    g_compassRecorder.reset(); g_calibrating = true; g_calStarted = millis(); g_heading = NAN;
+    return true;
+  }
+  if (!g_calibrating || millis() - g_calStarted < 20000) return false;
+  float g[3]; compass::Calibration candidate;
+  if (!readAccel(g[0], g[1], g[2]) || !g_compassRecorder.finish(g, candidate)) return false;
+  Preferences prefs;
+  if (!prefs.begin("compass", false)) return false;
+  bool saved = prefs.putBytes("cal", &candidate, sizeof(candidate)) == sizeof(candidate);
+  prefs.end();
+  if (!saved) return false;
+  g_compassCal = candidate; g_calibrating = false; g_heading = NAN;
+  LOGI(M_SENS, "калибровка компаса сохранена: %lu отсчётов", (unsigned long)g_compassRecorder.samples());
+  return true;
+}
+
 bool armMotion(bool sensitive) {
 #ifndef FAKE_SENSORS
   if (!g_pres.mpu) return false;
@@ -282,6 +349,7 @@ void stopMotion() { clearMotion(); }
 
 void prepareSleep() {
 #ifndef FAKE_SENSORS
+  if (g_pres.compass && g_pres.compassAddr == ADDR_QMC_P) writeReg(ADDR_QMC_P, 0x0A, 0x00);
   armMotion(true);  // тот же детектор, для которого на плате подтверждены MOT=1 и INT=HIGH
   if (g_pres.ina) ina.powerSave(true);
 #endif

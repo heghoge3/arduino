@@ -1,5 +1,6 @@
 package com.vabugeode.app.ui
 
+import androidx.compose.foundation.verticalScroll
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
@@ -101,6 +102,21 @@ class ScreenshotTest {
         compose.onNodeWithText("← Гаджет").performClick()
         compose.onNodeWithContentDescription("Настройки").performClick()
         shot("5_settings")
+    }
+
+    @Test
+    fun compassSettings() {
+        compose.mainClock.autoAdvance = false
+        val vm = AppViewModel(RuntimeEnvironment.getApplication())
+        vm.repo.use(com.vabugeode.app.transport.NoTransport)
+        vm.repo.compassState.value = 3
+        compose.setContent { VabuTheme {
+            androidx.compose.foundation.layout.Column(
+                androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+            ) { com.vabugeode.app.ui.screens.CompassPanel(vm) }
+        } }
+        shot("11_compass_settings")
+        compose.onNodeWithText("МАРШРУТ ПО ШАГАМ").assertExists()
     }
 
     /** Вечер: после заката, идёт подмена GPS (сценарий, минута ~255). */

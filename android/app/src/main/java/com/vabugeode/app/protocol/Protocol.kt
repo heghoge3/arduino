@@ -56,6 +56,7 @@ object Proto {
     const val CMD_SET_DEBUG = 0x14
     const val CMD_NEW_HIKE = 0x15
     const val CMD_DELETE_HIKE = 0x16
+    const val CMD_PDR_SETTINGS = 0x17
 
     // Результаты ACK
     const val ACK_OK = 0
@@ -247,6 +248,7 @@ sealed interface Cmd {
     data class SetIntervals(val movingSec: Int, val idleSec: Int) : Cmd
     data class CalibAlt(val altM: Double) : Cmd
     data class CalibCompass(val start: Boolean) : Cmd
+    data class PdrSettings(val strideCm: Int, val headingOffset10: Int, val inverted: Boolean) : Cmd
     data class Blacklist(val points: List<Entry>) : Cmd {
         data class Entry(val lat: Double, val lon: Double, val radiusM: Int)
     }
@@ -284,6 +286,7 @@ object Codec {
         Cmd.Find -> packet(Proto.CMD_FIND, 0) {}
         is Cmd.SetIntervals -> packet(Proto.CMD_SET_INTERVALS, 4) { u16(cmd.movingSec); u16(cmd.idleSec) }
         is Cmd.CalibAlt -> packet(Proto.CMD_CALIB_ALT, 2) { i16(scaled(cmd.altM, 10.0)) }
+        is Cmd.PdrSettings -> packet(Proto.CMD_PDR_SETTINGS, 5) { u16(cmd.strideCm); i16(cmd.headingOffset10); u8(if (cmd.inverted) 1 else 0) }
         is Cmd.CalibCompass -> packet(Proto.CMD_CALIB_COMPASS, 1) { u8(if (cmd.start) 1 else 0) }
         is Cmd.Blacklist -> {
             require(cmd.points.size <= Proto.MAX_BLACKLIST) { "Чёрный список: не больше ${Proto.MAX_BLACKLIST} точек" }
@@ -324,6 +327,7 @@ object Codec {
             Proto.CMD_FIND -> Cmd.Find
             Proto.CMD_SET_INTERVALS -> Cmd.SetIntervals(r.u16(), r.u16())
             Proto.CMD_CALIB_ALT -> Cmd.CalibAlt(r.i16() / 10.0)
+            Proto.CMD_PDR_SETTINGS -> Cmd.PdrSettings(r.u16(), r.i16(), r.u8() != 0)
             Proto.CMD_CALIB_COMPASS -> Cmd.CalibCompass(r.u8() != 0)
             Proto.CMD_BLACKLIST -> {
                 val n = r.u8()
@@ -362,7 +366,7 @@ object Codec {
             u32((m.pressureHpa * 100).roundToLong())
             i16(scaledOrNa(m.altBaro, 10.0)); i16(scaledOrNa(m.trend3h, 100.0))
             u16(m.battMv); i16(scaled(m.battMa, 10.0)); u8(m.battPct); u16(m.usedMah)
-            u32(m.steps); u16(scaled(m.headingDeg, 10.0)); u32(m.distanceM)
+            u32(m.steps); u16(if (m.headingDeg.isFinite()) scaled(m.headingDeg, 10.0) else 65535); u32(m.distanceM)
             u16(scaled(m.hoursLeft, 10.0)); u16(m.seq); u8(m.alerts)
         }
         is SatsMsg -> {
@@ -394,7 +398,7 @@ object Codec {
             u16(scaled(m.humidity, 100.0)); u32((m.pressureHpa * 100).roundToLong())
             i16(scaledOrNa(m.altBaro, 10.0)); i16(scaledOrNa(m.altGps, 10.0))
             u16(m.battMv); u8(m.battPct); u8(m.sats); u8(hdop(m.hdop))
-            u32(m.steps); u16(scaled(m.headingDeg, 10.0)); u16(scaled(m.speedKmh, 10.0))
+            u32(m.steps); u16(if (m.headingDeg.isFinite()) scaled(m.headingDeg, 10.0) else 65535); u16(scaled(m.speedKmh, 10.0))
         }
         is SyncDoneMsg -> packet(Proto.MSG_SYNC_DONE, 5) { u8(m.what); u32(m.count) }
         is HikeResultMsg -> packet(Proto.MSG_HIKE_RESULT, 6) { u8(m.cmd); u8(m.result); u32(m.hike) }
@@ -425,7 +429,7 @@ object Codec {
                     humidity = r.u16() / 100.0, pressureHpa = r.u32() / 100.0,
                     altBaro = r.i16OrNull(10.0), trend3h = r.i16OrNull(100.0),
                     battMv = r.u16(), battMa = r.i16() / 10.0, battPct = r.u8(), usedMah = r.u16(),
-                    steps = r.u32(), headingDeg = r.u16() / 10.0, distanceM = r.u32(),
+                    steps = r.u32(), headingDeg = r.u16().let { if (it == 65535) Double.NaN else it / 10.0 }, distanceM = r.u32(),
                     hoursLeft = r.u16() / 10.0, seq = r.u16(), alerts = r.u8(),
                 )
             }
@@ -458,7 +462,7 @@ object Codec {
                     humidity = r.u16() / 100.0, pressureHpa = r.u32() / 100.0,
                     altBaro = r.i16OrNull(10.0), altGps = r.i16OrNull(10.0),
                     battMv = r.u16(), battPct = r.u8(), sats = r.u8(), hdop = r.hdop(),
-                    steps = r.u32(), headingDeg = r.u16() / 10.0, speedKmh = r.u16() / 10.0,
+                    steps = r.u32(), headingDeg = r.u16().let { if (it == 65535) Double.NaN else it / 10.0 }, speedKmh = r.u16() / 10.0,
                 )
             }
             Proto.MSG_SYNC_DONE -> SyncDoneMsg(r.u8(), r.u32())

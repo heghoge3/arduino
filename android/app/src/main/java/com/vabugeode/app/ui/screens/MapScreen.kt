@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Satellite
 import com.vabugeode.app.data.OfflineMap
 import com.vabugeode.app.data.isRoutePoint
 import com.vabugeode.app.data.routeSegments
+import com.vabugeode.app.data.correctedRoute
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -130,7 +131,7 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String)
 fun MapLegend(spoofCount: Int) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
         Text("━ GPS", color = Palette.Geo, fontSize = 11.sp)
-        Text("┅ по шагам", color = Palette.Pdr, fontSize = 11.sp)
+        Text("┅ ≈ шаги", color = Palette.Pdr, fontSize = 11.sp)
         Text(if (spoofCount > 0) "● подмена $spoofCount" else "● подмена", color = Palette.Bad, fontSize = 11.sp)
         Text("● метки", color = Palette.Text, fontSize = 11.sp)
     }
@@ -379,7 +380,7 @@ private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
     }
     s.getSourceAs<GeoJsonSource>("marks")?.setGeoJson(FeatureCollection.fromFeatures(mk))
 
-    val me = track.lastOrNull { it.isRoutePoint() }
+    val me = correctedRoute(track).lastOrNull { it.isRoutePoint() }
     s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(FeatureCollection.fromFeatures(
         me?.let { listOf(Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat))) } ?: emptyList()))
 }
@@ -388,7 +389,7 @@ private fun lineFeature(pts: List<Point>, src: String) =
     Feature.fromGeometry(LineString.fromLngLats(pts)).apply { addStringProperty("src", src) }
 
 private fun fitTrack(map: MapLibreMap?, track: List<TrackPoint>, top: Int) {
-    val pts = track.filter { it.isRoutePoint() }.map { LatLng(it.lat, it.lon) }
+    val pts = correctedRoute(track).filter { it.isRoutePoint() }.map { LatLng(it.lat, it.lon) }
     fitPoints(map, pts, top)
 }
 

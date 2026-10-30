@@ -140,6 +140,25 @@ class ProtocolDeviceRepository(
     private val _notices = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val notices: SharedFlow<String> = _notices
 
+    // Настройки телефона отправляются только прошивкам с поддержкой 0x17.
+    var pdrSettings = Cmd.PdrSettings(75, 0, false)
+    val compassState = MutableStateFlow<Int?>(null) // INFO: 0 готов, 3 не откалиброван, 13 идёт калибровка
+    fun setPdrSettings(strideCm: Int, offset10: Int, inverted: Boolean) {
+        require(strideCm in 30..150 && offset10 in -1800..1800)
+        pdrSettings = Cmd.PdrSettings(strideCm, offset10, inverted)
+        if (link.value == LinkState.CONNECTED && supportsPdr()) send(pdrSettings)
+    }
+    private fun supportsPdr(): Boolean = lastInfo?.let { it.fwMajor > 0 || it.fwMinor > 1 || (it.fwMinor == 1 && it.fwPatch >= 14) } == true
+    fun anchorFromPhone(lat: Double, lon: Double, accuracyM: Int) {
+        require(lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0 && accuracyM in 1..1000)
+        send(Cmd.PhonePos(lat, lon, accuracyM))
+    }
+    fun calibrateCompass(start: Boolean) {
+        if (link.value != LinkState.CONNECTED || !supportsPdr()) return
+        send(Cmd.CalibCompass(start))
+        if (!start) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
+    }
+
     val deviceName: String get() = transport.deviceName
 
     // Трек и метки копим во внутренних структурах и публикуем пачками:
@@ -204,6 +223,7 @@ class ProtocolDeviceRepository(
         markMap.clear()
         lastSats = null
         lastInfo = null
+        compassState.value = null
         hikeStartSec = null
         hikeStartMs.value = null
         status.value = null
@@ -385,6 +405,7 @@ class ProtocolDeviceRepository(
     override fun clap() = send(Cmd.Clap)
     override fun setRecording(on: Boolean) {
         send(Cmd.Record(on))
+        if (on) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
         send(Cmd.GetInfo) // мог начаться новый поход
     }
     override fun findDevice() = send(Cmd.Find)
@@ -407,8 +428,8 @@ class ProtocolDeviceRepository(
         val now = System.currentTimeMillis()
         val tz = java.util.TimeZone.getDefault().getOffset(now) / 60_000
         send(Cmd.SetTime(now / 1000, tz))
-        phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
         send(Cmd.Blacklist(blacklist.value.map { Cmd.Blacklist.Entry(it.lat, it.lon, it.radiusM) }))
+        phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
         // Дальше — по ответу INFO: понять, тот же ли поход, и догрузить недостающее
         send(Cmd.GetInfo)
     }
@@ -482,13 +503,18 @@ class ProtocolDeviceRepository(
             is AckMsg -> if (msg.result != Proto.ACK_OK) {
                 hikeReply?.let { (code, _, reply) -> if (code == msg.cmd) reply.complete(msg.result) }
                 AppLog.w("BLE", "гаджет отклонил ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
-                _notices.tryEmit("Устройство отклонило ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
+                _notices.tryEmit(if (msg.cmd == Proto.CMD_CALIB_COMPASS && msg.result == Proto.ACK_BAD_ARGS)
+                    "Калибровка не сохранена: вращайте по всем трём осям не менее 20 с, затем положите горизонтально и повторите."
+                    else "Устройство отклонило ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
             }
         }
     }
 
     private fun onInfo(m: InfoMsg) {
+        val firstInfo = syncAfterInfo
         lastInfo = m
+        compassState.value = m.checks.firstOrNull { it.id == 4 }?.code
+        if (firstInfo && supportsPdr()) send(pdrSettings)
         val newHike = m.hikeStartUtc != hikeStartSec
         if (newHike) {
             // Другой поход на устройстве: в памяти — только его точки. Что уже скачано раньше, берём из базы,
@@ -496,6 +522,7 @@ class ProtocolDeviceRepository(
             AppLog.i("SYNC", "поход на гаджете ${m.hikeStartUtc}, в приложении был $hikeStartSec")
             hikeStartSec = m.hikeStartUtc
             hikeStartMs.value = m.hikeStartUtc?.let { it * 1000 }
+            if (!firstInfo) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
             points.clear()
             markMap.clear()
             dirty = true
@@ -630,7 +657,9 @@ class ProtocolDeviceRepository(
                 0 -> okDetail
                 1 -> "Не найден на шине — проверьте провода и питание"
                 2 -> "Неверный chip id — возможно, другой датчик (BMP280?)"
-                3 -> "Обнаружен; калибровка и направление пока не поддерживаются"
+                3 -> if (c.id == 4 && c.addr == 0x2C && (info.fwMajor > 0 || info.fwMinor > 1 || (info.fwMinor == 1 && info.fwPatch >= 14)))
+                    "Нужна калибровка: Настройки → Маршрут по шагам" else "Обнаружен; калибровка и направление пока не поддерживаются"
+                13 -> "Калибровка: вращайте корпус по трём осям, затем завершите в настройках"
                 4 -> "Нет данных NMEA — проверьте TX/RX и питание"
                 5 -> "NMEA идёт, но подозрение на подмену"
                 6 -> "Ищет спутники${st?.let { " (${it.gps.satsInView} видно)" } ?: ""}"
@@ -665,6 +694,7 @@ class ProtocolDeviceRepository(
         fun cmdNameByCode(code: Int) = when (code) {
             Proto.CMD_NEW_HIKE -> "NEW_HIKE"
             Proto.CMD_DELETE_HIKE -> "DELETE_HIKE"
+            Proto.CMD_PDR_SETTINGS -> "PDR_SETTINGS"
             Proto.CMD_SET_TIME -> "SET_TIME"
             Proto.CMD_PHONE_POS -> "PHONE_POS"
             Proto.CMD_RECORD -> "RECORD"

@@ -77,6 +77,11 @@ void loadSettings() {
   S.seaLevelHpa = g_prefs.getFloat("sl", DEF_SEA_LEVEL_HPA);
   S.baroCalibrated = g_prefs.getBool("bc", false);
   S.debug = g_prefs.getBool("dbg", true);
+  S.strideM = g_prefs.getFloat("stride", 0.75f);
+  S.headingOffset = g_prefs.getFloat("heading", 0);
+  S.compassInverted = g_prefs.getBool("cmpflip", false);
+  if (!isfinite(S.strideM) || S.strideM < 0.3f || S.strideM > 1.5f) S.strideM = 0.75f;
+  if (!isfinite(S.headingOffset) || fabsf(S.headingOffset) > 180) S.headingOffset = 0;
   sensors::setSeaLevel(S.seaLevelHpa);
   dlog::setDebug(S.debug);
 }
@@ -91,6 +96,9 @@ void saveSettings() {
   g_prefs.putFloat("sl", S.seaLevelHpa);
   g_prefs.putBool("bc", S.baroCalibrated);
   g_prefs.putBool("dbg", S.debug);
+  g_prefs.putFloat("stride", S.strideM);
+  g_prefs.putFloat("heading", S.headingOffset);
+  g_prefs.putBool("cmpflip", S.compassInverted);
 }
 
 void applySettings() {
@@ -174,6 +182,7 @@ void newHike(uint32_t start) {
   P.distM = 0;
   P.stepDet.setCount(0);
   P.stepDet.resume();
+  P.pdr.reset(); P.pdrEstimated = false;
   P.haveGood = false;
   P.goodTime = 0;
   P.spoof.forgetLastGood();
@@ -283,7 +292,8 @@ proto::Status makeStatus() {
   m.battPct = N.pwr.pct;
   m.usedMah = (uint16_t)P.usedMah;
   m.steps = P.stepDet.count();
-  m.heading10 = (uint16_t)lroundf(N.courseDeg * 10);
+  float heading = sensors::compassHeading();
+  m.heading10 = isfinite(heading) ? (uint16_t)lroundf(heading * 10) : 65535;
   m.distM = (uint32_t)P.distM;
   float left = BATT_CAPACITY_MAH * N.pwr.pct / 100.0f / fmaxf(P.avgMa, 1);
   m.hoursLeft10 = (uint16_t)fminf(left * 10, 65535);
@@ -416,14 +426,14 @@ void onFix() {
   if (r.spoof) {
     P.spoofMaskLast = r.mask;
     P.spoofAlertUntil = N.now + 60;  // тревога держится минуту после последнего подозрительного фикса
-    // Позиция — последняя достоверная (счисление по шагам — следующий этап)
+    // GPS отвергнут; ниже допускается только отдельная оценка по шагам и компасу.
     N.src = 0;
     N.altValid = false;
     N.speedKmh = 0;
   } else {
     // Дрожание стоящего приёмника в путь не засчитываем: точку сдвигаем, только если ушли дальше погрешности
     bool moved = !P.haveGood;
-    if (P.haveGood) {
+    if (P.haveGood && !P.pdrEstimated) {
       double d = spoof::distanceM(P.goodLat, P.goodLon, f.lat, f.lon);
       // GPS молчал дольше 5 мин (пауза записи, стоянка) и точка далеко — переехали (машина, электричка):
       // в километраж не идёт, отсчёт с новой точки
@@ -436,13 +446,16 @@ void onFix() {
         moved = true;
       }
     }
-    if (moved) {
+    if (moved || P.pdrEstimated) {
       P.haveGood = true;
       P.goodLat = f.lat;
       P.goodLon = f.lon;
     }
     P.goodAlt = f.altM;
     P.goodTime = N.now;
+    if (P.pdrEstimated) LOGI(M_GPS, "GPS вернулся: завершён приблизительный участок по шагам");
+    P.pdr.anchor(f.lat, f.lon, P.stepDet.count());
+    P.pdrEstimated = false;
     N.src = 1;
     N.altValid = f.altValid;
     N.altGps = f.altM;
@@ -480,11 +493,12 @@ void logPoint() {
   bool paused = !P.recording;
   bool haveGps = !paused && N.fix && !N.spoof && N.src == 1;
   // На паузе (едем на машине и т. п.) — только датчики: без координат, в трек и километраж не идёт
-  double lat = paused ? 0 : (haveGps ? N.lat : (P.haveGood ? P.goodLat : 0));
-  double lon = paused ? 0 : (haveGps ? N.lon : (P.haveGood ? P.goodLon : 0));
+  bool havePdr = !paused && N.src == 2 && P.pdr.valid();
+  double lat = paused ? 0 : ((haveGps || havePdr) ? N.lat : (P.haveGood ? P.goodLat : 0));
+  double lon = paused ? 0 : ((haveGps || havePdr) ? N.lon : (P.haveGood ? P.goodLon : 0));
   p.lat7 = (lat || lon) ? c7(lat) : 0;
   p.lon7 = (lat || lon) ? c7(lon) : 0;
-  p.src = paused ? proto::SRC_PAUSE : (haveGps ? 1 : 0);
+  p.src = paused ? proto::SRC_PAUSE : (haveGps ? 1 : (havePdr ? 2 : 0));
   p.spoof = !paused && N.spoof;
   p.spoofMask = p.spoof ? N.spoofMask : 0;
   if (p.spoof) {
@@ -658,6 +672,11 @@ void handleCommand(const uint8_t* data, size_t len) {
     }
     case proto::CMD_PHONE_POS:
       P.spoof.setPhone(c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM, N.now);
+      if (!P.pdr.valid() && c.accuracyM > 0 && c.accuracyM <= 1000 &&
+          !P.spoof.blacklisted(c.lat7 / 1e7, c.lon7 / 1e7)) {
+        P.pdr.anchor(c.lat7 / 1e7, c.lon7 / 1e7, P.stepDet.count());
+        LOGI(M_GPS, "начало счисления от телефона, точность %u м", c.accuracyM);
+      }
 #ifdef FAKE_SENSORS
       if (gps::fakeAnchor(c.lat7 / 1e7, c.lon7 / 1e7)) {
         P.spoof.forgetLastGood();
@@ -687,6 +706,7 @@ void handleCommand(const uint8_t* data, size_t len) {
     case proto::CMD_RECORD:
       if (c.flag && !P.recording && (P.hikeStart == 0 || (int32_t)(N.now - P.lastPointTime) > 6 * 3600)) newHike(N.now);
       P.recording = c.flag;
+      if (!c.flag) { P.pdr.reset(); P.pdrEstimated = false; }
       break;
     case proto::CMD_MARK:
       addMark(c.markType, c.text, c.textLen);
@@ -712,7 +732,12 @@ void handleCommand(const uint8_t* data, size_t len) {
       saveSettings();
       break;
     case proto::CMD_CALIB_COMPASS:
-      res = proto::ACK_UNSUPPORTED;  // компас и счисление по шагам — следующий этап
+      if (!sensors::calibrateCompass(c.flag)) res = proto::ACK_BAD_ARGS;
+      if (c.flag) g_awakeUntil = millis() + 180000;
+      break;
+    case proto::CMD_PDR_SETTINGS:
+      S.strideM = c.a / 100.0f; S.headingOffset = c.altDm / 10.0f; S.compassInverted = c.flag;
+      saveSettings();
       break;
     case proto::CMD_BLACKLIST: {
       double la[proto::MAX_BLACKLIST], lo[proto::MAX_BLACKLIST];
@@ -764,7 +789,7 @@ void handleCommand(const uint8_t* data, size_t len) {
   if (code == proto::CMD_NEW_HIKE || code == proto::CMD_DELETE_HIKE)
     sendPacketEvent(b, proto::encodeHikeResult(code, res, c.time, b, sizeof(b)));
   else sendPacketEvent(b, proto::encodeAck(code, res, b, sizeof(b)));
-  if (c.code == proto::CMD_GET_INFO || c.code == proto::CMD_NEW_HIKE) sendInfo();
+  if (c.code == proto::CMD_GET_INFO || c.code == proto::CMD_NEW_HIKE || c.code == proto::CMD_CALIB_COMPASS) sendInfo();
   if (c.code == proto::CMD_BYE) radio::disconnect();
 }
 
@@ -986,6 +1011,16 @@ void secondTick() {
     N.satsUsed = 0;
     N.src = 0;
   }
+  // Направление допускается только после калибровки и проверки текущего магнитного измерения.
+  if (P.recording && N.src != 1) {
+    float beforeDistance = P.pdr.distance();
+    float heading = sensors::compassHeading();
+    if (P.pdr.advance(P.stepDet.count(), heading, S.strideM) && isfinite(heading)) {
+      float added = P.pdr.distance() - beforeDistance;
+      if (added > 0) { P.distM += added; P.pdrEstimated = true; }
+      N.lat = P.pdr.lat(); N.lon = P.pdr.lon(); N.haveLat = true; N.src = 2; N.courseDeg = heading;
+    } else N.src = 0;
+  }
   if (!N.haveLat && P.haveGood) {
     N.lat = P.goodLat;
     N.lon = P.goodLon;
@@ -1068,7 +1103,7 @@ bool canSleep(uint32_t ms) {
 #else
   bool resting = P.power.state() == logic::CAMP || P.power.state() == logic::CRITICAL ||
                  (P.power.state() == logic::ECONOMY && !P.power.moving());
-  return resting && radio::state() == radio::State::OFF && !gps::isOn() && !ui::busy() && !ui::screenActive() &&
+  return resting && !sensors::compassCalibrating() && radio::state() == radio::State::OFF && !gps::isOn() && !ui::busy() && !ui::screenActive() &&
          !ui::anyHeld() && !g_sync.active && (int32_t)(ms - g_motionCheckUntil) >= 0 &&
          (int32_t)(ms - g_awakeUntil) >= 0;
 #endif
@@ -1255,8 +1290,10 @@ uint8_t buildChecks(proto::Check* c) {
   c[n++] = {1, (uint8_t)(pr.oled ? 0 : 2), (uint8_t)(pr.oled ? 0 : 1), 0x3C};
   c[n++] = {2, (uint8_t)(pr.ina ? 0 : 2), (uint8_t)(pr.ina ? 0 : 1), 0x40};
   c[n++] = {3, (uint8_t)(pr.mpu ? 0 : 2), (uint8_t)(pr.mpu ? 0 : 1), 0x68};
-  // Компас пока не калибруется (следующий этап) — честно «не откалиброван»
-  c[n++] = {4, (uint8_t)(pr.compass ? 1 : 2), (uint8_t)(pr.compass ? 3 : 1), pr.compass ? pr.compassAddr : (uint8_t)0x0D};
+  // QMC5883P: постоянная калибровка и отдельное состояние сбора измерений.
+  c[n++] = {4, (uint8_t)(sensors::compassReady() && !sensors::compassCalibrating() ? 0 : (pr.compass ? 1 : 2)),
+           (uint8_t)(sensors::compassCalibrating() ? 13 : (sensors::compassReady() ? 0 : (pr.compass ? 3 : 1))),
+           pr.compass ? pr.compassAddr : (uint8_t)0x0D};
   if (!pr.bme) c[n++] = {5, 2, 1, 0x76};
   else if (!pr.bmeIdOk) c[n++] = {5, 2, 2, pr.bmeAddr};
   else c[n++] = {5, 0, 0, pr.bmeAddr};
@@ -1425,7 +1462,7 @@ void loop() {
     g_lastAccelMs = ms;
     float ax, ay, az;
     if (sensors::readAccel(ax, ay, az)) {
-      P.stepDet.feed(ax, ay, az, ms);
+      if (!sensors::compassCalibrating()) P.stepDet.feed(ax, ay, az, ms);
       // Диагностика реальной ходьбы: амплитуда и число отсчётов, доступные в журнале телефона.
       static float lo = 100, hi = 0;
       static uint32_t samples = 0, at = 0;
@@ -1443,6 +1480,11 @@ void loop() {
   }
 
   gps::poll();
+  static uint32_t lastCompassMs = 0;
+  if (ms - lastCompassMs >= 100) {
+    lastCompassMs = ms;
+    sensors::pollCompass(S.headingOffset, S.compassInverted);
+  }
 
   if (ms - g_lastSecondMs >= 1000) {
     g_lastSecondMs = ms;

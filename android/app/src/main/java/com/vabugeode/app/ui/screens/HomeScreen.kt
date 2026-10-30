@@ -136,7 +136,7 @@ fun HomeScreen(
             StatTile(
                 Icons.Filled.Speed, "Скорость", Fmt.num(if (st.mode == PowerMode.MOVING) st.gps.speedKmh else 0.0, 1), "км/ч", Palette.Cold,
                 Modifier.weight(1f),
-                sub = "курс ${Fmt.compass(st.headingDeg)} ${st.headingDeg.toInt()}°",
+                sub = if (st.headingDeg.isFinite()) "компас ${Fmt.compass(st.headingDeg)} ${st.headingDeg.toInt()}°" else "компас: нет направления",
                 sub2 = if (st.mode == PowerMode.MOVING) "в движении" else "стоим",
             )
         }

@@ -8,8 +8,9 @@
 #include "sensors.h"
 #include "spoof.h"
 #include "steps.h"
+#include "pdr.h"
 
-constexpr uint32_t PERSIST_MAGIC = 0x56424734;  // «VBG4»: состояние подтверждения восстановления GPS
+constexpr uint32_t PERSIST_MAGIC = 0x56424735;  // «VBG5»: счисление по шагам
 constexpr uint8_t CAMP_BUF = 15;                // записей на стоянке до сброса на SD
 
 // Настройки (NVS): меняются командами с телефона
@@ -23,6 +24,8 @@ struct Settings {
   float seaLevelHpa;
   bool baroCalibrated;
   bool debug;           // подробный журнал (отладка): по умолчанию включён на первые походы
+  float strideM, headingOffset;
+  bool compassInverted;
 };
 
 // Всё, что нужно помнить между пробуждениями
@@ -37,6 +40,8 @@ struct Persist {
   logic::Alerts alerts;
   spoof::Detector spoof;
   steps::Detector stepDet;
+  pdr::Tracker pdr;
+  bool pdrEstimated = false;
 
   // Последняя достоверная позиция (для записи на стоянке и меток)
   bool haveGood;

@@ -55,6 +55,7 @@ enum CmdCode : uint8_t {
   CMD_SET_DEBUG = 0x14,
   CMD_NEW_HIKE = 0x15,
   CMD_DELETE_HIKE = 0x16,
+  CMD_PDR_SETTINGS = 0x17,
 };
 
 enum AckResult : uint8_t {

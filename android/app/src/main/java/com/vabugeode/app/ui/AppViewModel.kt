@@ -83,6 +83,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         blacklistSettings.save(repo.blacklist.value)
     }
 
+    private val pdrPrefs = app.getSharedPreferences("pdr", 0)
+    val pdrSettings = MutableStateFlow(com.vabugeode.app.protocol.Cmd.PdrSettings(
+        pdrPrefs.getInt("stride", 75).coerceIn(30, 150),
+        pdrPrefs.getInt("heading", 0).coerceIn(-1800, 1800), pdrPrefs.getBoolean("inverted", false),
+    ))
+    fun setPdrSettings(strideCm: Int, heading10: Int, inverted: Boolean) {
+        repo.setPdrSettings(strideCm, heading10, inverted)
+        pdrSettings.value = repo.pdrSettings
+        pdrPrefs.edit().putInt("stride", strideCm).putInt("heading", heading10).putBoolean("inverted", inverted).apply()
+    }
+
+    val pdrAnchorMessage = MutableStateFlow<String?>(null)
+    fun seedPdrFromPhone() {
+        if (repo.link.value != LinkState.CONNECTED) return
+        val transport = repo.currentTransport
+        pdrAnchorMessage.value = "Уточняю позицию телефона…"
+        viewModelScope.launch {
+            val fix = PhoneLocation.refresh(getApplication(), repo.blacklist.value)
+            if (repo.currentTransport !== transport || repo.link.value != LinkState.CONNECTED) return@launch
+            if (fix == null || fix.accuracyM > 1000) {
+                pdrAnchorMessage.value = "Нет свежей позиции телефона. Проверьте геолокацию и разрешение; начало маршрута пока неизвестно."
+            } else {
+                repo.anchorFromPhone(fix.lat, fix.lon, fix.accuracyM)
+                pdrAnchorMessage.value = "Передана позиция телефона с точностью ±${fix.accuracyM} м. Начало задаётся, если у трекера ещё нет позиции."
+            }
+        }
+    }
+
     private var bleScanner: GadgetScanner? = null
 
     val link = LinkManager(
@@ -128,6 +156,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         AppLog.debug = debugLog.value
         repo.debugLog = debugLog.value
+        repo.pdrSettings = pdrSettings.value
         AppLog.i("APP", "запуск приложения ${com.vabugeode.app.BuildConfig.VERSION_NAME}")
         // Прогноз: раз в 10 мин проверяем, не старше ли он часа; обновляем, если есть интернет и позиция
         viewModelScope.launch {
@@ -142,7 +171,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         // Позиция телефона — гаджету для проверки подмены (сверка с телефоном)
-        repo.phonePosition = { PhoneLocation.last(app, repo.blacklist.value, maxAgeMs = 5 * 60_000)?.let { Triple(it.lat, it.lon, it.accuracyM) } }
+        repo.phonePosition = { PhoneLocation.last(app, repo.blacklist.value, maxAgeMs = 30_000)?.let { Triple(it.lat, it.lon, it.accuracyM) } }
         // Маячки, услышанные с открытым приложением, тоже запоминаем для «где гаджет»
         viewModelScope.launch {
             var lastMs = 0L

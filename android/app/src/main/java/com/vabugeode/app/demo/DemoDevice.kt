@@ -576,6 +576,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             }
             is Cmd.CalibAlt -> {}
             is Cmd.CalibCompass -> {}
+            is Cmd.PdrSettings -> {}
             is Cmd.Blacklist -> blacklist = cmd.points
             Cmd.GetInfo, is Cmd.SyncTrack, is Cmd.SyncMarks, is Cmd.SyncLog -> {} // ответы шлёт транспорт
             is Cmd.SetDebug -> debug = cmd.on

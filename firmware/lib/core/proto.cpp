@@ -225,8 +225,10 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
   switch (c.code) {
     case CMD_SET_TIME: c.time = r.u32(); c.tzMin = r.i16(); break;
     case CMD_PHONE_POS: c.lat7 = r.i32(); c.lon7 = r.i32(); c.accuracyM = r.u16(); break;
-    case CMD_RECORD:
     case CMD_CALIB_COMPASS:
+      c.flag = r.u8();
+      return r.atEnd() && c.flag <= 1 ? ACK_OK : ACK_BAD_ARGS;
+    case CMD_RECORD:
     case CMD_SESSION:
     case CMD_ACK_ALERT:
     case CMD_SET_DEBUG: c.flag = r.u8(); break;
@@ -261,6 +263,10 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
     case CMD_SET_RADIO:
       c.a = r.u16();
       if (r.atEnd() && c.a != 0 && (c.a < 10 || c.a > 600)) return ACK_BAD_ARGS;
+      break;
+    case CMD_PDR_SETTINGS:
+      c.a = r.u16(); c.altDm = r.i16(); c.flag = r.u8();
+      if (r.atEnd() && (c.a < 30 || c.a > 150 || c.altDm < -1800 || c.altDm > 1800 || c.flag > 1)) return ACK_BAD_ARGS;
       break;
     case CMD_SYNC_TRACK:
     case CMD_SYNC_MARKS:

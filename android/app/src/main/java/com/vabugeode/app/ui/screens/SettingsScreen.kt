@@ -147,15 +147,13 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             Text("Сохраняется на телефоне. Передаётся подключённому гаджету или при следующем подключении.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
         }
 
+        if (source == Source.GADGET) CompassPanel(vm)
+
         if (source == Source.GADGET) Panel {
-            SectionLabel("Запись и калибровки")
+            SectionLabel("Запись")
             Spacer(Modifier.height(6.dp))
             KeyValue("Интервал в движении", "10 с")
             KeyValue("Интервал на стоянке", "60 с")
-            KeyValue("Длина шага", "0,75 м (уточняется по GPS)")
-            KeyValue("Высота", "калибровка по известной точке")
-            KeyValue("Компас", "калибровка вращением")
-            Text("Станет доступно после подключения устройства", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
         }
 
         Panel {
