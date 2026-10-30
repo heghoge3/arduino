@@ -655,6 +655,15 @@ void test_steps_noise_and_bumps() {
   TEST_ASSERT_EQUAL_UINT32(0, e.count());
 }
 
+void test_steps_gentle_and_resume() {
+  steps::Detector d;
+  TEST_ASSERT_INT_WITHIN(4, 36, (int)simulateWalk(d, 1.8f, 0.12f, 0.01f, 20000, 600000));
+  uint32_t before = d.count();
+  d.resume();
+  TEST_ASSERT_EQUAL_UINT32(before, d.count());
+  TEST_ASSERT_INT_WITHIN(4, 36, (int)simulateWalk(d, 1.8f, 0.12f, 0.01f, 20000));
+}
+
 void test_sunset() {
   // Петербург, 26.10.2026: закат ~17:17–17:20 МСК (как в приложении), 21.06 ~22:26
   uint32_t t;
@@ -692,6 +701,7 @@ int main(int, char**) {
   RUN_TEST(test_clock_jump_back);
   RUN_TEST(test_steps_walking);
   RUN_TEST(test_steps_noise_and_bumps);
+  RUN_TEST(test_steps_gentle_and_resume);
   RUN_TEST(test_sunset);
   RUN_TEST(test_log_vector);
   RUN_TEST(test_log_ring);

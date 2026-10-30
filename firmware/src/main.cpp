@@ -1289,6 +1289,7 @@ void setup() {
 
   memcpy(&P, g_rtcBlob, sizeof(P));
   if (P.magic != PERSIST_MAGIC) initPersist();
+  P.stepDet.resume();
   P.bootCount++;
 
   loadSettings();
@@ -1389,7 +1390,21 @@ void loop() {
   if (ms - g_lastAccelMs >= 40) {
     g_lastAccelMs = ms;
     float ax, ay, az;
-    if (sensors::readAccel(ax, ay, az)) P.stepDet.feed(ax, ay, az, ms);
+    if (sensors::readAccel(ax, ay, az)) {
+      P.stepDet.feed(ax, ay, az, ms);
+      // Диагностика реальной ходьбы: амплитуда и число отсчётов, доступные в журнале телефона.
+      static float lo = 100, hi = 0;
+      static uint32_t samples = 0, at = 0;
+      float mag = sqrtf(ax * ax + ay * ay + az * az);
+      lo = fminf(lo, mag);
+      hi = fmaxf(hi, mag);
+      samples++;
+      if (ms - at >= 10000) {
+        LOGD(M_SENS, "ACC n=%lu g=%.3f..%.3f steps=%lu", (unsigned long)samples, lo, hi,
+             (unsigned long)P.stepDet.count());
+        lo = 100; hi = 0; samples = 0; at = ms;
+      }
+    }
     else if (sensors::presence().mpu) dlog::counters().accelFail++;
   }
 

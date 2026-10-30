@@ -5,7 +5,7 @@
 // Версия прошивки (уходит в INFO)
 constexpr uint8_t FW_MAJOR = 0;
 constexpr uint8_t FW_MINOR = 1;
-constexpr uint8_t FW_PATCH = 9;
+constexpr uint8_t FW_PATCH = 10;
 
 // Пищалка: тип выяснится при сборке (ТЗ, раздел 2).
 // 1 — активная (просто подать HIGH), 0 — пассивная (тон через ledc)
@@ -41,7 +41,7 @@ constexpr float BATT_FULL_V = 4.15f;
 constexpr float BATT_CAPACITY_MAH = 2000.0f;   // 18650 на тестах ~2000–3000; LiPo в расчётах 2000
 
 // Перегрев корпуса: поправка температуры = k × (внутренняя температура − BME280)
-constexpr float TEMP_SELF_HEAT_K = 0.35f;      // подобрать по замерам
+constexpr float TEMP_SELF_HEAT_K = 0.0f;       // поправка выключена до калибровки в собранном корпусе
 
 // Высота: давление на уровне моря по умолчанию (калибруется командой CALIB_ALT)
 constexpr float DEF_SEA_LEVEL_HPA = 1013.25f;
