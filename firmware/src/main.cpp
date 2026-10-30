@@ -1056,7 +1056,6 @@ void goToSleep(int32_t forceS = 0) {
   LOGD(M_PWR, "сон %ld с", (long)sleepS);
   // Буфер журнала почти полон — сбросить, иначе за следующие пробуждения начнёт терять строки
   if (dlog::pending() >= logbuf::RING_N * 3 / 4) flushLog();
-  dlog::beforeSleep((uint32_t)sleepS);
   memcpy(g_rtcBlob, &P, sizeof(P));
   sensors::prepareSleep();
   gps::power(false);
@@ -1072,9 +1071,20 @@ void goToSleep(int32_t forceS = 0) {
   rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_B);
   esp_sleep_enable_ext1_wakeup((1ULL << PIN_BTN_A) | (1ULL << PIN_BTN_B), ESP_EXT1_WAKEUP_ANY_LOW);
 #ifndef FAKE_SENSORS  // в эмуляции MPU нет, вывод INT висит в воздухе — будил бы сразу
-  if (sensors::presence().mpu) esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_MPU_INT, 1);
+  if (sensors::presence().mpu) {
+    gpio_num_t pin = (gpio_num_t)PIN_MPU_INT;
+    esp_err_t init = rtc_gpio_init(pin);
+    esp_err_t dir = rtc_gpio_set_direction(pin, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pullup_dis(pin);
+    rtc_gpio_pulldown_en(pin);
+    esp_err_t wake = esp_sleep_enable_ext0_wakeup(pin, 1);
+    LOGI(M_PWR, "MPU wake GPIO%d=%d init=%d dir=%d ext0=%d", PIN_MPU_INT,
+         rtc_gpio_get_level(pin), (int)init, (int)dir, (int)wake);
+    Serial.flush();
+  }
 #endif
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);  // держать подтяжки кнопок
+  dlog::beforeSleep((uint32_t)sleepS);
   esp_deep_sleep_start();
 }
 

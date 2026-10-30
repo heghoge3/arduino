@@ -282,7 +282,7 @@ void stopMotion() { clearMotion(); }
 
 void prepareSleep() {
 #ifndef FAKE_SENSORS
-  armMotion();
+  armMotion(true);  // тот же детектор, для которого на плате подтверждены MOT=1 и INT=HIGH
   if (g_pres.ina) ina.powerSave(true);
 #endif
 }
