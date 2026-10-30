@@ -176,13 +176,13 @@ void drawPage4() {
   drawHeader("проверка");
   proto::Check c[proto::MAX_CHECKS];
   uint8_t n = buildChecks(c);
-  static const char* names[] = {"", "Экр", "INA", "MPU", "Комп", "BME", "SD", "GPS", "АКБ", "Часы"};
+  static const char* names[] = {"", "Экр", "INA", "MPU", "Комп", "BME", "SD", "GPS", "АКБ", "Часы", "Нав"};
   oled.setFont(u8g2_font_6x13_t_cyrillic);
   for (uint8_t i = 0; i < n; i++) {
     char l[16];
     const char* mark = c[i].level == 0 ? "+" : (c[i].level == 1 ? "!" : "x");
-    snprintf(l, sizeof(l), "%s%s", mark, c[i].id < 10 ? names[c[i].id] : "?");
-    oled.drawUTF8((i % 3) * 43, 26 + (i / 3) * 13, l);
+    snprintf(l, sizeof(l), "%s%s", mark, c[i].id < 11 ? names[c[i].id] : "?");
+    oled.drawUTF8((i % 3) * 43, 23 + (i / 3) * (n > 9 ? 10 : 13), l);
   }
 }
 

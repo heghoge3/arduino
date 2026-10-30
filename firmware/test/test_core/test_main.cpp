@@ -10,6 +10,7 @@
 #include "hike_files.h"
 #include "pdr.h"
 #include "compass.h"
+#include "inertial.h"
 
 #include "logbuf.h"
 #include "logic.h"
@@ -807,6 +808,109 @@ void test_pdr_commands_validation() {
   TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(calibrate, sizeof(calibrate), c));
 }
 
+struct SimPose {
+  float q[4];
+  static SimPose euler(float yaw,float pitch,float roll) {
+    float c=cosf(yaw/2),s=sinf(yaw/2),cp=cosf(pitch/2),sp=sinf(pitch/2),cr=cosf(roll/2),sr=sinf(roll/2);
+    return {{c*cp*cr+s*sp*sr,c*cp*sr-s*sp*cr,c*sp*cr+s*cp*sr,s*cp*cr-c*sp*sr}};
+  }
+  void toBody(const float world[3],float out[3]) const {
+    float w=q[0],x=q[1],y=q[2],z=q[3];
+    out[0]=(1-2*(y*y+z*z))*world[0]+2*(x*y+w*z)*world[1]+2*(x*z-w*y)*world[2];
+    out[1]=2*(x*y-w*z)*world[0]+(1-2*(x*x+z*z))*world[1]+2*(y*z+w*x)*world[2];
+    out[2]=2*(x*z+w*y)*world[0]+2*(y*z-w*x)*world[1]+(1-2*(x*x+y*y))*world[2];
+  }
+  void angularVelocity(const SimPose& previous,float out[3]) const {
+    // q(previous)^-1 * q(now), body angular velocity over 40 ms.
+    float w=previous.q[0],x=-previous.q[1],y=-previous.q[2],z=-previous.q[3];
+    float v[]={w*q[1]+x*q[0]+y*q[3]-z*q[2], w*q[2]-x*q[3]+y*q[0]+z*q[1], w*q[3]+x*q[2]-y*q[1]+z*q[0]};
+    float a=w*q[0]-x*q[1]-y*q[2]-z*q[3],n=sqrtf(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+    float k=n>1e-8f ? 2*atan2f(n,a)/n/.04f*180/M_PI : 0;
+    for(int j=0;j<3;j++) out[j]=v[j]*k;
+  }
+};
+struct WalkSimulation {
+  inertial::Navigator nav;
+  SimPose previous=SimPose::euler(1.8f,.7f,-.5f);
+  uint32_t ms=100,steps=0;
+  float walkTime=0;
+  double latitude=60,longitude=30;
+  WalkSimulation(float roll=-.5f) {
+    previous=SimPose::euler(1.8f,.7f,roll);
+    float gravity[]={0,0,1},a[3]; previous.toBody(gravity,a);
+    for(int j=0;j<90;j++) { nav.feed(a[0],a[1],a[2],.2f,-.1f,.3f,0,ms); ms+=40; }
+  }
+  void walk(float seconds,float fromCourse,float toCourse,bool gps,bool rotate=false) {
+    int samples=lroundf(seconds/.04f);
+    for(int i=0;i<samples;i++) {
+      float t=(i+1)*.04f,course=fromCourse+(toCourse-fromCourse)*t/seconds,rad=course*M_PI/180;
+      float gait=.16f*sinf(2*M_PI*1.8f*walkTime);
+      float world[]={gait*cosf(rad),-gait*sinf(rad),1+.08f*cosf(2*M_PI*1.8f*walkTime)};
+      SimPose pose=rotate ? SimPose::euler(1.8f+walkTime*.7f,.7f+.5f*sinf(walkTime*.4f),-.5f+.4f*sinf(walkTime*.3f)) : previous;
+      float a[3],g[3]; pose.toBody(world,a); pose.angularVelocity(previous,g);
+      steps=(uint32_t)(walkTime*1.8f);
+      nav.feed(a[0],a[1],a[2],g[0]+.2f,g[1]-.1f,g[2]+.3f,steps,ms);
+      latitude+=1.4*.04*cos(rad)/111194.93;
+      longitude+=1.4*.04*sin(rad)/(111194.93*cos(latitude*M_PI/180));
+      if(gps && i%25==0) nav.offerGps(latitude,longitude,steps,ms);
+      previous=pose; walkTime+=.04f; ms+=40;
+    }
+  }
+  float heading() const { return nav.heading(ms-40); }
+};
+static float headingError(float actual,float expected) { return fabsf(fmodf(actual-expected+540,360)-180); }
+void test_inertial_free_orientation_and_turn() {
+  WalkSimulation s;
+  TEST_ASSERT_TRUE(s.nav.gyroReady());
+  s.walk(14,0,0,true,true);
+  TEST_ASSERT_TRUE(s.nav.aligned());
+  TEST_ASSERT_TRUE(headingError(s.heading(),0)<10);
+  s.walk(12,0,0,false,true); // Turning/tilting the device, walking straight.
+  char message[100]; snprintf(message,sizeof(message),"heading after rotating device: %.1f",s.heading());
+  TEST_ASSERT_TRUE_MESSAGE(isfinite(s.heading()),message);
+  TEST_ASSERT_TRUE_MESSAGE(headingError(s.heading(),0)<20,"device rotation must not become a route turn");
+  s.walk(5,0,90,false,true); // Person turns with the device held at changing angles.
+  s.walk(8,90,90,false,true);
+  TEST_ASSERT_TRUE_MESSAGE(headingError(s.heading(),90)<20,"walking turn should change the estimated route");
+}
+void test_inertial_upside_down_left_turn_and_bias() {
+  WalkSimulation s(3.0f);
+  s.walk(14,0,0,true);
+  TEST_ASSERT_TRUE(s.nav.aligned());
+  s.walk(5,0,-90,false); s.walk(8,-90,-90,false);
+  TEST_ASSERT_TRUE(headingError(s.heading(),270)<10);
+  s.walk(5,-90,-180,false); s.walk(8,-180,-180,false);
+  TEST_ASSERT_TRUE(headingError(s.heading(),180)<10);
+  TEST_ASSERT_TRUE(s.nav.keepAwake(s.ms));
+  TEST_ASSERT_FALSE(s.nav.keepAwake(s.ms+300000));
+  // Datasheet permits substantial zero-rate offsets; a stationary unit must auto-calibrate.
+  inertial::Navigator factoryBias;
+  for (uint32_t t=100;t<5000;t+=40) factoryBias.feed(0,0,-1,15,-10,8,0,t);
+  TEST_ASSERT_TRUE(factoryBias.gyroReady());
+  float measured[3]; factoryBias.copyBias(measured);
+  TEST_ASSERT_FLOAT_WITHIN(.01,15,measured[0]);
+  TEST_ASSERT_FLOAT_WITHIN(.01,-10,measured[1]);
+  TEST_ASSERT_FLOAT_WITHIN(.01,8,measured[2]);
+  TEST_ASSERT_TRUE(isnan(factoryBias.heading(5000))); // Bias alone cannot invent north.
+}
+void test_inertial_unknown_and_discontinuity() {
+  WalkSimulation s;
+  s.walk(10,0,0,false,true);
+  TEST_ASSERT_FALSE(s.nav.aligned()); TEST_ASSERT_TRUE(isnan(s.heading()));
+  s.walk(14,0,0,true,true);
+  TEST_ASSERT_TRUE(s.nav.aligned());
+  TEST_ASSERT_TRUE(isnan(s.nav.heading(s.ms+11000)));
+  float bias[3]; TEST_ASSERT_TRUE(s.nav.copyBias(bias));
+  s.nav.feed(0,0,1,0,0,0,s.steps,s.ms+1000); // Missing rotation samples breaks orientation.
+  TEST_ASSERT_FALSE(s.nav.aligned());
+  TEST_ASSERT_TRUE(s.nav.gyroReady()); // Sensor bias survives an orientation reset.
+  s.nav.restoreBias(bias);
+  TEST_ASSERT_FALSE(s.nav.offerGps(NAN,30,s.steps,s.ms+1000));
+  TEST_ASSERT_FALSE(s.nav.aligned());
+  s.nav.feed(0,0,1,0,0,500,s.steps,s.ms+1040); // Saturated gyro cannot produce a valid heading.
+  TEST_ASSERT_FALSE(s.nav.aligned());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   loadVectors();
@@ -839,6 +943,9 @@ int main(int, char**) {
   RUN_TEST(test_hike_commands);
   RUN_TEST(test_pdr_steps_and_missing_reference);
   RUN_TEST(test_compass_calibration_and_rejection);
+  RUN_TEST(test_inertial_free_orientation_and_turn);
+  RUN_TEST(test_inertial_unknown_and_discontinuity);
+  RUN_TEST(test_inertial_upside_down_left_turn_and_bias);
   RUN_TEST(test_pdr_commands_validation);
   RUN_TEST(test_delete_archived_hike_files);
   RUN_TEST(test_log_vector);

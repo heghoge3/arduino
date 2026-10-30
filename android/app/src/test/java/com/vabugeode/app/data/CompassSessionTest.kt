@@ -21,10 +21,11 @@ class CompassSessionTest {
         override val incoming = MutableSharedFlow<Packet>(extraBufferCapacity = 100)
         val sent = mutableListOf<Cmd>()
         var code = 3
+        var navCode = 14
         override fun connect() { state.value = LinkState.CONNECTED }
         override fun disconnect() { state.value = LinkState.DISCONNECTED }
         private suspend fun info() { incoming.emit(Packet(Channel.EVENT, Codec.encode(
-            InfoMsg(0, 1, patch, 1, 10, 100, 90, 0, 1793000000, listOf(CheckMsg(4, if (code == 0) 0 else 1, code, 0x2C))),
+            InfoMsg(0, 1, patch, 1, 10, 100, 90, 0, 1793000000, listOf(CheckMsg(4, if (code == 0) 0 else 1, code, 0x2C)) + if (patch >= 15) listOf(CheckMsg(10, if (navCode == 0) 0 else 1, navCode, 0)) else emptyList()),
         ))) }
         override suspend fun send(data: ByteArray): Boolean {
             delay(1)
@@ -53,6 +54,17 @@ class CompassSessionTest {
         r.disconnect(); advanceTimeBy(100)
         g.sent.clear(); r.connect(); advanceTimeBy(1000)
         assertTrue(g.sent.contains(Cmd.PdrSettings(82, -900, true)))
+    }
+    @Test fun automaticNavigationReadinessComesFromNewFirmwareAndClearsOnSourceChange() = runTest {
+        val g = Gadget(15)
+        val r = ProtocolDeviceRepository(backgroundScope, g, emptyList())
+        r.connect(); advanceTimeBy(1000)
+        assertEquals(14, r.navigationState.value)
+        g.navCode = 0
+        r.refreshInfo(); advanceTimeBy(100)
+        assertEquals(0, r.navigationState.value)
+        r.use(NoTransport)
+        assertNull(r.navigationState.value)
     }
     @Test fun oldFirmwareDoesNotReceiveUnsupportedSettings() = runTest {
         val g = Gadget(13)

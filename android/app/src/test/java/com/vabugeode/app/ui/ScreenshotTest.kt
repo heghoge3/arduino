@@ -110,13 +110,19 @@ class ScreenshotTest {
         val vm = AppViewModel(RuntimeEnvironment.getApplication())
         vm.repo.use(com.vabugeode.app.transport.NoTransport)
         vm.repo.compassState.value = 3
+        vm.repo.info.value = com.vabugeode.app.model.DeviceInfo("vabuGEOde", "ESP32-S3", "0.1.15", 10, 7600, 7500, "GPS", emptyList())
+        vm.repo.navigationState.value = 0
         compose.setContent { VabuTheme {
             androidx.compose.foundation.layout.Column(
                 androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
             ) { com.vabugeode.app.ui.screens.CompassPanel(vm) }
         } }
         shot("11_compass_settings")
-        compose.onNodeWithText("МАРШРУТ ПО ШАГАМ").assertExists()
+        compose.onNodeWithText("Готов к приблизительной записи без GPS").assertExists()
+        compose.onNodeWithText("Сохранить калибровку").assertDoesNotExist()
+        compose.onNodeWithText("Дополнительные настройки").performClick()
+        shot("12_navigation_advanced")
+        compose.onNodeWithText("Сохранить длину шага").assertExists()
     }
 
     /** Вечер: после заката, идёт подмена GPS (сценарий, минута ~255). */

@@ -18,6 +18,18 @@ class HardwareChecksTest {
         assertTrue(c.detail.contains("пока не поддерживаются"))
     }
 
+    @Test fun automaticNavigationDoesNotRequireCompassCalibration() {
+        val latest = info.copy(fwPatch = 15)
+        val compass = ProtocolDeviceRepository.checkText(CheckMsg(4, 1, 3, 0x2C), null, latest)
+        assertTrue(compass.detail.contains("работает без него"))
+        val waiting = ProtocolDeviceRepository.checkText(CheckMsg(10, 1, 14, 0), null, latest)
+        assertEquals("Приблизительный маршрут", waiting.name)
+        assertTrue(waiting.detail.contains("GPS"))
+        val ready = ProtocolDeviceRepository.checkText(CheckMsg(10, 0, 0, 0), null, latest)
+        assertEquals(CheckLevel.OK, ready.level)
+        assertTrue(ready.detail.contains("автоматически"))
+    }
+
     @Test fun missingBatteryIsUnknownInsteadOfDepleted() {
         val power = PowerState(0.0, 0.0, 0, false, 0.0, 0.0)
         assertFalse(power.batteryKnown)

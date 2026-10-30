@@ -12,6 +12,7 @@
 #include "config.h"
 #include "pins.h"
 #include "compass.h"
+#include "inertial.h"
 
 namespace sensors {
 
@@ -33,6 +34,10 @@ compass::Recorder g_compassRecorder;
 bool g_calibrating = false;
 uint32_t g_calStarted = 0, g_headingAt = 0;
 float g_heading = NAN;
+inertial::Navigator g_navigation;
+bool g_gyroRunning = false;
+RTC_DATA_ATTR uint32_t g_gyroBiasMagic = 0;
+RTC_DATA_ATTR float g_savedGyroBias[3] = {};
 
 uint8_t readReg(uint8_t addr, uint8_t reg) {
   Wire.beginTransmission(addr);
@@ -49,11 +54,13 @@ void writeReg(uint8_t addr, uint8_t reg, uint8_t v) {
   Wire.endTransmission();
 }
 
-// MPU6050: акселерометр ±2 g, фильтр 44 Гц, гироскоп в standby (экономия)
+// MPU6050: акселерометр ±2 g, гироскоп ±500 °/с, фильтр 44 Гц. Во сне гироскоп выключен.
 void mpuInit() {
   writeReg(ADDR_MPU, 0x6B, 0x00);  // PWR_MGMT_1: проснуться
   delay(5);
-  writeReg(ADDR_MPU, 0x6C, 0x07);  // PWR_MGMT_2: гироскоп выкл
+  writeReg(ADDR_MPU, 0x6C, 0x00);  // все оси во время работы
+  writeReg(ADDR_MPU, 0x1B, 0x08);  // GYRO_CONFIG: ±500 °/с
+  g_gyroRunning = true;
   writeReg(ADDR_MPU, 0x1A, 0x03);  // CONFIG: DLPF 44 Гц
   writeReg(ADDR_MPU, 0x1C, 0x00);  // ACCEL_CONFIG: ±2 g
   writeReg(ADDR_MPU, 0x38, 0x00);  // прерывания выкл, пока не спим
@@ -108,6 +115,9 @@ bool i2cProbe(uint8_t addr) {
 
 void begin(bool coldBoot) {
   Wire.begin(PIN_SDA, PIN_SCL, 400000);
+  g_navigation.reset();
+  if (coldBoot) g_gyroBiasMagic=0;
+  if (g_gyroBiasMagic==0x47595231) g_navigation.restoreBias(g_savedGyroBias);
 #ifdef FAKE_SENSORS
   g_pres = Presence{true, true, true, true, i2cProbe(ADDR_OLED), true, 0x76, ADDR_QMC, 0x60};
   (void)coldBoot;
@@ -252,6 +262,37 @@ bool readAccel(float& ax, float& ay, float& az) {
 #endif
 }
 
+bool readMotionSample(MotionSample& s) {
+#ifdef FAKE_SENSORS
+  s.gx=s.gy=s.gz=0; s.gyro=false;
+  return readAccel(s.ax,s.ay,s.az);
+#else
+  if (!g_pres.mpu) return false;
+  Wire.beginTransmission(ADDR_MPU); Wire.write(0x3B);
+  if (Wire.endTransmission(false) || Wire.requestFrom(ADDR_MPU,(uint8_t)14)!=14) return false;
+  int16_t raw[7];
+  for (int j=0;j<7;j++) { uint8_t hi=Wire.read(),lo=Wire.read(); raw[j]=(int16_t)((uint16_t)hi<<8|lo); }
+  s.ax=raw[0]/16384.0f; s.ay=raw[1]/16384.0f; s.az=raw[2]/16384.0f;
+  s.gx=raw[4]/65.5f; s.gy=raw[5]/65.5f; s.gz=raw[6]/65.5f; s.gyro=g_gyroRunning;
+  return true;
+#endif
+}
+void feedNavigation(const MotionSample& s,uint32_t steps,uint32_t ms) {
+  if (!s.gyro) { resetNavigation(); return; }
+  g_navigation.feed(s.ax,s.ay,s.az,s.gx,s.gy,s.gz,steps,ms);
+  if (g_navigation.copyBias(g_savedGyroBias)) g_gyroBiasMagic=0x47595231;
+}
+void offerNavigationGps(double lat,double lon,uint32_t steps,uint32_t ms) {
+  if (g_navigation.offerGps(lat,lon,steps,ms)) LOGD(M_SENS,"направление ходьбы уточнено по GPS");
+}
+float travelHeading() { return g_navigation.heading(millis()); }
+uint8_t navigationState() { return g_navigation.state(millis()); }
+bool navigationKeepAwake() { return g_navigation.keepAwake(millis()); }
+void resetNavigation() {
+  g_navigation.reset();
+  if (g_gyroBiasMagic==0x47595231) g_navigation.restoreBias(g_savedGyroBias);
+}
+
 void pollCompass(float offset, bool inverted) {
 #ifndef FAKE_SENSORS
   if (g_calibrating && millis() - g_calStarted > 180000) {
@@ -309,6 +350,7 @@ bool armMotion(bool sensitive) {
 #ifndef FAKE_SENSORS
   if (!g_pres.mpu) return false;
   mpuInit();
+  writeReg(ADDR_MPU, 0x6C, 0x07); g_gyroRunning=false; // сон/диагностика MOT — без гироскопа
   // Сначала проверяем обычный motion detector без CYCLE/LP_WAKE 1,25 Гц.
   // Редкие отсчёты могли пропускать короткое движение; экономию вернём после замеров.
   delay(100);

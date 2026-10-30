@@ -183,6 +183,7 @@ void newHike(uint32_t start) {
   P.stepDet.setCount(0);
   P.stepDet.resume();
   P.pdr.reset(); P.pdrEstimated = false;
+  sensors::resetNavigation();
   P.haveGood = false;
   P.goodTime = 0;
   P.spoof.forgetLastGood();
@@ -454,6 +455,7 @@ void onFix() {
     P.goodAlt = f.altM;
     P.goodTime = N.now;
     if (P.pdrEstimated) LOGI(M_GPS, "GPS вернулся: завершён приблизительный участок по шагам");
+    sensors::offerNavigationGps(f.lat,f.lon,P.stepDet.count(),millis());
     P.pdr.anchor(f.lat, f.lon, P.stepDet.count());
     P.pdrEstimated = false;
     N.src = 1;
@@ -706,7 +708,7 @@ void handleCommand(const uint8_t* data, size_t len) {
     case proto::CMD_RECORD:
       if (c.flag && !P.recording && (P.hikeStart == 0 || (int32_t)(N.now - P.lastPointTime) > 6 * 3600)) newHike(N.now);
       P.recording = c.flag;
-      if (!c.flag) { P.pdr.reset(); P.pdrEstimated = false; }
+      if (!c.flag) { P.pdr.reset(); P.pdrEstimated = false; sensors::resetNavigation(); }
       break;
     case proto::CMD_MARK:
       addMark(c.markType, c.text, c.textLen);
@@ -1011,10 +1013,10 @@ void secondTick() {
     N.satsUsed = 0;
     N.src = 0;
   }
-  // Направление допускается только после калибровки и проверки текущего магнитного измерения.
+  // Ось ходьбы в неподвижной системе координат, автоматически привязанная к GPS.
   if (P.recording && N.src != 1) {
     float beforeDistance = P.pdr.distance();
-    float heading = sensors::compassHeading();
+    float heading = sensors::travelHeading();
     if (P.pdr.advance(P.stepDet.count(), heading, S.strideM) && isfinite(heading)) {
       float added = P.pdr.distance() - beforeDistance;
       if (added > 0) { P.distM += added; P.pdrEstimated = true; }
@@ -1103,7 +1105,8 @@ bool canSleep(uint32_t ms) {
 #else
   bool resting = P.power.state() == logic::CAMP || P.power.state() == logic::CRITICAL ||
                  (P.power.state() == logic::ECONOMY && !P.power.moving());
-  return resting && !sensors::compassCalibrating() && radio::state() == radio::State::OFF && !gps::isOn() && !ui::busy() && !ui::screenActive() &&
+  bool keepNavigation = P.recording && P.pdrEstimated && P.pdr.valid() && !P.power.critical() && sensors::navigationKeepAwake();
+  return resting && !keepNavigation && !sensors::compassCalibrating() && radio::state() == radio::State::OFF && !gps::isOn() && !ui::busy() && !ui::screenActive() &&
          !ui::anyHeld() && !g_sync.active && (int32_t)(ms - g_motionCheckUntil) >= 0 &&
          (int32_t)(ms - g_awakeUntil) >= 0;
 #endif
@@ -1312,6 +1315,8 @@ uint8_t buildChecks(proto::Check* c) {
   if (!clockx::rtcPresent()) c[n++] = {9, 2, 1, 0};
   else if (!clockx::trusted()) c[n++] = {9, 1, 11, 0};
   else c[n++] = {9, 0, 0, 0};
+  uint8_t nav = sensors::navigationState();
+  c[n++] = {10, (uint8_t)(nav==0 ? 0 : 1), nav, 0};
   return n;
 }
 
@@ -1460,9 +1465,13 @@ void loop() {
   // Акселерометр 25 Гц — шаги
   if (ms - g_lastAccelMs >= 40) {
     g_lastAccelMs = ms;
-    float ax, ay, az;
-    if (sensors::readAccel(ax, ay, az)) {
-      if (!sensors::compassCalibrating()) P.stepDet.feed(ax, ay, az, ms);
+    sensors::MotionSample motion;
+    if (sensors::readMotionSample(motion)) {
+      float ax=motion.ax,ay=motion.ay,az=motion.az;
+      if (!sensors::compassCalibrating()) {
+        P.stepDet.feed(ax, ay, az, ms);
+        sensors::feedNavigation(motion,P.stepDet.count(),ms);
+      } else sensors::resetNavigation();
       // Диагностика реальной ходьбы: амплитуда и число отсчётов, доступные в журнале телефона.
       static float lo = 100, hi = 0;
       static uint32_t samples = 0, at = 0;
@@ -1471,8 +1480,8 @@ void loop() {
       hi = fmaxf(hi, mag);
       samples++;
       if (ms - at >= 10000) {
-        LOGD(M_SENS, "ACC n=%lu g=%.3f..%.3f steps=%lu", (unsigned long)samples, lo, hi,
-             (unsigned long)P.stepDet.count());
+        LOGD(M_SENS, "ACC n=%lu g=%.3f..%.3f steps=%lu nav=%u h=%.0f", (unsigned long)samples, lo, hi,
+             (unsigned long)P.stepDet.count(), sensors::navigationState(), sensors::travelHeading());
         lo = 100; hi = 0; samples = 0; at = ms;
       }
     }

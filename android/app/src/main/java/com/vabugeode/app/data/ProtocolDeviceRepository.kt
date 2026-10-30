@@ -142,6 +142,7 @@ class ProtocolDeviceRepository(
 
     // Настройки телефона отправляются только прошивкам с поддержкой 0x17.
     var pdrSettings = Cmd.PdrSettings(75, 0, false)
+    val navigationState = MutableStateFlow<Int?>(null)
     val compassState = MutableStateFlow<Int?>(null) // INFO: 0 готов, 3 не откалиброван, 13 идёт калибровка
     fun setPdrSettings(strideCm: Int, offset10: Int, inverted: Boolean) {
         require(strideCm in 30..150 && offset10 in -1800..1800)
@@ -224,6 +225,7 @@ class ProtocolDeviceRepository(
         lastSats = null
         lastInfo = null
         compassState.value = null
+        navigationState.value = null
         hikeStartSec = null
         hikeStartMs.value = null
         status.value = null
@@ -514,6 +516,7 @@ class ProtocolDeviceRepository(
         val firstInfo = syncAfterInfo
         lastInfo = m
         compassState.value = m.checks.firstOrNull { it.id == 4 }?.code
+        navigationState.value = m.checks.firstOrNull { it.id == 10 }?.code
         if (firstInfo && supportsPdr()) send(pdrSettings)
         val newHike = m.hikeStartUtc != hikeStartSec
         if (newHike) {
@@ -639,6 +642,7 @@ class ProtocolDeviceRepository(
                 7 -> "GPS ATGM336H"
                 8 -> "Аккумулятор"
                 9 -> "Часы DS1302"
+                10 -> "Приблизительный маршрут"
                 else -> "Узел #${c.id}"
             }
             val okDetail = when (c.id) {
@@ -651,6 +655,7 @@ class ProtocolDeviceRepository(
                 7 -> st?.let { f("NMEA идёт, %d спутн., HDOP %.1f", it.gps.satsUsed, it.gps.hdop) }
                 8 -> st?.let { f("%d %%, хватит на ~%.0f ч", it.power.percent, it.power.hoursLeft) }
                 9 -> "Идут, время сверено"
+                10 -> "Направление автоматически настроено по GPS и ходьбе"
                 else -> null
             } ?: "Отвечает"
             val detail = when (c.code) {
@@ -658,8 +663,14 @@ class ProtocolDeviceRepository(
                 1 -> "Не найден на шине — проверьте провода и питание"
                 2 -> "Неверный chip id — возможно, другой датчик (BMP280?)"
                 3 -> if (c.id == 4 && c.addr == 0x2C && (info.fwMajor > 0 || info.fwMinor > 1 || (info.fwMinor == 1 && info.fwPatch >= 14)))
-                    "Нужна калибровка: Настройки → Маршрут по шагам" else "Обнаружен; калибровка и направление пока не поддерживаются"
+                    if (info.fwMajor > 0 || info.fwMinor > 1 || info.fwPatch >= 15)
+                        "Дополнительный компас не откалиброван; автоматический маршрут работает без него"
+                    else "Нужна калибровка: Настройки → Маршрут по шагам" else "Обнаружен; калибровка и направление пока не поддерживаются"
                 13 -> "Калибровка: вращайте корпус по трём осям, затем завершите в настройках"
+                14 -> "Нужна короткая прогулка с достоверным GPS; шаги считаются при любой ориентации"
+                15 -> "Гироскоп настроится автоматически, когда гаджет пару секунд неподвижен"
+                16 -> "Нет устойчивого направления ходьбы; приблизительная линия может прерваться"
+                17 -> "Долго без GPS: ошибка направления накапливается"
                 4 -> "Нет данных NMEA — проверьте TX/RX и питание"
                 5 -> "NMEA идёт, но подозрение на подмену"
                 6 -> "Ищет спутники${st?.let { " (${it.gps.satsInView} видно)" } ?: ""}"
