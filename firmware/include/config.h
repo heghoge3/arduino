@@ -5,7 +5,7 @@
 // Версия прошивки (уходит в INFO)
 constexpr uint8_t FW_MAJOR = 0;
 constexpr uint8_t FW_MINOR = 1;
-constexpr uint8_t FW_PATCH = 8;
+constexpr uint8_t FW_PATCH = 9;
 
 // Пищалка: тип выяснится при сборке (ТЗ, раздел 2).
 // 1 — активная (просто подать HIGH), 0 — пассивная (тон через ledc)
@@ -29,7 +29,7 @@ constexpr uint16_t DEF_GPS_PULSE_S = 30;
 constexpr uint32_t SD_FLUSH_S = 900;      // на стоянке копим в RTC-памяти, сбрасываем раз в 15 мин
 
 // Радио
-constexpr uint32_t BEACON_BURST_MS = 3000;     // дать Android время заметить маячок и начать соединение
+constexpr uint32_t BEACON_BURST_MS = 300;      // короткий маячок ради экономии; срочное подключение — кнопкой B
 constexpr uint16_t BEACON_ADV_INTERVAL_MS = 50;
 constexpr uint32_t WINDOW_MS = 120000;         // окно после кнопки B / тревоги
 constexpr uint16_t WINDOW_ADV_INTERVAL_MS = 100;
