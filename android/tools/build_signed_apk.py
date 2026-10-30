@@ -17,7 +17,12 @@ def main():
     root = Path(__file__).resolve().parents[1]
     raw = args.config.read_text() if args.config else os.environ.get("ANDROID_SIGNING_BUNDLE")
     if not raw:
-        raise SystemExit("Configure ANDROID_SIGNING_BUNDLE in GitHub Secrets; see docs/android-signing.md")
+        saved_path = os.environ.get("VABUGEODE_SIGNING_CONFIG")
+        saved_config = Path(saved_path) if saved_path else root.parent.parent / "private-signing/github-secret.txt"
+        if saved_config.is_file():
+            raw = saved_config.read_text()
+    if not raw:
+        raise SystemExit("Saved signing key not found. Restore the owner's backup; see docs/android-signing.md. Do not generate a replacement key.")
     try:
         config = json.loads(raw)
         for field in ("keystoreBase64", "storePassword", "keyPassword", "keyAlias"):

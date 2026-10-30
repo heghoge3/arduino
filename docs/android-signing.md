@@ -4,12 +4,18 @@
 постоянным ключом владельца. Отдельная версия `.hike` больше не выпускается.
 Прошивка гаджета при смене подписи приложения не меняется.
 
+По решению владельца сборкой и передачей подписанных APK занимается агент.
+Пользователю не нужно настраивать Secrets или запускать сборку. Ключ этой среды сохранён в
+`/workspace/private-signing/`; скрипт находит его автоматически. Это файлы среды, а не постоянная
+память чата: при переносе в новую независимую среду нужна резервная копия того же ключа.
+
 ## Первая установка и обновления
 
 Старый debug-APK нужно один раз удалить: его подпись отличается. Удаление очищает данные
 приложения на телефоне, включая импортированные карты; файлы на SD гаджета остаются.
 Владелец подтвердил, что важных походов в старой версии сейчас нет.
-Далее скачивать `vabugeode-apk` → `app-release.apk` из Actions или APK из Releases.
+Далее скачивать готовый APK по ссылке агента. Версия 0.9.9 размещена в ветке
+`artifacts/android-v0.9.9`, файл `vabugeode-0.9.9.apk`.
 Для обновления нужны тот же пакет, тот же сертификат и увеличенный `versionCode`.
 Debug-APK и старый `app-hike.apk` для обновления release не подходят.
 
@@ -26,7 +32,10 @@ Debug-APK и старый `app-hike.apk` для обновления release н�
 
 ## GitHub Actions
 
-Нужен один repository Secret: **ANDROID_SIGNING_BUNDLE**.
+Настройка необязательна: без Secret Actions выполняет сборку для проверки и тесты,
+а подписанный APK готовит агент локально. Не перекладывать настройку на пользователя.
+
+Для автоматической подписи в CI при наличии доступа используется repository Secret: **ANDROID_SIGNING_BUNDLE**.
 Settings → Secrets and variables → Actions → New repository secret.
 В Value вставить содержимое выданного владельцу `github-secret.txt`, целиком, без кавычек вокруг.
 Это JSON с четырьмя полями: `keystoreBase64`, `storePassword`, `keyPassword`, `keyAlias`.
@@ -34,7 +43,7 @@ Settings → Secrets and variables → Actions → New repository secret.
 
 После сохранения запустить Actions → Android APK → Run workflow для нужной ветки.
 Дальнейшие push с изменениями Android используют тот же ключ автоматически.
-Пока Secret отсутствует, сборка подписи завершается понятной ошибкой и APK не публикуется.
+Пока Secret отсутствует, шаги подписи и публикации пропускаются с пояснением в итогах запуска.
 Случайный debug-ключ или неподписанный APK вместо release не выдаются.
 
 ## Локальная сборка
@@ -44,6 +53,10 @@ Settings → Secrets and variables → Actions → New repository secret.
 ```bash
 python3 android/tools/build_signed_apk.py --config /private/path/github-secret.txt
 ```
+
+В текущей облачной среде достаточно `python3 android/tools/build_signed_apk.py`:
+используется сохранённая конфигурация из соседнего с репозиторием каталога `private-signing`.
+Для другого расположения можно задать `VABUGEODE_SIGNING_CONFIG` — путь к приватному JSON-файлу.
 
 В Windows вместо `python3` можно использовать `python`. Результат:
 `android/app/build/outputs/apk/release/app-release.apk`.

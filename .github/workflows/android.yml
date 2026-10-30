@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_BUNDLE != '' }}
     defaults:
       run:
         working-directory: android
@@ -23,14 +25,19 @@ jobs:
       - name: Тестовая сборка и тесты
         run: ./gradlew --no-daemon --max-workers=4 assembleDebug testDebugUnitTest
       - name: Подписанный APK с постоянным ключом
+        if: env.HAS_SIGNING_KEY == 'true'
         env:
           ANDROID_SIGNING_BUNDLE: ${{ secrets.ANDROID_SIGNING_BUNDLE }}
         run: python3 tools/build_signed_apk.py
       - name: APK для телефона
+        if: env.HAS_SIGNING_KEY == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: vabugeode-apk
           path: android/app/build/outputs/apk/release/app-release.apk
+      - name: Локальная подпись APK
+        if: env.HAS_SIGNING_KEY != 'true'
+        run: echo 'Подписанные APK готовит агент локально постоянным ключом владельца. Настройка Secrets пользователем не требуется.' >> "$GITHUB_STEP_SUMMARY"
       - name: Скриншоты экранов
         if: always()
         uses: actions/upload-artifact@v4
