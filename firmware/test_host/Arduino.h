@@ -2,6 +2,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdlib.h>
+#define RTC_DATA_ATTR
 constexpr int OUTPUT = 1, INPUT_PULLUP = 2, HIGH = 1, LOW = 0;
 void pinMode(int pin, int mode);
 void digitalWrite(int pin, int value);

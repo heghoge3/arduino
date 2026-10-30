@@ -88,7 +88,7 @@ internal fun WatchPanel(vm: AppViewModel, onGuide: () -> Unit) {
         }
         if (!available) {
             Text(
-                "Работает только с настоящим гаджетом: выберите «Гаджет» выше и гаджет на вкладке «Трекер».",
+                "Работает только с настоящим гаджетом: выберите «Гаджет» выше и сам гаджет в блоке подключения.",
                 style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint,
             )
         }

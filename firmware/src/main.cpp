@@ -43,6 +43,10 @@ uint32_t g_lastAccelMs = 0, g_lastSecondMs = 0;
 uint32_t g_lastEnvMs = 0, g_lastSelftestMs = 0, g_lastResyncMs = 0;
 uint32_t g_tick = 0;
 uint32_t g_powerOnUtc = 0;
+// Записи с этих номеров сделаны по непроверенным часам (с включения) — сдвинуть, когда придёт время
+constexpr uint32_t NO_SHIFT = 0xFFFFFFFF;
+RTC_DATA_ATTR uint32_t g_shiftFromPoint = NO_SHIFT, g_shiftFromMark = NO_SHIFT;  // переживают сон
+RTC_DATA_ATTR bool g_hikeUntrusted = false;  // поход начат по непроверенным часам
 bool g_fixAnnounced = false;
 
 // Синхронизация: идёт порциями в цикле, чтобы не блокировать остальное
@@ -51,7 +55,11 @@ struct SyncJob {
   uint8_t what = 0;
   uint32_t idx = 0, end = 0, sent = 0;
 };
-SyncJob g_sync, g_syncNext;
+SyncJob g_sync;
+// Ожидающие — по одной на вид (точки, метки, журнал): повторный запрос того же вида заменяет старый,
+// другие виды не вытесняет (раньше запрос журнала мог вытеснить метки, пока шёл длинный трек)
+SyncJob g_syncWait[3];
+int syncSlot(uint8_t what) { return what == proto::CMD_SYNC_TRACK ? 0 : (what == proto::CMD_SYNC_MARKS ? 1 : 2); }
 
 // ---------------------------------------------------------------------------
 // Настройки и состояние
@@ -114,8 +122,54 @@ void flushLog() {
   dlog::flush();
 }
 
+// Часы переставили на d секунд (телефон или GPS). Все «когда в следующий раз» и «когда было» сдвигаем
+// вместе с ними: иначе после перевода назад запись и маячок замолкают на эти d секунд, а пауза начинает
+// новый поход. Номер похода (hikeStart) не трогаем — по нему поход узнают SD и телефон.
+void onClockJump(int32_t d) {
+  using logic::shiftTime;
+  shiftTime(P.nextLogAt, d);
+  shiftTime(P.nextBeaconAt, d);
+  shiftTime(P.lastFlushAt, d);
+  shiftTime(P.lastPointTime, d);
+  shiftTime(P.goodTime, d);
+  shiftTime(P.spoofAlertUntil, d);
+  shiftTime(P.pressHistAt, d);
+  shiftTime(g_powerOnUtc, d);
+  P.power.shiftTime(d);
+  P.pulse.shiftTime(d);
+  P.alerts.shiftTime(d);
+  P.spoof.shiftTime(d);
+  // Записанное с включения по неверным часам — туда же (иначе в приложении данные «из будущего»,
+  // а докачка «с последней точки» пропускает новые). Телефон шлёт время первой командой, до докачки
+  if ((d > 60 || d < -60) && g_shiftFromPoint != NO_SHIFT) {
+    storage::shiftTimes(g_shiftFromPoint, g_shiftFromMark, d);
+    proto::Point p;
+    for (uint8_t i = 0; i < P.campN; i++) {
+      if (proto::decodePoint(P.campBuf[i], proto::POINT_SIZE, p)) {
+        p.time += (uint32_t)d;
+        proto::encodePoint(p, P.campBuf[i], proto::POINT_SIZE);
+      }
+    }
+    if (g_hikeUntrusted) {
+      P.hikeStart += (uint32_t)d;
+      storage::renameHike(P.hikeStart);
+      g_prefs.putULong("hike", P.hikeStart);
+    }
+    LOGI(M_SYS, "время записей с включения сдвинуто на %+ld с", (long)d);
+  }
+  g_shiftFromPoint = g_shiftFromMark = NO_SHIFT;
+  g_hikeUntrusted = false;
+  if (P.lastPointTime) g_prefs.putULong("last", P.lastPointTime);
+  N.now = clockx::now();
+}
+
 void newHike(uint32_t start) {
+  // Без проверенных часов каждое включение стартует с одного времени (сборки) — номер повторил бы
+  // прошлый поход, и на SD точки дописались бы в его файлы. Номер нового всегда больше прошлого
+  uint32_t prev = g_prefs.getULong("hike", 0);
+  if (!clockx::trusted() && start <= prev) start = prev + 1;
   P.hikeStart = start;
+  g_hikeUntrusted = !clockx::trusted();
   P.distM = 0;
   P.stepDet.setCount(0);
   P.campN = 0;
@@ -287,6 +341,29 @@ void sendSats() {
 void onFix() {
   const nmea::Parser& p = gps::parser();
   const nmea::Fix& f = p.fix();
+
+  // Вышли из здания: первые фиксы после потери сигнала неточные (отражения, мало спутников) —
+  // их не проверяем на подмену и не пишем в трек и километраж, иначе ложный «скачок» на каждом выходе.
+  // Подменный сигнал «хороший» (HDOP низкий, спутников много) — его эта отсрочка не прячет, только на 5 с
+  static uint32_t lastFixMs = 0;
+  static uint8_t settle = 0;
+  uint32_t ms = millis();
+  if (ms - lastFixMs > 30000) settle = 0;  // сигнала не было 30+ с
+  lastFixMs = ms;
+  bool rough = f.hdop > 5.0f || f.satsUsed < 4 || settle < 5;
+  if (settle < 255) settle++;
+  if (rough) {
+    N.fix = true;
+    N.fixType = f.fixType;
+    N.satsUsed = f.satsUsed;
+    N.hdop = f.hdop;
+    N.spoof = false;
+    N.spoofMask = 0;
+    N.src = 0;  // позиция — последняя достоверная
+    N.altValid = false;
+    N.speedKmh = 0;
+    return;
+  }
   uint8_t usedSnr[nmea::MAX_SATS];
   size_t used = 0;
   for (size_t i = 0; i < p.satCount(); i++) {
@@ -309,7 +386,13 @@ void onFix() {
   spoof::Result r = P.spoof.check(in);
 
   // Время от GPS — только если часы не проверены и нет подозрения
-  if (f.timeValid) clockx::offerGps(f.utc, r.spoof);
+#ifndef FAKE_SENSORS
+  // В эмуляции время «GPS» берётся из самих часов — проверенным оно от этого не становится
+  if (f.timeValid) {
+    int32_t d = clockx::offerGps(f.utc, r.spoof);
+    if (d) onClockJump(d);
+  }
+#endif
 
   N.fix = true;
   N.fixType = f.fixType;
@@ -329,7 +412,13 @@ void onFix() {
     bool moved = !P.haveGood;
     if (P.haveGood) {
       double d = spoof::distanceM(P.goodLat, P.goodLon, f.lat, f.lon);
-      if (d > fmaxf(5.0f, f.hdop * 3.0f)) {
+      // GPS молчал дольше 5 мин (пауза записи, стоянка) и точка далеко — переехали (машина, электричка):
+      // в километраж не идёт, отсчёт с новой точки
+      int32_t gap = P.goodTime ? (int32_t)(N.now - P.goodTime) : 0;
+      if (gap > 300 && d > 200) {
+        LOGI(M_GPS, "переезд %.1f км за %ld мин — в километраж не идёт", d / 1000, (long)(gap / 60));
+        moved = true;
+      } else if (d > fmaxf(5.0f, f.hdop * 3.0f)) {
         P.distM += d;
         moved = true;
       }
@@ -340,6 +429,7 @@ void onFix() {
       P.goodLon = f.lon;
     }
     P.goodAlt = f.altM;
+    P.goodTime = N.now;
     N.src = 1;
     N.altValid = f.altValid;
     N.altGps = f.altM;
@@ -374,15 +464,17 @@ void flushCamp() {
 void logPoint() {
   proto::Point p{};
   p.time = N.now;
-  bool haveGps = N.fix && !N.spoof && N.src == 1;
-  double lat = haveGps ? N.lat : (P.haveGood ? P.goodLat : 0);
-  double lon = haveGps ? N.lon : (P.haveGood ? P.goodLon : 0);
+  bool paused = !P.recording;
+  bool haveGps = !paused && N.fix && !N.spoof && N.src == 1;
+  // На паузе (едем на машине и т. п.) — только датчики: без координат, в трек и километраж не идёт
+  double lat = paused ? 0 : (haveGps ? N.lat : (P.haveGood ? P.goodLat : 0));
+  double lon = paused ? 0 : (haveGps ? N.lon : (P.haveGood ? P.goodLon : 0));
   p.lat7 = (lat || lon) ? c7(lat) : 0;
   p.lon7 = (lat || lon) ? c7(lon) : 0;
-  p.src = haveGps ? 1 : 0;
-  p.spoof = N.spoof;
-  p.spoofMask = N.spoofMask;
-  if (N.spoof) {
+  p.src = paused ? proto::SRC_PAUSE : (haveGps ? 1 : 0);
+  p.spoof = !paused && N.spoof;
+  p.spoofMask = p.spoof ? N.spoofMask : 0;
+  if (p.spoof) {
     const nmea::Fix& f = gps::parser().fix();
     p.spoofLat7 = c7(f.lat);
     p.spoofLon7 = c7(f.lon);
@@ -402,7 +494,7 @@ void logPoint() {
   p.speed10 = haveGps ? (uint16_t)lroundf(N.speedKmh * 10) : 0;
   P.lastPointTime = p.time;
 
-  bool camp = P.power.state() == logic::CAMP || P.power.state() == logic::CRITICAL ||
+  bool camp = paused || P.power.state() == logic::CAMP || P.power.state() == logic::CRITICAL ||
               (P.power.state() == logic::ECONOMY && !P.power.moving());
   if (camp) {
     // На стоянке копим в RTC-памяти — SD не трогаем на каждой записи
@@ -470,19 +562,20 @@ void startSync(uint8_t what, uint32_t since) {
     j.idx = storage::firstMarkSince(since);
     j.end = storage::markCount();
   }
-  if (g_sync.active) g_syncNext = j;
+  if (g_sync.active) g_syncWait[syncSlot(what)] = j;
   else g_sync = j;
 }
 
 void pumpSync() {
   if (!g_sync.active) return;
   if (!radio::secured()) {
-    g_sync.active = g_syncNext.active = false;
+    g_sync.active = false;
+    for (SyncJob& w : g_syncWait) w.active = false;
     return;
   }
   uint8_t b[96];
   // Порция за итерацию: темп ограничен буферами BLE — подобрать на железе
-  for (int i = 0; i < 4 && g_sync.idx < g_sync.end; i++, g_sync.idx++) {
+  for (int i = 0; i < 4 && g_sync.idx < g_sync.end; i++) {
     size_t n = 0;
     if (g_sync.what == proto::CMD_SYNC_TRACK) {
       proto::Point p;
@@ -494,15 +587,23 @@ void pumpSync() {
       if (storage::readMark(g_sync.idx, m)) n = proto::encodeMark(m, b, sizeof(b));
     }
     if (n) {
-      radio::sendEvent(b, n);
+      if (!radio::sendEvent(b, n)) break;  // буферы BLE заняты — эту же запись в следующий раз
       g_sync.sent++;
     }
+    g_sync.idx++;
   }
   if (g_sync.idx >= g_sync.end) {
+    // SYNC_DONE тоже не терять: без него приложение считает, что выгрузка ещё идёт
+    if (!radio::sendEvent(b, proto::encodeSyncDone(g_sync.what, g_sync.sent, b, sizeof(b)))) return;
     if (g_sync.what != proto::CMD_SYNC_LOG || g_sync.sent) LOGD(M_BLE, "выгрузка 0x%02X: %lu записей", g_sync.what, (unsigned long)g_sync.sent);
-    sendPacketEvent(b, proto::encodeSyncDone(g_sync.what, g_sync.sent, b, sizeof(b)));
-    g_sync = g_syncNext;
-    g_syncNext.active = false;
+    g_sync.active = false;
+    for (SyncJob& w : g_syncWait) {
+      if (w.active) {
+        g_sync = w;
+        w.active = false;
+        break;
+      }
+    }
   } else {
     delay(4);
   }
@@ -535,7 +636,7 @@ void handleCommand(const uint8_t* data, size_t len) {
       else if (delta > 300 || delta < -300) LOGW(M_RTC, "время с телефона: часы ушли на %+ld с", delta);
       else LOGD(M_RTC, "время с телефона: сдвиг %+ld с", delta);
       clockx::setFromPhone(c.time);
-      N.now = c.time;
+      if (delta) onClockJump((int32_t)delta);
       if (c.tzMin != S.tzMin) {
         S.tzMin = c.tzMin;
         saveSettings();
@@ -544,9 +645,16 @@ void handleCommand(const uint8_t* data, size_t len) {
     }
     case proto::CMD_PHONE_POS:
       P.spoof.setPhone(c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM, N.now);
+#ifdef FAKE_SENSORS
+      if (gps::fakeAnchor(c.lat7 / 1e7, c.lon7 / 1e7)) {
+        P.spoof.forgetLastGood();
+        P.haveGood = false;
+        LOGI(M_GPS, "эмуляция: трек идёт от позиции телефона, подмена — каждые 10 мин на 2 мин");
+      }
+#endif
       break;
     case proto::CMD_RECORD:
-      if (c.flag && !P.recording && (P.hikeStart == 0 || N.now - P.lastPointTime > 6 * 3600)) newHike(N.now);
+      if (c.flag && !P.recording && (P.hikeStart == 0 || (int32_t)(N.now - P.lastPointTime) > 6 * 3600)) newHike(N.now);
       P.recording = c.flag;
       break;
     case proto::CMD_MARK:
@@ -848,14 +956,19 @@ void secondTick() {
   if (g_tick % 600 == 0) updateSun();
 
   // Запись
-  if (P.recording && P.hikeStart && (int32_t)(N.now - P.nextLogAt) >= 0) {
+  // На паузе GPS выключен, но датчики пишутся дальше — раз в минуту (как на стоянке), без координат
+  if (P.hikeStart && (int32_t)(N.now - P.nextLogAt) >= 0) {
     logPoint();
-    P.nextLogAt = N.now + P.power.logIntervalS();
+    uint16_t every = P.power.logIntervalS();
+    if (!P.recording && every < S.logCampS) every = S.logCampS;
+    P.nextLogAt = N.now + every;
   }
 
   // Тревоги
   uint8_t active = 0;
-  if (N.spoof || (int32_t)(P.spoofAlertUntil - N.now) > 0) active |= proto::AL_SPOOF;
+  // Подмена — не тревога: сделать с ней ничего нельзя, а писк и окно BLE на каждый эпизод только
+  // отвлекают и тратят батарею. Она видна в статусе, на карте и в журнале
+
   if (P.power.low()) active |= proto::AL_LOW_BATT;
   if (P.power.critical()) active |= proto::AL_CRIT_BATT;
   if (g_sdError && storage::sdOk() == false) active |= proto::AL_SD_ERROR;
@@ -921,17 +1034,19 @@ bool canSleep(uint32_t ms) {
 #endif
 }
 
-void goToSleep() {
+// forceS > 0 — уснуть ровно на столько (консольная команда sleep, проверка сна на голой плате)
+void goToSleep(int32_t forceS = 0) {
   N.now = clockx::now();
   if (P.campN && N.now - P.lastFlushAt >= SD_FLUSH_S) flushCamp();
   // Будим на ближайшее: запись (если идёт) или маячок (если не невидимка); иначе через час
   uint32_t wakeAt = N.now + 3600;
-  if (P.recording && P.hikeStart && (int32_t)(P.nextLogAt - wakeAt) < 0) wakeAt = P.nextLogAt;
+  if (P.hikeStart && (int32_t)(P.nextLogAt - wakeAt) < 0) wakeAt = P.nextLogAt;
   uint16_t beaconEvery = P.power.beaconIntervalS(S.beaconS);
   if (beaconEvery && (int32_t)(P.nextBeaconAt - wakeAt) < 0) wakeAt = P.nextBeaconAt;
   int32_t sleepS = (int32_t)(wakeAt - N.now);
   if (sleepS < 1) sleepS = 1;
   if (sleepS > 3600) sleepS = 3600;
+  if (forceS > 0) sleepS = forceS;
 
   LOGD(M_PWR, "сон %ld с", (long)sleepS);
   // Буфер журнала почти полон — сбросить, иначе за следующие пробуждения начнёт терять строки
@@ -951,7 +1066,9 @@ void goToSleep() {
   rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_A);
   rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_B);
   esp_sleep_enable_ext1_wakeup((1ULL << PIN_BTN_A) | (1ULL << PIN_BTN_B), ESP_EXT1_WAKEUP_ANY_LOW);
+#ifndef FAKE_SENSORS  // в эмуляции MPU нет, вывод INT висит в воздухе — будил бы сразу
   if (sensors::presence().mpu) esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_MPU_INT, 1);
+#endif
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);  // держать подтяжки кнопок
   esp_deep_sleep_start();
 }
@@ -977,6 +1094,8 @@ void console() {
     if (!strcmp(line, "help")) {
       Serial.println("st — состояние; i2c — сканер шины; gps on|off|echo — GPS; pcas <тело> — команда модулю;"
                      " win — окно BLE; info — чип и SD; log — сбросить журнал на SD; debug on|off — подробный журнал");
+      Serial.println("Проверки: sleep <с> — глубокий сон (USB пропадёт, монитор переоткрыть); jump <±с> — переставить"
+                     " часы, как телефон; newhike — начать новый поход");
     } else if (!strcmp(line, "log")) {
       uint32_t n = dlog::pending();
       flushLog();
@@ -1009,6 +1128,22 @@ void console() {
       gps::setEcho(echo);
     } else if (!strncmp(line, "pcas ", 5)) {
       gps::sendCommand(line + 5);
+    } else if (!strncmp(line, "sleep ", 6)) {
+      int32_t s = atol(line + 6);
+      if (s < 1 || s > 3600) {
+        Serial.println("sleep 1..3600");
+      } else {
+        Serial.printf("сплю %ld с; после пробуждения переоткрой монитор и введи st\n", (long)s);
+        goToSleep(s);
+      }
+    } else if (!strncmp(line, "jump ", 5)) {
+      int32_t d = atol(line + 5);
+      clockx::setFromPhone(clockx::now() + d);
+      onClockJump(d);
+      Serial.printf("часы переставлены на %+ld с (как от телефона), t=%lu\n", (long)d, (unsigned long)N.now);
+    } else if (!strcmp(line, "newhike")) {
+      newHike(clockx::now());
+      LOGI(M_SYS, "новый поход %lu (команда)", (unsigned long)P.hikeStart);
     } else if (!strcmp(line, "win")) {
       radio::openWindow(makeBeacon(), true);
     } else if (!strcmp(line, "info")) {
@@ -1106,7 +1241,7 @@ void setup() {
 
   loadSettings();
   applySettings();
-  bool rtcOk = clockx::begin();
+  bool rtcOk = clockx::begin(cold);
   N.now = clockx::now();
   if (cold) {
     logBoot(g_prefs);
@@ -1117,6 +1252,7 @@ void setup() {
     if (wake == ESP_SLEEP_WAKEUP_TIMER) c.wakeTimer++;
     else if (wake == ESP_SLEEP_WAKEUP_EXT1) c.wakeButton++;
     else if (wake == ESP_SLEEP_WAKEUP_EXT0) c.wakeMotion++;
+    if (!rtcOk) LOGW(M_RTC, "DS1302 не ответил после сна — время по внутренним часам");
     if (wake != ESP_SLEEP_WAKEUP_TIMER) {
       LOGD(M_PWR, "проснулся: %s", wake == ESP_SLEEP_WAKEUP_EXT1 ? "кнопка" : (wake == ESP_SLEEP_WAKEUP_EXT0 ? "движение" : "?"));
     }
@@ -1157,10 +1293,12 @@ void setup() {
            S.gpsPulseS, S.beaconS, S.logMovingS, S.logCampS, S.debug ? "вкл" : "выкл");
     }
     loadBlacklist();
-    // Продолжить поход, если последняя запись свежее 6 ч; иначе новый
+    // Продолжить поход, если последняя запись свежее 6 ч; иначе новый.
+    // При непроверенных часах «6 ч назад» посчитать нельзя — начинаем новый: его начало и записи
+    // сдвинутся, когда придёт время (onClockJump). Иначе остаётся поход с началом «из будущего»
     uint32_t hike = g_prefs.getULong("hike", 0);
     uint32_t last = g_prefs.getULong("last", 0);
-    if (hike && last && N.now >= last && N.now - last < 6 * 3600) {
+    if (clockx::trusted() && hike && last && N.now >= last && N.now - last < 6 * 3600) {
       P.hikeStart = hike;
       P.lastPointTime = last;
       storage::openHike(hike);
@@ -1168,6 +1306,8 @@ void setup() {
     } else {
       newHike(N.now);
     }
+    g_shiftFromPoint = clockx::trusted() ? NO_SHIFT : storage::pointCount();
+    g_shiftFromMark = clockx::trusted() ? NO_SHIFT : storage::markCount();
     P.nextLogAt = N.now;
     P.nextBeaconAt = N.now;
     // После включения 2 мин окно подключения (без сопряжения новых) и не спим

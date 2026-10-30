@@ -80,7 +80,7 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         ),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { SectionLabel("Сохранено в телефоне · ${list.size}") }
+        item { SectionLabel("Сохранено в телефоне | ${list.size}") }
         if (list.isEmpty()) item {
             Text(
                 "Походов пока нет. Они появятся после первой связи с гаджетом.",
@@ -111,11 +111,11 @@ private fun HikeCard(h: HikeSummary, current: Boolean, onClick: () -> Unit) {
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    "${Fmt.time(h.startMs)}–${Fmt.time(h.endMs)} · ${Fmt.duration(h.endMs - h.startMs)}",
+                    "${Fmt.time(h.startMs)}–${Fmt.time(h.endMs)} | ${Fmt.duration(h.endMs - h.startMs)}",
                     style = MaterialTheme.typography.labelMedium, color = Palette.Text,
                 )
                 Text(
-                    "t ${Fmt.num(h.tempMin)}…${Fmt.num(h.tempMax)}° · меток ${h.marks}",
+                    "${Fmt.num(h.tempMin)}…${Fmt.num(h.tempMax)} °C | меток ${h.marks}",
                     style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
                 )
             }
@@ -149,7 +149,7 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
         Row(verticalAlignment = Alignment.CenterVertically) {
             TermButton("← Походы", Palette.TextDim, onClick = onClose)
             Spacer(Modifier.width(12.dp))
-            Text(h.title(), style = MaterialTheme.typography.titleMedium, color = Palette.Text, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(h.title(), style = MaterialTheme.typography.titleMedium, color = Palette.Text, modifier = Modifier.weight(1f))
         }
 
         Panel(accent = Palette.Geo, title = dateOf(h.startMs), titleRight = if (h.demo) "эмулятор" else null) {
@@ -161,7 +161,7 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
             }
             Spacer(Modifier.height(6.dp))
             KeyValue("Время", "${Fmt.time(h.startMs)} – ${Fmt.time(h.endMs)}")
-            KeyValue("Температура", "${Fmt.num(h.tempMin)}° … ${Fmt.num(h.tempMax)}°", Palette.Temp)
+            KeyValue("Температура", "${Fmt.num(h.tempMin)} … ${Fmt.num(h.tempMax)} °C", Palette.Temp)
             KeyValue("Метки", "${h.marks}")
             KeyValue("Точек записано", "${h.points}")
             if (h.spoofPoints > 0) KeyValue("Подозрение на подмену", "${h.spoofPoints} точек", Palette.Warn)
@@ -191,7 +191,7 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
                 }
                 ChartsBody(track, h.startMs, sun, "Закат и температура")
             }
-            SectionLabel("Метки · ${marks.size}", Modifier.padding(top = 4.dp))
+            SectionLabel("Метки | ${marks.size}", Modifier.padding(top = 4.dp))
             Column { marks.forEach { MarkLine(it, h.startMs) } }
         }
         Spacer(Modifier.height(8.dp))

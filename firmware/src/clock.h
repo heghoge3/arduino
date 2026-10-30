@@ -8,9 +8,10 @@ namespace clockx {
 enum Source : uint8_t { SRC_NONE = 0, SRC_RTC = 1, SRC_PHONE = 2, SRC_GPS = 3 };
 
 // Запустить DS1302: отключить подзаряд, проверить, шли ли часы. true — модуль отвечает.
-bool begin();
+// cold — включение, а не пробуждение: при пробуждении без ответа DS1302 время берётся из внутренних часов
+bool begin(bool cold);
 
-// Текущее время, Unix-с UTC (по millis() от последнего чтения DS1302)
+// Текущее время, Unix-с UTC (внутренние часы ESP32, их ставят DS1302, телефон или GPS)
 uint32_t now();
 
 // Время проверено: часы не стояли и их ставили с телефона или GPS
@@ -21,7 +22,7 @@ bool rtcPresent();
 // Поставить время (и записать в DS1302)
 void setFromPhone(uint32_t utc);
 // Время GPS: ставим только если часы не проверены, и только без подозрения на подмену
-void offerGps(uint32_t utc, bool spoofSuspected);
+int32_t offerGps(uint32_t utc, bool spoofSuspected);  // на сколько с переставили часы (0 — не брали)
 
 // Перечитать DS1302 (раз в 10 мин, после сна)
 void resync();

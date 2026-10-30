@@ -41,7 +41,6 @@ import com.vabugeode.app.ui.theme.Palette
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
-    val speed by vm.demo.speed.collectAsStateWithLifecycle()
     val blacklist by vm.repo.blacklist.collectAsStateWithLifecycle()
     var guide by rememberSaveable { mutableStateOf(false) }
     if (guide) {
@@ -73,38 +72,19 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                if (source == Source.GADGET) "Настоящий гаджет по Bluetooth. Выбор и подключение — на вкладке «Трекер»."
+                if (source == Source.GADGET) "Настоящий гаджет по Bluetooth."
                 else "Виртуальный гаджет внутри приложения — для проверки без железа.",
                 style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
             )
         }
-        WatchPanel(vm) { guide = true }
-        OfflineMapsPanel()
-        Panel(accent = Palette.Geo) {
-            SectionLabel("Виртуальное устройство", color = Palette.Geo)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Платы ещё нет — её заменяет эмулятор. Он шлёт байты по тому же протоколу, что и прошивка, а приложение их разбирает. Сценарий: поход под Петербургом, закат, стоянки, потеря сигнала в здании, подмена GPS.",
-                style = MaterialTheme.typography.bodyMedium, color = Palette.Text,
-            )
-            Spacer(Modifier.height(12.dp))
-            Text("Скорость времени", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
-            Spacer(Modifier.height(6.dp))
-            val options = listOf(1, 10, 30, 120)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                options.forEachIndexed { i, v ->
-                    SegmentedButton(
-                        selected = speed == v,
-                        onClick = { vm.demo.speed.value = v },
-                        shape = SegmentedButtonDefaults.itemShape(i, options.size),
-                    ) { Text("${v}×") }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = { vm.demo.restart() }, modifier = Modifier.fillMaxWidth()) {
-                Text("Начать демо-поход заново")
-            }
+        // Только то, что относится к выбранному источнику
+        if (source == Source.GADGET) {
+            LinkPanel(vm)
+            WatchPanel(vm) { guide = true }
+        } else {
+            EmulatorPanel(vm)
         }
+        OfflineMapsPanel()
 
         Panel {
             SectionLabel("Чёрный список подмены")
@@ -128,7 +108,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             Text("Редактирование — после подключения устройства", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
         }
 
-        Panel {
+        if (source == Source.GADGET) Panel {
             SectionLabel("Запись и калибровки")
             Spacer(Modifier.height(6.dp))
             KeyValue("Интервал в движении", "10 с")
@@ -142,10 +122,40 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         Panel {
             Logo(size = 28.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Версия 0.9.0 · на железе не проверено", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+            Text("Версия 0.9.0 | на железе не проверено", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             Text("Карта: © OpenStreetMap, Protomaps, OpenFreeMap", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             Text("Шрифты: VT323, IBM Plex Mono (OFL)", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun EmulatorPanel(vm: AppViewModel) {
+    val speed by vm.demo.speed.collectAsStateWithLifecycle()
+    Panel(accent = Palette.Geo) {
+        SectionLabel("Эмулятор", color = Palette.Geo)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Шлёт байты по тому же протоколу, что и прошивка, а приложение их разбирает. Сценарий: поход под Петербургом, закат, стоянки, потеря сигнала в здании, подмена GPS.",
+            style = MaterialTheme.typography.bodyMedium, color = Palette.Text,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("Скорость времени", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+        Spacer(Modifier.height(6.dp))
+        val options = listOf(1, 10, 30, 120)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            options.forEachIndexed { i, v ->
+                SegmentedButton(
+                    selected = speed == v,
+                    onClick = { vm.demo.speed.value = v },
+                    shape = SegmentedButtonDefaults.itemShape(i, options.size),
+                ) { Text("${v}×") }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = { vm.demo.restart() }, modifier = Modifier.fillMaxWidth()) {
+            Text("Начать демо-поход заново")
+        }
     }
 }

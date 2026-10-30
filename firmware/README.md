@@ -83,7 +83,7 @@ pio test -e native
 
 ```
 mkdir -p /tmp/vabugeode-tests
-g++ -std=gnu++17 -Wall -Wextra -Itest_host -Isrc -Iinclude -Ilib/core test_host/clock_test.cpp src/clock.cpp lib/core/nmea.cpp -o /tmp/vabugeode-tests/clock_test
+g++ -std=gnu++17 -Wall -Wextra -Itest_host -Isrc -Iinclude -Ilib/core test_host/clock_test.cpp src/clock.cpp lib/core/nmea.cpp -Wl,--wrap=time,--wrap=settimeofday -o /tmp/vabugeode-tests/clock_test
 /tmp/vabugeode-tests/clock_test
 g++ -std=gnu++17 -Wall -Wextra -Isrc -Ilib/core test_host/power_test.cpp lib/core/logic.cpp -o /tmp/vabugeode-tests/power_test
 /tmp/vabugeode-tests/power_test

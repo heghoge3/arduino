@@ -54,7 +54,8 @@ data class ChartSeries(
 
 /**
  * Линейный график по времени. Умеет: восходы и закаты (солнышки), затенение ночей,
- * разрывы при пропусках данных, «ползунок» пальцем с подсказкой значения.
+ * отрезки событий (привал, пропуск записи, подмена), разрывы при пропусках данных,
+ * «ползунок» пальцем с подсказкой значения.
  */
 @Composable
 fun LineChart(
@@ -65,6 +66,7 @@ fun LineChart(
     sun: SunSchedule? = null,
     showAxes: Boolean = true,
     interactive: Boolean = true,
+    bands: List<ChartBand> = emptyList(),
 ) {
     val measurer = rememberTextMeasurer()
     var touchX by remember { mutableStateOf<Float?>(null) }
@@ -108,7 +110,7 @@ fun LineChart(
     Canvas(modifier.then(gestureMod)) {
         val left = if (showAxes) 40.dp.toPx() else 0f
         val bottom = if (showAxes) 20.dp.toPx() else 0f
-        val top = if (showAxes) 18.dp.toPx() else 4.dp.toPx()
+        val top = if (showAxes) 32.dp.toPx() else 4.dp.toPx()  // сверху место под солнышки и время над ними
         val right = 6.dp.toPx()
         val w = size.width - left - right
         val h = size.height - top - bottom
@@ -141,6 +143,22 @@ fun LineChart(
             }
         }
 
+        // Отрезки событий: заливка и подпись сверху, если помещается
+        val bandStyle = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Medium)
+        for (b in bands) {
+            val a0 = max(b.startMs, t0)
+            val a1 = min(b.endMs, t1)
+            if (a1 <= a0) continue
+            val bx = x(a0)
+            val bw = max(x(a1) - bx, 1.dp.toPx())
+            drawRect(b.color.copy(alpha = 0.10f), topLeft = Offset(bx, top), size = Size(bw, h))
+            drawLine(b.color.copy(alpha = 0.5f), Offset(bx, top), Offset(bx + bw, top), strokeWidth = 2.dp.toPx())
+            if (showAxes) {
+                val tl = measurer.measure(b.label, bandStyle.copy(color = b.color))
+                if (tl.size.width + 4.dp.toPx() <= bw) drawText(tl, topLeft = Offset(bx + 2.dp.toPx(), top + 3.dp.toPx()))
+            }
+        }
+
         // Сетка и подписи по Y
         if (showAxes) {
             val step = niceStep((vMax - vMin) / 4)
@@ -160,16 +178,22 @@ fun LineChart(
             val stepMs = when {
                 t1 - t0 <= 2 * HOUR -> HOUR / 2
                 t1 - t0 <= 8 * HOUR -> HOUR
-                else -> 3 * HOUR
+                t1 - t0 <= 24 * HOUR -> 3 * HOUR
+                t1 - t0 <= 48 * HOUR -> 6 * HOUR
+                else -> 12 * HOUR
             }
             val zone = ZoneId.systemDefault()
             val offset = zone.rules.getOffset(Instant.ofEpochMilli(t0)).totalSeconds * 1000L
             var t = (floor((t0 + offset).toDouble() / stepMs).toLong() + 1) * stepMs - offset
+            // Подпись, которая налезла бы на предыдущую, пропускаем (узкий экран, длинный поход)
+            var lastRight = Float.NEGATIVE_INFINITY
             while (t < t1) {
                 val xx = x(t)
                 val tl = measurer.measure(Fmt.time(t), axisStyle)
-                if (xx - tl.size.width / 2 > left && xx + tl.size.width / 2 < left + w) {
-                    drawText(tl, topLeft = Offset(xx - tl.size.width / 2, top + h + 4.dp.toPx()))
+                val l = xx - tl.size.width / 2
+                if (l > left && xx + tl.size.width / 2 < left + w && l > lastRight + 6.dp.toPx()) {
+                    drawText(tl, topLeft = Offset(l, top + h + 4.dp.toPx()))
+                    lastRight = l + tl.size.width
                 }
                 t += stepMs
             }
@@ -177,7 +201,8 @@ fun LineChart(
 
         // Закаты и восходы: пунктир и солнышко (закат — оранжевое садится, восход — жёлтое встаёт)
         if (sun != null) {
-            for (e in sun.events) {
+            var sunLabelRight = Float.NEGATIVE_INFINITY
+            for (e in sun.events.sortedBy { it.timeMs }) {
                 if (e.kind != SunSchedule.Kind.SUNSET && e.kind != SunSchedule.Kind.SUNRISE) continue
                 if (e.timeMs !in t0..t1) continue
                 val rising = e.kind == SunSchedule.Kind.SUNRISE
@@ -191,9 +216,13 @@ fun LineChart(
                 val horizon = if (showAxes) top - 3.dp.toPx() else top + r * 2.4f
                 drawSun(xs, horizon, r, c, rising)
                 if (showAxes) {
+                    // Время — над солнышком, по центру; налезает на соседнее — пропускаем
                     val tl = measurer.measure(Fmt.time(e.timeMs), TextStyle(color = c, fontSize = 10.sp, fontWeight = FontWeight.SemiBold))
-                    val tx = min(xs + r * 2.6f, left + w - tl.size.width)
-                    drawText(tl, topLeft = Offset(tx, horizon - tl.size.height + 2.dp.toPx()))
+                    val tx = (xs - tl.size.width / 2).coerceIn(0f, size.width - tl.size.width)
+                    if (tx > sunLabelRight + 4.dp.toPx()) {
+                        drawText(tl, topLeft = Offset(tx, horizon - r * 2.2f - tl.size.height))
+                        sunLabelRight = tx + tl.size.width
+                    }
                 }
             }
         }

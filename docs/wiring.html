@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Схема подключения</title>
+<style>
+/* Крупные схемы к docs/assembly.html: кнопки и AO3401. Стиль и цвета — как в assembly.html */
+:root {
+  color-scheme: dark;
+  --bg: #060A12;
+  --line: #1E2D44;
+  --text: #D7EEFF;
+  --dim: #8CA3BD;
+  --geo: #9FD8FF;
+  --pwr: #FF7B6E;
+  --gnd: #8CA3BD;
+  --gps: #7CE3B0;
+  --io: #FF9FCB;
+  --warn: #FFBE5A;
+  --bad: #FF6B5E;
+  --badbg: #1D0C10;
+  --f-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --f-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.55 var(--f-sans);
+  margin: 0; padding: 20px 16px 48px;
+}
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1 { font: 600 26px/1.2 var(--f-sans); margin: 0; color: var(--geo); }
+h2 { font: 500 13px/1.3 var(--f-mono); letter-spacing: 2px; text-transform: uppercase; color: var(--geo); margin: 0; }
+p { margin: 0; }
+.lead { color: var(--dim); }
+section { border: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+section.danger { border-color: var(--bad); background: var(--badbg); }
+section.danger h2 { color: var(--bad); }
+.scroll { overflow-x: auto; }
+svg { width: 100%; min-width: 620px; height: auto; display: block; }
+svg text { font-family: var(--f-mono); }
+ol, ul { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+code { font-family: var(--f-mono); color: var(--geo); font-size: 0.92em; }
+b.pwr { color: var(--pwr); } b.gnd { color: var(--gnd); } b.gps { color: var(--gps); } b.io { color: var(--io); }
+.note { color: var(--dim); font-size: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font: 13px var(--f-mono); color: var(--dim); }
+.legend span::before { content: ""; display: inline-block; width: 18px; height: 3px; margin-right: 6px; vertical-align: middle; background: currentColor; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:8px">
+  <h1>Схема подключения</h1>
+  <p class="lead">На телефоне схемы листаются вбок. Дополнение к <code>assembly.html</code>. Полная схема и крупно: кнопка питания, кнопки A/B, MOSFET AO3401. Каждый провод нарисован отдельно. Номера GPIO как в <code>firmware/include/pins.h</code>, сверь их с надписями на своей плате.</p>
+  <div class="legend">
+    <span style="color:var(--pwr)">плюс питания</span>
+    <span style="color:var(--gnd)">GND</span>
+    <span style="color:var(--io)">кнопки → GPIO</span>
+    <span style="color:var(--gps)">GPS</span>
+  </div>
+</header>
+
+<section class="danger">
+  <h2>Сначала узнай выводы мультиметром</h2>
+  <p>У кнопок бывает 2, 4 или 6 выводов, а у переходника SOT-23→DIP разная разводка. Не паяй «по картинке», пока не прозвонил:</p>
+  <ul>
+    <li><b>Кнопка:</b> режим прозвонки, щупы на два вывода. Нажал — пищит, отпустил — тишина: это нужная пара. Если пищит всегда, эти выводы внутри соединены, бери другую пару.</li>
+    <li><b>Кнопка с фиксацией:</b> так же, но «нажата» = пищит постоянно, «отжата» = тишина.</li>
+    <li><b>AO3401 на переходнике:</b> прозвони, к какой ножке DIP идёт каждая ножка корпуса (вид корпуса — в схеме 3). Подпиши ножки маркером: G, S, D.</li>
+  </ul>
+</section>
+
+<!-- ============ 0. Полная схема (генерируется скриптом, правки — по образцу) ============ -->
+<section>
+  <h2>0. Полная схема</h2>
+  <p>Слева — выводы платы (номера GPIO, а не номера ножек). Четыре вертикальные шины: <b class="pwr">+3,3 В</b>, <b class="gnd">GND</b>, SDA, SCL (пунктир). <b>Точка — соединение.</b> Линия, которая пересекает шину без точки, с ней не соединена.</p>
+  <p class="note">На деле шина — это полоска на перфоплате или скрутка проводов, к которой припаяны все VCC (или все GND, SDA, SCL). Подключай по одному модулю и проверяй по шагам гайда.</p>
+  <div class="scroll"><svg viewBox="0 0 760 2086" role="img" aria-labelledby="t0"><title id="t0">Полная схема: плата, шины 3,3 В, GND, SDA, SCL и все модули</title><line x1="250" y1="220" x2="250" y2="2066" stroke="#FF7B6E" stroke-width="3"/><text x="250" y="198" fill="#FF7B6E" font-size="11" text-anchor="middle">3V3</text><line x1="275" y1="220" x2="275" y2="2066" stroke="#8CA3BD" stroke-width="3"/><text x="275" y="212" fill="#8CA3BD" font-size="11" text-anchor="middle">GND</text><line x1="300" y1="220" x2="300" y2="2066" stroke="#7FE0E6" stroke-width="3"/><text x="300" y="198" fill="#7FE0E6" font-size="11" text-anchor="middle">SDA</text><line x1="325" y1="220" x2="325" y2="2066" stroke="#7FE0E6" stroke-width="3" stroke-dasharray="6 4"/><text x="325" y="212" fill="#7FE0E6" font-size="11" text-anchor="middle">SCL</text><line x1="250" y1="118" x2="250" y2="220" stroke="#FF7B6E" stroke-width="3"/><line x1="275" y1="132" x2="275" y2="220" stroke="#8CA3BD" stroke-width="3"/><rect x="20" y="200" width="180" height="1866" fill="#0A111C" stroke="#9FD8FF" stroke-width="2"/><text x="30" y="220" fill="#9FD8FF" font-size="13">ESP32-S3-Zero</text><text x="20" y="20" fill="#9FD8FF" font-size="12" text-anchor="start">ЦЕПЬ ПИТАНИЯ</text><rect x="20" y="40" width="70" height="56" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="55.0" y="62" fill="#D7EEFF" font-size="12" text-anchor="middle">Аккум</text><rect x="120" y="40" width="90" height="56" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="165.0" y="62" fill="#D7EEFF" font-size="12" text-anchor="middle">TP4056</text><rect x="255" y="40" width="100" height="56" fill="#0A111C" stroke="#FFBE5A" stroke-width="2"/><text x="305.0" y="62" fill="#D7EEFF" font-size="12" text-anchor="middle">кнопка пит.</text><rect x="400" y="40" width="140" height="56" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="470.0" y="62" fill="#D7EEFF" font-size="12" text-anchor="middle">INA219</text><rect x="590" y="40" width="130" height="56" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="655.0" y="62" fill="#D7EEFF" font-size="12" text-anchor="middle">TPS63020</text><text x="55" y="84" fill="#8CA3BD" font-size="12" text-anchor="middle">+  −</text><text x="165" y="84" fill="#8CA3BD" font-size="10" text-anchor="middle">B+/B− OUT±</text><text x="305" y="84" fill="#8CA3BD" font-size="10" text-anchor="middle">с фиксацией</text><text x="470" y="84" fill="#FF7B6E" font-size="11" text-anchor="middle">VIN+   VIN−</text><text x="655" y="84" fill="#FF7B6E" font-size="11" text-anchor="middle">VIN → VOUT</text><line x1="90" y1="68" x2="120" y2="68" stroke="#FF7B6E" stroke-width="3"/><line x1="210" y1="68" x2="255" y2="68" stroke="#FF7B6E" stroke-width="3"/><line x1="355" y1="68" x2="400" y2="68" stroke="#FF7B6E" stroke-width="3"/><line x1="540" y1="68" x2="590" y2="68" stroke="#FF7B6E" stroke-width="3"/><line x1="655" y1="96" x2="655" y2="118" stroke="#FF7B6E" stroke-width="3"/><line x1="250" y1="118" x2="655" y2="118" stroke="#FF7B6E" stroke-width="3"/><text x="665" y="116" fill="#FF7B6E" font-size="11" text-anchor="start">VOUT 3,3 В</text><line x1="165" y1="96" x2="165" y2="132" stroke="#8CA3BD" stroke-width="3"/><line x1="165" y1="132" x2="720" y2="132" stroke="#8CA3BD" stroke-width="3"/><line x1="720" y1="132" x2="720" y2="80" stroke="#8CA3BD" stroke-width="3"/><text x="722" y="76" fill="#8CA3BD" font-size="10" text-anchor="end">GND</text><text x="290" y="150" fill="#FF6B5E" font-size="12" text-anchor="start">общая земля = OUT− TP4056. Минус аккумулятора — только на B−!</text><text x="192" y="226" fill="#FF7B6E" font-size="12" text-anchor="end">3V3</text><line x1="200" y1="222" x2="250" y2="222" stroke="#FF7B6E" stroke-width="3"/><circle cx="250" cy="222" r="4.5" fill="#FF7B6E"/><circle cx="200" cy="222" r="4.5" fill="#FF7B6E"/><text x="192" y="248" fill="#8CA3BD" font-size="12" text-anchor="end">GND</text><line x1="200" y1="244" x2="275" y2="244" stroke="#8CA3BD" stroke-width="3"/><circle cx="275" cy="244" r="4.5" fill="#8CA3BD"/><circle cx="200" cy="244" r="4.5" fill="#8CA3BD"/><text x="192" y="270" fill="#7FE0E6" font-size="12" text-anchor="end">GPIO8 · SDA</text><line x1="200" y1="266" x2="300" y2="266" stroke="#7FE0E6" stroke-width="3"/><circle cx="300" cy="266" r="4.5" fill="#7FE0E6"/><circle cx="200" cy="266" r="4.5" fill="#7FE0E6"/><text x="192" y="292" fill="#7FE0E6" font-size="12" text-anchor="end">GPIO9 · SCL</text><line x1="200" y1="288" x2="325" y2="288" stroke="#7FE0E6" stroke-width="3"/><circle cx="325" cy="288" r="4.5" fill="#7FE0E6"/><circle cx="200" cy="288" r="4.5" fill="#7FE0E6"/><rect x="430" y="308" width="300" height="132" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="326" fill="#D7EEFF" font-size="13" text-anchor="start">OLED SSD1306</text><text x="720" y="326" fill="#8CA3BD" font-size="11" text-anchor="end">0x3C</text><line x1="275" y1="360" x2="430" y2="360" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="360" r="4.5" fill="#8CA3BD"/><text x="440" y="364" fill="#8CA3BD" font-size="12" text-anchor="start">GND</text><text x="720" y="364" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="360" r="4.5" fill="#D7EEFF"/><line x1="250" y1="382" x2="430" y2="382" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="382" r="4.5" fill="#FF7B6E"/><text x="440" y="386" fill="#FF7B6E" font-size="12" text-anchor="start">VCC</text><text x="720" y="386" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="382" r="4.5" fill="#D7EEFF"/><line x1="325" y1="404" x2="430" y2="404" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="325" cy="404" r="4.5" fill="#7FE0E6"/><text x="440" y="408" fill="#7FE0E6" font-size="12" text-anchor="start">SCL</text><text x="720" y="408" fill="#7FE0E6" font-size="11" text-anchor="end">→ SCL</text><circle cx="430" cy="404" r="4.5" fill="#D7EEFF"/><line x1="300" y1="426" x2="430" y2="426" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="300" cy="426" r="4.5" fill="#7FE0E6"/><text x="440" y="430" fill="#7FE0E6" font-size="12" text-anchor="start">SDA</text><text x="720" y="430" fill="#7FE0E6" font-size="11" text-anchor="end">→ SDA</text><circle cx="430" cy="426" r="4.5" fill="#D7EEFF"/><rect x="430" y="454" width="300" height="176" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="472" fill="#D7EEFF" font-size="13" text-anchor="start">BME280</text><text x="720" y="472" fill="#8CA3BD" font-size="11" text-anchor="end">0x76</text><line x1="250" y1="506" x2="430" y2="506" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="506" r="4.5" fill="#FF7B6E"/><text x="440" y="510" fill="#FF7B6E" font-size="12" text-anchor="start">VCC</text><text x="720" y="510" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="506" r="4.5" fill="#D7EEFF"/><line x1="275" y1="528" x2="430" y2="528" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="528" r="4.5" fill="#8CA3BD"/><text x="440" y="532" fill="#8CA3BD" font-size="12" text-anchor="start">GND</text><text x="720" y="532" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="528" r="4.5" fill="#D7EEFF"/><line x1="325" y1="550" x2="430" y2="550" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="325" cy="550" r="4.5" fill="#7FE0E6"/><text x="440" y="554" fill="#7FE0E6" font-size="12" text-anchor="start">SCL</text><text x="720" y="554" fill="#7FE0E6" font-size="11" text-anchor="end">→ SCL</text><circle cx="430" cy="550" r="4.5" fill="#D7EEFF"/><line x1="300" y1="572" x2="430" y2="572" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="300" cy="572" r="4.5" fill="#7FE0E6"/><text x="440" y="576" fill="#7FE0E6" font-size="12" text-anchor="start">SDA</text><text x="720" y="576" fill="#7FE0E6" font-size="11" text-anchor="end">→ SDA</text><circle cx="430" cy="572" r="4.5" fill="#D7EEFF"/><line x1="250" y1="594" x2="430" y2="594" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="594" r="4.5" fill="#FF7B6E"/><text x="440" y="598" fill="#FF7B6E" font-size="12" text-anchor="start">CSB</text><text x="720" y="598" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="594" r="4.5" fill="#D7EEFF"/><line x1="275" y1="616" x2="430" y2="616" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="616" r="4.5" fill="#8CA3BD"/><text x="440" y="620" fill="#8CA3BD" font-size="12" text-anchor="start">SDO</text><text x="720" y="620" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="616" r="4.5" fill="#D7EEFF"/><rect x="430" y="644" width="300" height="176" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="662" fill="#D7EEFF" font-size="13" text-anchor="start">MPU6050 (GY-521)</text><text x="720" y="662" fill="#8CA3BD" font-size="11" text-anchor="end">0x68</text><line x1="250" y1="696" x2="430" y2="696" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="696" r="4.5" fill="#FF7B6E"/><text x="440" y="700" fill="#FF7B6E" font-size="12" text-anchor="start">VCC</text><text x="720" y="700" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="696" r="4.5" fill="#D7EEFF"/><line x1="275" y1="718" x2="430" y2="718" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="718" r="4.5" fill="#8CA3BD"/><text x="440" y="722" fill="#8CA3BD" font-size="12" text-anchor="start">GND</text><text x="720" y="722" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="718" r="4.5" fill="#D7EEFF"/><line x1="325" y1="740" x2="430" y2="740" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="325" cy="740" r="4.5" fill="#7FE0E6"/><text x="440" y="744" fill="#7FE0E6" font-size="12" text-anchor="start">SCL</text><text x="720" y="744" fill="#7FE0E6" font-size="11" text-anchor="end">→ SCL</text><circle cx="430" cy="740" r="4.5" fill="#D7EEFF"/><line x1="300" y1="762" x2="430" y2="762" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="300" cy="762" r="4.5" fill="#7FE0E6"/><text x="440" y="766" fill="#7FE0E6" font-size="12" text-anchor="start">SDA</text><text x="720" y="766" fill="#7FE0E6" font-size="11" text-anchor="end">→ SDA</text><circle cx="430" cy="762" r="4.5" fill="#D7EEFF"/><line x1="200" y1="784" x2="430" y2="784" stroke="#FF9FCB" stroke-width="2.5"/><circle cx="200" cy="784" r="4.5" fill="#FF9FCB"/><text x="192" y="788" fill="#FF9FCB" font-size="12" text-anchor="end">GPIO4</text><text x="440" y="788" fill="#FF9FCB" font-size="12" text-anchor="start">INT</text><text x="720" y="788" fill="#FF9FCB" font-size="11" text-anchor="end">→ GPIO4</text><circle cx="430" cy="784" r="4.5" fill="#D7EEFF"/><line x1="275" y1="806" x2="430" y2="806" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="806" r="4.5" fill="#8CA3BD"/><text x="440" y="810" fill="#8CA3BD" font-size="12" text-anchor="start">AD0</text><text x="720" y="810" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="806" r="4.5" fill="#D7EEFF"/><rect x="430" y="834" width="300" height="132" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="852" fill="#D7EEFF" font-size="13" text-anchor="start">Компас GY-271</text><text x="720" y="852" fill="#8CA3BD" font-size="11" text-anchor="end">0x0D</text><line x1="250" y1="886" x2="430" y2="886" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="886" r="4.5" fill="#FF7B6E"/><text x="440" y="890" fill="#FF7B6E" font-size="12" text-anchor="start">VCC</text><text x="720" y="890" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="886" r="4.5" fill="#D7EEFF"/><line x1="275" y1="908" x2="430" y2="908" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="908" r="4.5" fill="#8CA3BD"/><text x="440" y="912" fill="#8CA3BD" font-size="12" text-anchor="start">GND</text><text x="720" y="912" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="908" r="4.5" fill="#D7EEFF"/><line x1="325" y1="930" x2="430" y2="930" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="325" cy="930" r="4.5" fill="#7FE0E6"/><text x="440" y="934" fill="#7FE0E6" font-size="12" text-anchor="start">SCL</text><text x="720" y="934" fill="#7FE0E6" font-size="11" text-anchor="end">→ SCL</text><circle cx="430" cy="930" r="4.5" fill="#D7EEFF"/><line x1="300" y1="952" x2="430" y2="952" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="300" cy="952" r="4.5" fill="#7FE0E6"/><text x="440" y="956" fill="#7FE0E6" font-size="12" text-anchor="start">SDA</text><text x="720" y="956" fill="#7FE0E6" font-size="11" text-anchor="end">→ SDA</text><circle cx="430" cy="952" r="4.5" fill="#D7EEFF"/><rect x="430" y="980" width="300" height="132" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="998" fill="#D7EEFF" font-size="13" text-anchor="start">INA219 (логика)</text><text x="720" y="998" fill="#8CA3BD" font-size="11" text-anchor="end">0x40</text><line x1="250" y1="1032" x2="430" y2="1032" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="1032" r="4.5" fill="#FF7B6E"/><text x="440" y="1036" fill="#FF7B6E" font-size="12" text-anchor="start">VCC</text><text x="720" y="1036" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="1032" r="4.5" fill="#D7EEFF"/><line x1="275" y1="1054" x2="430" y2="1054" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="1054" r="4.5" fill="#8CA3BD"/><text x="440" y="1058" fill="#8CA3BD" font-size="12" text-anchor="start">GND</text><text x="720" y="1058" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="1054" r="4.5" fill="#D7EEFF"/><line x1="325" y1="1076" x2="430" y2="1076" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="325" cy="1076" r="4.5" fill="#7FE0E6"/><text x="440" y="1080" fill="#7FE0E6" font-size="12" text-anchor="start">SCL</text><text x="720" y="1080" fill="#7FE0E6" font-size="11" text-anchor="end">→ SCL</text><circle cx="430" cy="1076" r="4.5" fill="#D7EEFF"/><line x1="300" y1="1098" x2="430" y2="1098" stroke="#7FE0E6" stroke-width="2.5"/><circle cx="300" cy="1098" r="4.5" fill="#7FE0E6"/><text x="440" y="1102" fill="#7FE0E6" font-size="12" text-anchor="start">SDA</text><text x="720" y="1102" fill="#7FE0E6" font-size="11" text-anchor="end">→ SDA</text><circle cx="430" cy="1098" r="4.5" fill="#D7EEFF"/><rect x="430" y="1126" width="300" height="176" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="1144" fill="#D7EEFF" font-size="13" text-anchor="start">SD-модуль</text><text x="720" y="1144" fill="#8CA3BD" font-size="11" text-anchor="end">SPI</text><line x1="250" y1="1178" x2="430" y2="1178" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="1178" r="4.5" fill="#FF7B6E"/><text x="440" y="1182" fill="#FF7B6E" font-size="12" text-anchor="start">VCC</text><text x="720" y="1182" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="1178" r="4.5" fill="#D7EEFF"/><line x1="275" y1="1200" x2="430" y2="1200" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="1200" r="4.5" fill="#8CA3BD"/><text x="440" y="1204" fill="#8CA3BD" font-size="12" text-anchor="start">GND</text><text x="720" y="1204" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="1200" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1222" x2="430" y2="1222" stroke="#C2A8FF" stroke-width="2.5"/><circle cx="200" cy="1222" r="4.5" fill="#C2A8FF"/><text x="192" y="1226" fill="#C2A8FF" font-size="12" text-anchor="end">GPIO10</text><text x="440" y="1226" fill="#C2A8FF" font-size="12" text-anchor="start">CS</text><text x="720" y="1226" fill="#C2A8FF" font-size="11" text-anchor="end">→ GPIO10</text><circle cx="430" cy="1222" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1244" x2="430" y2="1244" stroke="#C2A8FF" stroke-width="2.5"/><circle cx="200" cy="1244" r="4.5" fill="#C2A8FF"/><text x="192" y="1248" fill="#C2A8FF" font-size="12" text-anchor="end">GPIO11</text><text x="440" y="1248" fill="#C2A8FF" font-size="12" text-anchor="start">MOSI</text><text x="720" y="1248" fill="#C2A8FF" font-size="11" text-anchor="end">→ GPIO11</text><circle cx="430" cy="1244" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1266" x2="430" y2="1266" stroke="#C2A8FF" stroke-width="2.5"/><circle cx="200" cy="1266" r="4.5" fill="#C2A8FF"/><text x="192" y="1270" fill="#C2A8FF" font-size="12" text-anchor="end">GPIO12</text><text x="440" y="1270" fill="#C2A8FF" font-size="12" text-anchor="start">SCK</text><text x="720" y="1270" fill="#C2A8FF" font-size="11" text-anchor="end">→ GPIO12</text><circle cx="430" cy="1266" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1288" x2="430" y2="1288" stroke="#C2A8FF" stroke-width="2.5"/><circle cx="200" cy="1288" r="4.5" fill="#C2A8FF"/><text x="192" y="1292" fill="#C2A8FF" font-size="12" text-anchor="end">GPIO13</text><text x="440" y="1292" fill="#C2A8FF" font-size="12" text-anchor="start">MISO</text><text x="720" y="1292" fill="#C2A8FF" font-size="11" text-anchor="end">→ GPIO13</text><circle cx="430" cy="1288" r="4.5" fill="#D7EEFF"/><rect x="430" y="1316" width="300" height="154" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="1334" fill="#D7EEFF" font-size="13" text-anchor="start">Часы DS1302</text><text x="720" y="1334" fill="#8CA3BD" font-size="11" text-anchor="end">не I²C</text><line x1="250" y1="1368" x2="430" y2="1368" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="1368" r="4.5" fill="#FF7B6E"/><text x="440" y="1372" fill="#FF7B6E" font-size="12" text-anchor="start">VCC</text><text x="720" y="1372" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="1368" r="4.5" fill="#D7EEFF"/><line x1="275" y1="1390" x2="430" y2="1390" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="1390" r="4.5" fill="#8CA3BD"/><text x="440" y="1394" fill="#8CA3BD" font-size="12" text-anchor="start">GND</text><text x="720" y="1394" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="1390" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1412" x2="430" y2="1412" stroke="#FFBE5A" stroke-width="2.5"/><circle cx="200" cy="1412" r="4.5" fill="#FFBE5A"/><text x="192" y="1416" fill="#FFBE5A" font-size="12" text-anchor="end">GPIO14</text><text x="440" y="1416" fill="#FFBE5A" font-size="12" text-anchor="start">CLK</text><text x="720" y="1416" fill="#FFBE5A" font-size="11" text-anchor="end">→ GPIO14</text><circle cx="430" cy="1412" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1434" x2="430" y2="1434" stroke="#FFBE5A" stroke-width="2.5"/><circle cx="200" cy="1434" r="4.5" fill="#FFBE5A"/><text x="192" y="1438" fill="#FFBE5A" font-size="12" text-anchor="end">GPIO15</text><text x="440" y="1438" fill="#FFBE5A" font-size="12" text-anchor="start">DAT</text><text x="720" y="1438" fill="#FFBE5A" font-size="11" text-anchor="end">→ GPIO15</text><circle cx="430" cy="1434" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1456" x2="430" y2="1456" stroke="#FFBE5A" stroke-width="2.5"/><circle cx="200" cy="1456" r="4.5" fill="#FFBE5A"/><text x="192" y="1460" fill="#FFBE5A" font-size="12" text-anchor="end">GPIO7</text><text x="440" y="1460" fill="#FFBE5A" font-size="12" text-anchor="start">RST</text><text x="720" y="1460" fill="#FFBE5A" font-size="11" text-anchor="end">→ GPIO7</text><circle cx="430" cy="1456" r="4.5" fill="#D7EEFF"/><rect x="430" y="1484" width="300" height="110" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="1502" fill="#D7EEFF" font-size="13" text-anchor="start">AO3401</text><text x="720" y="1502" fill="#8CA3BD" font-size="11" text-anchor="end">ключ GPS</text><line x1="250" y1="1536" x2="430" y2="1536" stroke="#FF7B6E" stroke-width="2.5"/><circle cx="250" cy="1536" r="4.5" fill="#FF7B6E"/><text x="440" y="1540" fill="#FF7B6E" font-size="12" text-anchor="start">S</text><text x="720" y="1540" fill="#FF7B6E" font-size="11" text-anchor="end">→ +3,3 В</text><circle cx="430" cy="1536" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1558" x2="430" y2="1558" stroke="#7CE3B0" stroke-width="2.5"/><circle cx="200" cy="1558" r="4.5" fill="#7CE3B0"/><text x="192" y="1562" fill="#7CE3B0" font-size="12" text-anchor="end">GPIO6</text><text x="440" y="1562" fill="#7CE3B0" font-size="12" text-anchor="start">G</text><text x="720" y="1562" fill="#7CE3B0" font-size="11" text-anchor="end">→ GPIO6</text><circle cx="430" cy="1558" r="4.5" fill="#D7EEFF"/><text x="440" y="1584" fill="#7CE3B0" font-size="12" text-anchor="start">D</text><text x="720" y="1584" fill="#7CE3B0" font-size="11" text-anchor="end">→ VCC GPS</text><text x="440" y="1606" fill="#FFBE5A" font-size="12" text-anchor="start">+ резистор 10 кОм между G и S</text><rect x="430" y="1624" width="300" height="132" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="1642" fill="#D7EEFF" font-size="13" text-anchor="start">GPS ATGM336H</text><text x="720" y="1642" fill="#8CA3BD" font-size="11" text-anchor="end">PPS не трогать</text><text x="440" y="1680" fill="#7CE3B0" font-size="12" text-anchor="start">VCC</text><text x="720" y="1680" fill="#7CE3B0" font-size="11" text-anchor="end">← D AO3401</text><line x1="275" y1="1698" x2="430" y2="1698" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="1698" r="4.5" fill="#8CA3BD"/><text x="440" y="1702" fill="#8CA3BD" font-size="12" text-anchor="start">GND</text><text x="720" y="1702" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="1698" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1720" x2="430" y2="1720" stroke="#7CE3B0" stroke-width="2.5"/><circle cx="200" cy="1720" r="4.5" fill="#7CE3B0"/><text x="192" y="1724" fill="#7CE3B0" font-size="12" text-anchor="end">GPIO44</text><text x="440" y="1724" fill="#7CE3B0" font-size="12" text-anchor="start">TXD</text><text x="720" y="1724" fill="#7CE3B0" font-size="11" text-anchor="end">→ GPIO44</text><circle cx="430" cy="1720" r="4.5" fill="#D7EEFF"/><line x1="200" y1="1742" x2="430" y2="1742" stroke="#7CE3B0" stroke-width="2.5"/><circle cx="200" cy="1742" r="4.5" fill="#7CE3B0"/><text x="192" y="1746" fill="#7CE3B0" font-size="12" text-anchor="end">GPIO43</text><text x="440" y="1746" fill="#7CE3B0" font-size="12" text-anchor="start">RXD</text><text x="720" y="1746" fill="#7CE3B0" font-size="11" text-anchor="end">→ GPIO43</text><circle cx="430" cy="1742" r="4.5" fill="#D7EEFF"/><rect x="430" y="1770" width="300" height="88" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="1788" fill="#D7EEFF" font-size="13" text-anchor="start">Кнопка A</text><text x="720" y="1788" fill="#8CA3BD" font-size="11" text-anchor="end">без фиксации</text><line x1="200" y1="1822" x2="430" y2="1822" stroke="#FF9FCB" stroke-width="2.5"/><circle cx="200" cy="1822" r="4.5" fill="#FF9FCB"/><text x="192" y="1826" fill="#FF9FCB" font-size="12" text-anchor="end">GPIO1</text><text x="440" y="1826" fill="#FF9FCB" font-size="12" text-anchor="start">вывод 1</text><text x="720" y="1826" fill="#FF9FCB" font-size="11" text-anchor="end">→ GPIO1</text><circle cx="430" cy="1822" r="4.5" fill="#D7EEFF"/><line x1="275" y1="1844" x2="430" y2="1844" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="1844" r="4.5" fill="#8CA3BD"/><text x="440" y="1848" fill="#8CA3BD" font-size="12" text-anchor="start">вывод 2</text><text x="720" y="1848" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="1844" r="4.5" fill="#D7EEFF"/><rect x="430" y="1872" width="300" height="88" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="1890" fill="#D7EEFF" font-size="13" text-anchor="start">Кнопка B</text><text x="720" y="1890" fill="#8CA3BD" font-size="11" text-anchor="end">без фиксации</text><line x1="200" y1="1924" x2="430" y2="1924" stroke="#FF9FCB" stroke-width="2.5"/><circle cx="200" cy="1924" r="4.5" fill="#FF9FCB"/><text x="192" y="1928" fill="#FF9FCB" font-size="12" text-anchor="end">GPIO2</text><text x="440" y="1928" fill="#FF9FCB" font-size="12" text-anchor="start">вывод 1</text><text x="720" y="1928" fill="#FF9FCB" font-size="11" text-anchor="end">→ GPIO2</text><circle cx="430" cy="1924" r="4.5" fill="#D7EEFF"/><line x1="275" y1="1946" x2="430" y2="1946" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="1946" r="4.5" fill="#8CA3BD"/><text x="440" y="1950" fill="#8CA3BD" font-size="12" text-anchor="start">вывод 2</text><text x="720" y="1950" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="1946" r="4.5" fill="#D7EEFF"/><rect x="430" y="1974" width="300" height="88" fill="#0A111C" stroke="#1E2D44" stroke-width="2"/><text x="440" y="1992" fill="#D7EEFF" font-size="13" text-anchor="start">Пищалка</text><text x="720" y="1992" fill="#8CA3BD" font-size="11" text-anchor="end"></text><line x1="200" y1="2026" x2="430" y2="2026" stroke="#FF9FCB" stroke-width="2.5"/><circle cx="200" cy="2026" r="4.5" fill="#FF9FCB"/><text x="192" y="2030" fill="#FF9FCB" font-size="12" text-anchor="end">GPIO5</text><text x="440" y="2030" fill="#FF9FCB" font-size="12" text-anchor="start">+</text><text x="720" y="2030" fill="#FF9FCB" font-size="11" text-anchor="end">→ GPIO5</text><circle cx="430" cy="2026" r="4.5" fill="#D7EEFF"/><line x1="275" y1="2048" x2="430" y2="2048" stroke="#8CA3BD" stroke-width="2.5"/><circle cx="275" cy="2048" r="4.5" fill="#8CA3BD"/><text x="440" y="2052" fill="#8CA3BD" font-size="12" text-anchor="start">−</text><text x="720" y="2052" fill="#8CA3BD" font-size="11" text-anchor="end">→ GND</text><circle cx="430" cy="2048" r="4.5" fill="#D7EEFF"/><line x1="730" y1="1580" x2="748" y2="1580" stroke="#7CE3B0" stroke-width="3"/><line x1="748" y1="1580" x2="748" y2="1676" stroke="#7CE3B0" stroke-width="3"/><line x1="730" y1="1676" x2="748" y2="1676" stroke="#7CE3B0" stroke-width="3"/></svg></div>
+  <p class="note">I²C-модули (OLED, BME280, MPU6050, компас, INA219) висят на одной паре SDA/SCL параллельно, у каждого свой адрес. Пин 5V платы не используется.</p>
+</section>
+
+<!-- ============ 1. Кнопка питания ============ -->
+<section>
+  <h2>1. Кнопка питания (с фиксацией)</h2>
+  <p>Она стоит в разрыве <b class="pwr">плюса</b> между зарядкой TP4056 и INA219. Минус через кнопку не идёт.</p>
+  <div class="scroll"><svg viewBox="0 0 720 300" role="img" aria-labelledby="t1">
+    <title id="t1">TP4056 OUT+ к кнопке питания, кнопка к INA219 VIN+, VIN− к TPS63020 VIN. OUT− на общий GND</title>
+    <!-- TP4056 -->
+    <rect x="20" y="60" width="150" height="150" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="95" y="50" fill="#D7EEFF" font-size="15" text-anchor="middle">TP4056</text>
+    <text x="30" y="95" fill="#8CA3BD" font-size="13">B+ ← аккум +</text>
+    <text x="30" y="120" fill="#8CA3BD" font-size="13">B− ← аккум −</text>
+    <text x="160" y="160" fill="#FF7B6E" font-size="14" text-anchor="end">OUT+</text>
+    <text x="160" y="195" fill="#8CA3BD" font-size="14" text-anchor="end">OUT−</text>
+    <circle cx="170" cy="155" r="4" fill="#FF7B6E"/>
+    <circle cx="170" cy="190" r="4" fill="#8CA3BD"/>
+    <!-- провод к кнопке -->
+    <line x1="170" y1="155" x2="250" y2="155" stroke="#FF7B6E" stroke-width="3"/>
+    <!-- кнопка -->
+    <circle cx="250" cy="155" r="5" fill="#FF7B6E"/>
+    <circle cx="320" cy="155" r="5" fill="#FF7B6E"/>
+    <line x1="252" y1="152" x2="315" y2="128" stroke="#FFBE5A" stroke-width="3"/>
+    <text x="285" y="105" fill="#FFBE5A" font-size="13" text-anchor="middle">кнопка</text>
+    <text x="285" y="182" fill="#8CA3BD" font-size="12" text-anchor="middle">с фиксацией</text>
+    <line x1="320" y1="155" x2="400" y2="155" stroke="#FF7B6E" stroke-width="3"/>
+    <!-- INA219 -->
+    <rect x="400" y="110" width="120" height="90" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="460" y="100" fill="#D7EEFF" font-size="15" text-anchor="middle">INA219</text>
+    <circle cx="400" cy="155" r="4" fill="#FF7B6E"/>
+    <text x="410" y="150" fill="#FF7B6E" font-size="13">VIN+</text>
+    <circle cx="520" cy="155" r="4" fill="#FF7B6E"/>
+    <text x="510" y="150" fill="#FF7B6E" font-size="13" text-anchor="end">VIN−</text>
+    <line x1="520" y1="155" x2="580" y2="155" stroke="#FF7B6E" stroke-width="3"/>
+    <!-- TPS -->
+    <rect x="580" y="110" width="120" height="110" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="640" y="100" fill="#D7EEFF" font-size="15" text-anchor="middle">TPS63020</text>
+    <circle cx="580" cy="155" r="4" fill="#FF7B6E"/>
+    <text x="590" y="150" fill="#FF7B6E" font-size="13">VIN</text>
+    <circle cx="580" cy="200" r="4" fill="#8CA3BD"/>
+    <text x="590" y="205" fill="#8CA3BD" font-size="13">GND</text>
+    <text x="640" y="245" fill="#FF7B6E" font-size="13" text-anchor="middle">VOUT 3,3 В →</text>
+    <text x="640" y="262" fill="#FF7B6E" font-size="13" text-anchor="middle">пин 3V3 платы</text>
+    <!-- общий GND -->
+    <line x1="170" y1="190" x2="200" y2="190" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="200" y1="190" x2="200" y2="270" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="200" y1="270" x2="560" y2="270" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="560" y1="270" x2="560" y2="200" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="560" y1="200" x2="580" y2="200" stroke="#8CA3BD" stroke-width="3"/>
+    <text x="380" y="290" fill="#8CA3BD" font-size="13" text-anchor="middle">общий GND (и GND платы)</text>
+  </svg></div>
+  <p class="note">Проверка: кнопка нажата — на VOUT TPS63020 3,3 В, отжата — 0 В. Это шаг 1 гайда, плату при этом <b>не подключать</b>. Зарядка через Type-C работает при любом положении кнопки.</p>
+</section>
+
+<!-- ============ 2. Кнопки A и B ============ -->
+<section>
+  <h2>2. Кнопки A и B (без фиксации)</h2>
+  <p>Один вывод кнопки — на GPIO, второй — на <b class="gnd">GND</b>. <b>Резисторы не нужны</b>: подтяжку к 3,3 В включает прошивка внутри чипа (<code>INPUT_PULLUP</code>). Отпущена — на пине 1, нажата — 0.</p>
+  <div class="scroll"><svg viewBox="0 0 720 250" role="img" aria-labelledby="t2">
+    <title id="t2">GPIO1 через кнопку A на GND, GPIO2 через кнопку B на GND</title>
+    <!-- плата -->
+    <rect x="20" y="30" width="170" height="190" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="105" y="22" fill="#D7EEFF" font-size="15" text-anchor="middle">ESP32-S3-Zero</text>
+    <text x="180" y="85" fill="#FF9FCB" font-size="15" text-anchor="end">GPIO1</text>
+    <text x="180" y="145" fill="#FF9FCB" font-size="15" text-anchor="end">GPIO2</text>
+    <text x="180" y="205" fill="#8CA3BD" font-size="15" text-anchor="end">GND</text>
+    <circle cx="190" cy="80" r="4" fill="#FF9FCB"/>
+    <circle cx="190" cy="140" r="4" fill="#FF9FCB"/>
+    <circle cx="190" cy="200" r="4" fill="#8CA3BD"/>
+    <!-- A -->
+    <line x1="190" y1="80" x2="360" y2="80" stroke="#FF9FCB" stroke-width="3"/>
+    <circle cx="360" cy="80" r="5" fill="#FF9FCB"/>
+    <circle cx="440" cy="80" r="5" fill="#8CA3BD"/>
+    <line x1="362" y1="77" x2="435" y2="55" stroke="#FFBE5A" stroke-width="3"/>
+    <text x="400" y="40" fill="#FFBE5A" font-size="14" text-anchor="middle">кнопка A</text>
+    <text x="400" y="105" fill="#8CA3BD" font-size="12" text-anchor="middle">метка / хлопушка</text>
+    <line x1="440" y1="80" x2="600" y2="80" stroke="#8CA3BD" stroke-width="3"/>
+    <!-- B -->
+    <line x1="190" y1="140" x2="360" y2="140" stroke="#FF9FCB" stroke-width="3"/>
+    <circle cx="360" cy="140" r="5" fill="#FF9FCB"/>
+    <circle cx="440" cy="140" r="5" fill="#8CA3BD"/>
+    <line x1="362" y1="137" x2="435" y2="115" stroke="#FFBE5A" stroke-width="3"/>
+    <text x="400" y="165" fill="#8CA3BD" font-size="12" text-anchor="middle">экран / Bluetooth</text>
+    <text x="480" y="125" fill="#FFBE5A" font-size="14">кнопка B</text>
+    <line x1="440" y1="140" x2="600" y2="140" stroke="#8CA3BD" stroke-width="3"/>
+    <!-- GND шина -->
+    <line x1="600" y1="80" x2="600" y2="200" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="190" y1="200" x2="600" y2="200" stroke="#8CA3BD" stroke-width="3"/>
+    <circle cx="600" cy="140" r="5" fill="#8CA3BD"/>
+    <text x="400" y="225" fill="#8CA3BD" font-size="13" text-anchor="middle">одна общая земля для обеих кнопок</text>
+  </svg></div>
+  <p class="note">Можно проще: вторые выводы обеих кнопок соединить перемычкой и одним проводом на GND. Какой вывод кнопки идёт на GPIO, а какой на GND, неважно. Главное, чтобы это была пара, которую ты нашёл прозвонкой.</p>
+  <p class="note">Проверка без пайки остального: прошивка <code>s3_fake</code>, монитор порта. Короткое нажатие A — в журнале метка, долгое B — открывается окно Bluetooth.</p>
+</section>
+
+<!-- ============ 3. AO3401 ============ -->
+<section>
+  <h2>3. Ключ GPS: AO3401 (P-MOSFET)</h2>
+  <p>Ключ стоит в разрыве <b class="pwr">плюса</b> GPS-модуля. <b class="gnd">GND</b> модуля идёт на общую землю напрямую, через ключ не проходит.</p>
+
+  <div class="scroll"><svg viewBox="0 0 720 230" role="img" aria-labelledby="t3a">
+    <title id="t3a">Корпус SOT-23 сверху: ножка 1 G слева снизу, ножка 2 S справа снизу, ножка 3 D одна сверху</title>
+    <text x="20" y="24" fill="#D7EEFF" font-size="14">Корпус SOT-23, вид сверху (надпись на корпусе читается)</text>
+    <rect x="230" y="70" width="260" height="90" rx="6" fill="#0A111C" stroke="#8CA3BD" stroke-width="2"/>
+    <text x="360" y="122" fill="#8CA3BD" font-size="16" text-anchor="middle">A1 / AO3401</text>
+    <!-- ножка 3 сверху -->
+    <rect x="345" y="38" width="30" height="32" fill="#7CE3B0"/>
+    <text x="385" y="60" fill="#7CE3B0" font-size="15">3 = D (сток)</text>
+    <!-- 1 и 2 снизу -->
+    <rect x="255" y="160" width="30" height="32" fill="#FF9FCB"/>
+    <rect x="435" y="160" width="30" height="32" fill="#FF7B6E"/>
+    <text x="270" y="215" fill="#FF9FCB" font-size="15" text-anchor="middle">1 = G (затвор)</text>
+    <text x="450" y="215" fill="#FF7B6E" font-size="15" text-anchor="middle">2 = S (исток)</text>
+  </svg></div>
+
+  <div class="scroll"><svg viewBox="0 0 720 320" role="img" aria-labelledby="t3b">
+    <title id="t3b">+3,3 В к S; резистор 10 кОм между S и G; GPIO6 к G; D к VCC модуля GPS; GND модуля на общий GND</title>
+    <!-- шина 3,3 -->
+    <text x="20" y="44" fill="#FF7B6E" font-size="15">+3,3 В (пин 3V3 платы)</text>
+    <line x1="20" y1="60" x2="420" y2="60" stroke="#FF7B6E" stroke-width="3"/>
+    <!-- к S -->
+    <line x1="300" y1="60" x2="300" y2="140" stroke="#FF7B6E" stroke-width="3"/>
+    <circle cx="300" cy="60" r="5" fill="#FF7B6E"/>
+    <!-- транзистор -->
+    <rect x="260" y="140" width="140" height="90" rx="6" fill="#0A111C" stroke="#8CA3BD" stroke-width="2"/>
+    <text x="330" y="190" fill="#D7EEFF" font-size="16" text-anchor="middle">AO3401</text>
+    <circle cx="300" cy="140" r="5" fill="#FF7B6E"/>
+    <text x="308" y="160" fill="#FF7B6E" font-size="14">S</text>
+    <circle cx="260" cy="215" r="5" fill="#FF9FCB"/>
+    <text x="270" y="220" fill="#FF9FCB" font-size="14">G</text>
+    <circle cx="400" cy="185" r="5" fill="#7CE3B0"/>
+    <text x="390" y="180" fill="#7CE3B0" font-size="14" text-anchor="end">D</text>
+    <!-- резистор 10к между S-шиной и G -->
+    <line x1="150" y1="60" x2="150" y2="105" stroke="#FF7B6E" stroke-width="3"/>
+    <circle cx="150" cy="60" r="5" fill="#FF7B6E"/>
+    <rect x="135" y="105" width="30" height="60" fill="none" stroke="#FFBE5A" stroke-width="3"/>
+    <text x="125" y="140" fill="#FFBE5A" font-size="14" text-anchor="end">10 кОм</text>
+    <line x1="150" y1="165" x2="150" y2="215" stroke="#FF9FCB" stroke-width="3"/>
+    <line x1="150" y1="215" x2="260" y2="215" stroke="#FF9FCB" stroke-width="3"/>
+    <circle cx="150" cy="215" r="5" fill="#FF9FCB"/>
+    <!-- GPIO6 -->
+    <line x1="20" y1="215" x2="150" y2="215" stroke="#FF9FCB" stroke-width="3"/>
+    <text x="20" y="205" fill="#FF9FCB" font-size="15">GPIO6</text>
+    <!-- GPS модуль -->
+    <line x1="400" y1="185" x2="540" y2="185" stroke="#7CE3B0" stroke-width="3"/>
+    <rect x="540" y="140" width="160" height="140" fill="none" stroke="#1E2D44" stroke-width="2"/>
+    <text x="620" y="130" fill="#D7EEFF" font-size="15" text-anchor="middle">GPS ATGM336H</text>
+    <circle cx="540" cy="185" r="4" fill="#7CE3B0"/>
+    <text x="550" y="190" fill="#7CE3B0" font-size="14">VCC</text>
+    <circle cx="540" cy="250" r="4" fill="#8CA3BD"/>
+    <text x="550" y="255" fill="#8CA3BD" font-size="14">GND</text>
+    <line x1="540" y1="250" x2="480" y2="250" stroke="#8CA3BD" stroke-width="3"/>
+    <line x1="480" y1="250" x2="480" y2="300" stroke="#8CA3BD" stroke-width="3"/>
+    <text x="490" y="300" fill="#8CA3BD" font-size="14">→ общий GND</text>
+    <text x="20" y="275" fill="#8CA3BD" font-size="13">GPIO6 = LOW → GPS включён</text>
+    <text x="20" y="295" fill="#8CA3BD" font-size="13">GPIO6 = HIGH или плата выключена → GPS выключен</text>
+  </svg></div>
+
+  <ol>
+    <li><b class="pwr">S</b> (исток, ножка 2) — к +3,3 В.</li>
+    <li><b class="gps">D</b> (сток, ножка 3) — к VCC GPS-модуля.</li>
+    <li><b class="io">G</b> (затвор, ножка 1) — к GPIO6.</li>
+    <li>Резистор 10 кОм — между G и S, то есть от затвора к +3,3 В. Он держит GPS выключенным, пока плата загружается.</li>
+    <li>GND модуля GPS — на общую землю. TX/RX модуля — к GPIO44/43 крест-накрест, как в гайде.</li>
+  </ol>
+  <p class="note"><b>Частая ошибка:</b> перепутать S и D. Тогда GPS не выключается никогда (ток идёт через встроенный диод транзистора) или не включается вовсе. Если GPS горит постоянно, даже на паузе, — переверни S и D.</p>
+  <p class="note"><b>Проверка до подключения GPS:</b> прошивка <code>s3</code>, плата на USB, мультиметр между D и GND. Нажми в приложении «Пауза» — около 0 В. «Запись» с GPS в режиме «всегда» (Настройки) — 3,2–3,3 В. Только после этого подключай модуль.</p>
+</section>
+
+</div>
+</body>
+</html>

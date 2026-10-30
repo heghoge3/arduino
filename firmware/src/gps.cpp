@@ -23,6 +23,7 @@ uint32_t g_onSinceMs = 0;
 uint32_t g_fakeLastMs = 0;
 double g_fakeLat = 60.1580, g_fakeLon = 30.5150;
 float g_fakeHeading = 40;
+bool g_fakeAnchored = false;
 
 void fakeTick() {
   uint32_t ms = millis();
@@ -34,7 +35,7 @@ void fakeTick() {
   g_fakeLat += d * cos(g_fakeHeading * PI / 180) / 111320.0;
   g_fakeLon += d * sin(g_fakeHeading * PI / 180) / (111320.0 * cos(g_fakeLat * PI / 180));
 
-  bool spoof = (ms / 1000) % 2400 >= 2220;  // последние 3 мин каждых 40 мин
+  bool spoof = (ms / 1000) % 600 >= 480;  // последние 2 мин каждых 10 мин
   double lat = spoof ? 60.0346 : g_fakeLat;
   double lon = spoof ? 30.5693 : g_fakeLon;
   uint32_t t = clockx::now();
@@ -55,15 +56,20 @@ void fakeTick() {
   nmea::buildCommand(body, line, sizeof(line));
   g_parser.parseLine(line);
   snprintf(body, sizeof(body), "GNGGA,%02lu%02lu%02lu.000,%02d%07.4f,N,%03d%07.4f,E,1,%02d,%.1f,%.1f,M,15.0,M,,",
-           sod / 3600, (sod / 60) % 60, sod % 60, dlat, mlat, dlon, mlon, spoof ? 10 : 8, spoof ? 0.7 : 1.1, spoof ? 12.0 : 70.0);
+           sod / 3600, (sod / 60) % 60, sod % 60, dlat, mlat, dlon, mlon, 6, spoof ? 0.7 : 1.1, spoof ? 12.0 : 70.0);
   nmea::buildCommand(body, line, sizeof(line));
   g_parser.parseLine(line);
   // Спутники: при подмене — подозрительно одинаковый сигнал
   snprintf(body, sizeof(body), "GPGSA,A,3,03,06,09,12,15,18,,,,,,,1.6,%.1f,1.3,1", spoof ? 0.7 : 1.1);
   nmea::buildCommand(body, line, sizeof(line));
   g_parser.parseLine(line);
-  if (spoof) snprintf(body, sizeof(body), "GPGSV,1,1,06,03,40,100,41,06,40,100,42,09,40,100,41,12,40,100,42,0");
-  else snprintf(body, sizeof(body), "GPGSV,1,1,06,03,40,100,23,06,40,100,38,09,40,100,31,12,40,100,44,0");
+  // Два сообщения GSV: 6 спутников, как в GGA/GSA (проверке SNR нужно ≥5)
+  if (spoof) snprintf(body, sizeof(body), "GPGSV,2,1,06,03,40,100,41,06,40,100,42,09,40,100,41,12,40,100,42,0");
+  else snprintf(body, sizeof(body), "GPGSV,2,1,06,03,40,100,23,06,40,100,38,09,40,100,31,12,40,100,44,0");
+  nmea::buildCommand(body, line, sizeof(line));
+  g_parser.parseLine(line);
+  if (spoof) snprintf(body, sizeof(body), "GPGSV,2,2,06,15,40,100,41,18,40,100,42,0");
+  else snprintf(body, sizeof(body), "GPGSV,2,2,06,15,40,100,27,18,40,100,35,0");
   nmea::buildCommand(body, line, sizeof(line));
   g_parser.parseLine(line);
   g_lastSentenceMs = ms;
@@ -85,6 +91,9 @@ void power(bool on) {
   g_on = on;
   if (on) {
     digitalWrite(PIN_GPS_EN, LOW);
+    // 9600 бод ≈ 1 КБ/с: стандартных 256 байт хватает на ~0,25 с. Запись на SD или выгрузка по BLE
+    // иногда держат цикл дольше — без запаса теряются предложения NMEA
+    Serial1.setRxBufferSize(2048);
     Serial1.begin(9600, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
     g_onSinceMs = millis();
   } else {
@@ -100,6 +109,16 @@ void power(bool on) {
 }
 
 bool isOn() { return g_on; }
+
+#ifdef FAKE_SENSORS
+bool fakeAnchor(double lat, double lon) {
+  if (g_fakeAnchored) return false;
+  g_fakeAnchored = true;
+  g_fakeLat = lat;
+  g_fakeLon = lon;
+  return true;
+}
+#endif
 
 void poll() {
   if (!g_on) return;

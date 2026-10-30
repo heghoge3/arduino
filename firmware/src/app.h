@@ -9,7 +9,7 @@
 #include "spoof.h"
 #include "steps.h"
 
-constexpr uint32_t PERSIST_MAGIC = 0x56424731;  // «VBG1»; поменять при изменении Persist
+constexpr uint32_t PERSIST_MAGIC = 0x56424732;  // «VBG2»; поменять при изменении Persist
 constexpr uint8_t CAMP_BUF = 15;                // записей на стоянке до сброса на SD
 
 // Настройки (NVS): меняются командами с телефона
@@ -42,6 +42,7 @@ struct Persist {
   bool haveGood;
   double goodLat, goodLon;
   float goodAlt;
+  uint32_t goodTime;  // когда была последняя достоверная точка
 
   double distM;
   float usedMah;

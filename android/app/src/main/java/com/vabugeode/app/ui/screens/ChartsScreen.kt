@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -40,6 +41,7 @@ import com.vabugeode.app.model.TrackPoint
 import com.vabugeode.app.ui.AppViewModel
 import com.vabugeode.app.ui.Fmt
 import com.vabugeode.app.ui.components.ChartSeries
+import com.vabugeode.app.ui.components.chartBands
 import com.vabugeode.app.ui.components.KeyValue
 import com.vabugeode.app.ui.components.LineChart
 import com.vabugeode.app.ui.components.Panel
@@ -123,7 +125,7 @@ private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sun: SunSchedul
     val last = track.last()
     val now = last.tsUtcMs
     Panel(accent = Palette.Sunset, title = title) {
-        if (start != null) KeyValue("Старт", "${Fmt.time(start)} · в пути ${Fmt.duration(now - start)}")
+        if (start != null) KeyValue("Старт", "${Fmt.time(start)} | в пути ${Fmt.duration(now - start)}")
         if (sun == null) {
             Text("Закат посчитается, когда будет позиция", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             return@Panel
@@ -154,8 +156,8 @@ private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sun: SunSchedul
         val nextRise = sun.next(SunSchedule.Kind.SUNRISE, now)
         when {
             nextSet != null && (nextRise == null || nextSet.timeMs < nextRise.timeMs) ->
-                KeyValue("До заката", "${Fmt.duration(nextSet.timeMs - now)} · в ${Fmt.time(nextSet.timeMs)}", Palette.SunsetSun)
-            nextRise != null -> KeyValue("До восхода", "${Fmt.duration(nextRise.timeMs - now)} · в ${Fmt.time(nextRise.timeMs)}", Palette.Sunrise)
+                KeyValue("До заката", "${Fmt.duration(nextSet.timeMs - now)} | в ${Fmt.time(nextSet.timeMs)}", Palette.SunsetSun)
+            nextRise != null -> KeyValue("До восхода", "${Fmt.duration(nextRise.timeMs - now)} | в ${Fmt.time(nextRise.timeMs)}", Palette.Sunrise)
         }
     }
 }
@@ -164,6 +166,7 @@ private fun SunsetSummary(track: List<TrackPoint>, start: Long?, sun: SunSchedul
 private fun BigChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?) {
     val values = track.map { m.value(it) }.filter { !it.isNaN() }
     if (values.isEmpty()) return
+    val bands = remember(track) { chartBands(track) }
     val series = buildList {
         add(ChartSeries(seriesOf(track, m.value), m.color, if (m == Metric.TEMP) "воздух" else m.title.lowercase()))
         if (m == Metric.TEMP) {
@@ -176,9 +179,10 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?) {
             Spacer(Modifier.width(4.dp))
             Text(m.unit, color = Palette.TextDim, modifier = Modifier.padding(bottom = 6.dp))
             Spacer(Modifier.weight(1f))
-            Column(horizontalAlignment = Alignment.End) {
-                Text("мин ${Fmt.num(values.min(), m.digits)}  ·  макс ${Fmt.num(values.max(), m.digits)}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
-                Text("ведите пальцем по графику", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+            // Мин и макс — по строке, с единицами, без переноса
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(bottom = 4.dp)) {
+                Text("макс ${Fmt.num(values.max(), m.digits)} ${m.unit}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1, softWrap = false)
+                Text("мин ${Fmt.num(values.min(), m.digits)} ${m.unit}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1, softWrap = false)
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -186,8 +190,19 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?) {
             series = series,
             modifier = Modifier.fillMaxWidth().height(260.dp),
             unit = m.unit, digits = m.digits,
-            sun = sun,
+            sun = sun, bands = bands,
         )
+        // Какие отрезки есть на графике — подписи цветом
+        val kinds = bands.distinctBy { it.label }
+        if (kinds.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.padding(start = 4.dp)) {
+                kinds.forEach { b ->
+                    Text("▮ ${b.label}", color = b.color, fontSize = 11.sp)
+                    Spacer(Modifier.width(12.dp))
+                }
+            }
+        }
         if (m == Metric.TEMP) {
             Spacer(Modifier.height(6.dp))
             Row(Modifier.padding(start = 4.dp)) {
@@ -221,7 +236,7 @@ private fun SmallChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?, on
             LineChart(
                 series = listOf(ChartSeries(seriesOf(track, m.value), m.color, m.title)),
                 modifier = Modifier.weight(1f).height(48.dp),
-                sun = sun, showAxes = false, interactive = false,
+                sun = sun, showAxes = false, interactive = false, bands = remember(track) { chartBands(track) },
             )
         }
     }

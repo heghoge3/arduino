@@ -52,7 +52,7 @@ object OfflineMap {
 
     /** Подпись для настроек: какие уровни приближения есть в файле */
     private fun describe(f: File, fmt: Format): String? = when (fmt) {
-        Format.MBTILES -> MbTiles.fix(f)?.let { "уровни ${it.minZoom}–${it.maxZoom} · ${it.tiles} тайлов · ${it.format}" }
+        Format.MBTILES -> MbTiles.fix(f)?.let { "уровни ${it.minZoom}–${it.maxZoom} | ${it.tiles} тайлов | ${it.format}" }
         else -> null
     }
 

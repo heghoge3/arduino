@@ -195,12 +195,13 @@ class BleTransport(
             state.value = LinkState.DISCONNECTED
             return
         }
-        // Гаджет мог уснуть между маячками — не висим вечно
+        // Гаджет мог уснуть между маячками — не висим вечно. Ждём дольше периода маячка (30 с),
+        // чтобы система успела поймать хотя бы один выход в эфир
         scope.launch {
-            delay(15_000)
+            delay(CONNECT_TIMEOUT_MS)
             if (state.value == LinkState.CONNECTING) {
-                AppLog.w("GATT", "гаджет не ответил за 15 с")
-                lastError.value = "Гаджет не ответил за 15 с"
+                AppLog.w("GATT", "гаджет не ответил за ${CONNECT_TIMEOUT_MS / 1000} с")
+                lastError.value = "Гаджет не ответил за ${CONNECT_TIMEOUT_MS / 1000} с"
                 gatt?.disconnect()
                 cleanup()
             }
@@ -222,6 +223,14 @@ class BleTransport(
         val g = gatt ?: return false
         val c = cmdChar ?: return false
         var st = write(g, c, data)
+        // Гаджет занят выгрузкой (буферы BLE заняты уведомлениями) — короткая пауза и ещё раз
+        var retry = 0
+        while (st != BluetoothGatt.GATT_SUCCESS && st !in AUTH_ERRORS && retry < 3 && state.value == LinkState.CONNECTED) {
+            retry++
+            AppLog.d("GATT", "запись команды: код $st, повтор $retry")
+            delay(150L * retry)
+            st = write(g, c, data)
+        }
         if (st != BluetoothGatt.GATT_SUCCESS) AppLog.w("GATT", "запись команды: код $st")
         if (st in AUTH_ERRORS) {
             // Команды — только по шифрованной связи: ждём, пока Android проведёт сопряжение, и пробуем снова
@@ -258,5 +267,6 @@ class BleTransport(
         private const val TIMEOUT = -1
         // Нет шифрования/сопряжения (5, 15) и типичная ошибка Android при сопряжении (137)
         private val AUTH_ERRORS = setOf(5, 15, 137)
+        private const val CONNECT_TIMEOUT_MS = 35_000L
     }
 }

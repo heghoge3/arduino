@@ -6,6 +6,19 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
+#include <time.h>
+
+// Системные часы моделируются локально: тест не меняет время компьютера.
+static time_t fakeUtc = 0;
+extern "C" int __wrap_settimeofday(const timeval* tv, const struct timezone*) {
+  fakeUtc = tv->tv_sec;
+  return 0;
+}
+extern "C" time_t __wrap_time(time_t* out) {
+  if (out) *out = fakeUtc;
+  return fakeUtc;
+}
 
 namespace {
 uint8_t regs[64];
@@ -59,7 +72,7 @@ int main() {
   // Новый модуль: дата невалидна, но RAM отвечает. Должен обнаружиться без доверия времени.
   memset(regs, 0, sizeof(regs));
   regs[62] = 0x39;
-  assert(clockx::begin());
+  assert(clockx::begin(true));
   assert(clockx::rtcPresent());
   assert(!clockx::trusted());
   assert(regs[62] == 0x39);  // проба не портит RAM
@@ -70,14 +83,19 @@ int main() {
   uint32_t utc = nmea::toUnix(2030, 10, 30, 12, 34, 56);
   clockx::setFromPhone(utc);
   assert(clockx::trusted());
-  assert(clockx::begin());
+  assert(clockx::begin(true));
   assert(clockx::trusted());
   assert(clockx::now() == utc);  // чтение burst и запись всех байтов
   assert(!contention);
   puts("PASS: phone time survives restart and burst read");
 
   present = false;
-  assert(!clockx::begin());
+  fakeUtc += 60;
+  assert(!clockx::begin(false));
+  assert(clockx::trusted());
+  assert(clockx::now() == utc + 60);
+  puts("PASS: wake without DS1302 preserves internal time and trust");
+  assert(!clockx::begin(true));
   assert(!clockx::rtcPresent());
   assert(!clockx::trusted());
   puts("PASS: disconnected DS1302 is not detected");

@@ -20,12 +20,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.WaterDrop
@@ -65,7 +63,6 @@ import com.vabugeode.app.ui.components.StatTile
 import com.vabugeode.app.ui.theme.Palette
 import com.vabugeode.app.astro.SunSchedule
 import com.vabugeode.app.ui.components.AnimatedValue
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.WbSunny
 import kotlin.math.abs
 
@@ -95,6 +92,7 @@ fun HomeScreen(
         StatusRow(st, start)
         TempHero(st, track, sun)
         GpsCard(st)
+        WeatherPanel(vm)
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val trend = st.env.pressureTrend3h
@@ -124,7 +122,7 @@ fun HomeScreen(
                 Icons.Filled.BatteryChargingFull, "Заряд", if (pw.batteryKnown) "${pw.percent}" else "—", if (pw.batteryKnown) "%" else "",
                 if (pw.batteryKnown && pw.percent < 20) Palette.Bad else Palette.Battery,
                 Modifier.weight(1f),
-                sub = "${Fmt.num(pw.voltage, 2)} В · ${Fmt.num(pw.currentMa, 0)} мА",
+                sub = "${Fmt.num(pw.voltage, 2)} В | ${Fmt.num(pw.currentMa, 0)} мА",
                 sub2 = if (pw.batteryKnown) "~${Fmt.num(pw.hoursLeft, 0)} ч осталось" else "Заряд неизвестен",
             )
         }
@@ -151,7 +149,8 @@ fun HomeScreen(
 @Composable
 private fun StatusRow(st: DeviceStatus, start: Long?) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (st.recording) Pill("Запись", Palette.Bad, blink = true) else Pill("Пауза", Palette.TextDim)
+        // Датчики пишутся всегда; кнопка включает и выключает только GPS (пауза — переезд на машине)
+        if (st.recording) Pill("GPS вкл", Palette.Good) else Pill("GPS выкл", Palette.Bad, blink = true)
         Pill(st.mode.title, if (st.mode == PowerMode.MOVING) Palette.Good else Palette.Cold)
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End) {
@@ -205,7 +204,7 @@ private fun TempHero(st: DeviceStatus, track: List<TrackPoint>, sun: SunSchedule
                     nextSet != null -> Triple("до заката ${Fmt.duration(nextSet.timeMs - now)}", Palette.SunsetSun, false)
                     else -> Triple("", Palette.TextDim, false)
                 }
-                Text(first.first, color = first.second, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(first.first, color = first.second, style = MaterialTheme.typography.titleMedium)
                 Text("в корпусе ${Fmt.num(st.env.tempRaw)}°", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
                 Text("поправка ${Fmt.signed(st.env.tempCorr - st.env.tempRaw)}°", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
             }
@@ -239,7 +238,7 @@ private fun GpsCard(st: DeviceStatus) {
         )
         else -> Quad(
             Palette.Good, Icons.Filled.GpsFixed, "GPS: сигнал хороший",
-            "${g.fix.title} · ${g.satsUsed} из ${g.satsInView} спутников · HDOP ${Fmt.num(g.hdop)} · ±${Fmt.num(g.hdop * 3, 0)} м",
+            "${g.fix.title} | ${g.satsUsed} из ${g.satsInView} спутников | HDOP ${Fmt.num(g.hdop)} | ±${Fmt.num(g.hdop * 3, 0)} м",
         )
     }
     Panel(accent = color) {
@@ -247,16 +246,16 @@ private fun GpsCard(st: DeviceStatus) {
             IconBadge(icon, color)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = color)
                 Text("Позиция: ${st.positionSource.title}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
             }
         }
         Spacer(Modifier.height(8.dp))
         // Всегда две строки текста и строка причин — блок одной высоты в любом состоянии
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = Palette.Text, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = Palette.Text, minLines = 2)
         Text(
-            if (g.spoof) "Причины: " + SpoofReason.fromMask(g.spoofMask).joinToString(" · ") { it.title.lowercase() } else "",
-            style = MaterialTheme.typography.labelMedium, color = Palette.Bad, minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            if (g.spoof) "Причины: " + SpoofReason.fromMask(g.spoofMask).joinToString(" | ") { it.title.replaceFirstChar { c -> c.lowercase() } } else "",
+            style = MaterialTheme.typography.labelMedium, color = Palette.Bad, minLines = 1,
         )
         Spacer(Modifier.height(8.dp))
         SnrBars(g.satellites, Modifier.fillMaxWidth().height(36.dp))
@@ -277,12 +276,12 @@ private fun GpsCard(st: DeviceStatus) {
 @Composable
 private fun Actions(st: DeviceStatus, onMark: () -> Unit, onClap: () -> Unit, onToggle: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ActionButton(Icons.Filled.BookmarkAdd, "Метка", Palette.Geo, Modifier.weight(1f), onMark)
+        ActionButton(Icons.Filled.BookmarkAdd, "Метка", Palette.Warn, Modifier.weight(1f), onMark)
         ActionButton(Icons.Filled.Movie, "Хлопушка", Palette.Sunset, Modifier.weight(1f), onClap)
         ActionButton(
-            if (st.recording) Icons.Filled.Pause else Icons.Filled.FiberManualRecord,
-            if (st.recording) "Пауза" else "Запись",
-            if (st.recording) Palette.TextDim else Palette.Bad,
+            if (st.recording) Icons.Filled.GpsOff else Icons.Filled.GpsFixed,
+            if (st.recording) "Выкл GPS" else "Вкл GPS",
+            if (st.recording) Palette.Bad else Palette.Good,
             Modifier.weight(1f), onToggle,
         )
     }
@@ -336,7 +335,7 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
                 )
             } else {
                 Text(
-                    if (name == null) "Выберите гаджет на вкладке «Трекер»."
+                    if (name == null) "Выберите гаджет на вкладке «Гаджет»."
                     else "Гаджет пока не слышно. Он выходит в эфир раз в 30–60 с; чтобы сразу — зажмите B на 1,5 с.",
                     style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
                 )
@@ -350,6 +349,7 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
                 }
             }
         }
+        WeatherPanel(vm)
     }
 }
 

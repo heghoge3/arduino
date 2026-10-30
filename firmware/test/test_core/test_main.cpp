@@ -434,6 +434,17 @@ void test_spoof_blacklist_and_jump() {
   TEST_ASSERT_EQUAL_UINT8(spoof::R_JUMP, r.mask);
 }
 
+void test_spoof_jump_after_pause() {
+  // Пауза записи / стоянка с выключенным GPS, потом переезд на машине на 10 км — не подмена
+  spoof::Detector d;
+  d.check(inputAt(1000, 60.1580, 30.5150));
+  TEST_ASSERT_FALSE(d.check(inputAt(1000 + 900, 60.2480, 30.5150)).mask & spoof::R_JUMP);
+  // А тот же скачок через минуту при включённом GPS — скачок
+  spoof::Detector d2;
+  d2.check(inputAt(1000, 60.1580, 30.5150));
+  TEST_ASSERT_TRUE(d2.check(inputAt(1060, 60.2480, 30.5150)).mask & spoof::R_JUMP);
+}
+
 void test_spoof_phone_and_time() {
   spoof::Detector d;
   d.setPhone(60.1580, 30.5150, 50, 1000);
@@ -556,6 +567,33 @@ void test_gps_pulse() {
   TEST_ASSERT_TRUE(g.update(60, false, false));
 }
 
+void test_clock_jump_back() {
+  // Телефон перевёл часы назад на ~3 ч: расписание импульсов и «в пути» сдвигаются вместе с часами
+  const uint32_t T = 1793000000;
+  const int32_t d = -10713;
+  logic::GpsPulse g;
+  g.configure(30, 20, 3);
+  TEST_ASSERT_TRUE(g.update(T, false, false));
+  g.update(T + 3, true, true);
+  g.update(T + 4, true, true);
+  TEST_ASSERT_FALSE(g.update(T + 5, true, true));
+  g.shiftTime(d);
+  TEST_ASSERT_TRUE(g.update(T + 30 + d, false, false));  // без сдвига ждал бы 3 ч
+
+  logic::PowerLogic p;
+  p.update(T, 80, 0);
+  TEST_ASSERT_EQUAL(logic::MOVING, p.update(T + 20, 80, 12));
+  p.shiftTime(d);
+  TEST_ASSERT_EQUAL(logic::MOVING, p.update(T + 20 + d + 240, 80, 12));
+  TEST_ASSERT_EQUAL(logic::CAMP, p.update(T + 20 + d + 300, 80, 12));
+
+  uint32_t unset = 0, at = T;
+  logic::shiftTime(unset, d);
+  logic::shiftTime(at, d);
+  TEST_ASSERT_EQUAL_UINT32(0, unset);
+  TEST_ASSERT_EQUAL_UINT32(T + d, at);
+}
+
 void test_alerts() {
   logic::Alerts a;
   logic::Alerts::Decision d = a.update(0, 0);
@@ -643,6 +681,7 @@ int main(int, char**) {
   RUN_TEST(test_nmea_lost_fix_and_errors);
   RUN_TEST(test_nmea_command_build);
   RUN_TEST(test_spoof_blacklist_and_jump);
+  RUN_TEST(test_spoof_jump_after_pause);
   RUN_TEST(test_spoof_phone_and_time);
   RUN_TEST(test_spoof_weak_signs_need_two);
   RUN_TEST(test_spoof_steps_but_standing);
@@ -650,6 +689,7 @@ int main(int, char**) {
   RUN_TEST(test_power_battery_hysteresis);
   RUN_TEST(test_gps_pulse);
   RUN_TEST(test_alerts);
+  RUN_TEST(test_clock_jump_back);
   RUN_TEST(test_steps_walking);
   RUN_TEST(test_steps_noise_and_bumps);
   RUN_TEST(test_sunset);

@@ -38,6 +38,8 @@ fun trackKm(track: List<TrackPoint>): Double {
     var m = 0.0
     var prev: TrackPoint? = null
     for (p in track) {
+        // Пауза (переезд на машине) — переезд в километраж не идёт
+        if (p.src == com.vabugeode.app.model.PositionSource.PAUSE) { prev = null; continue }
         if (p.lat.isNaN() || p.lon.isNaN()) continue
         val q = prev
         if (q == null) { prev = p; continue }
@@ -61,7 +63,8 @@ fun summarize(device: String, hike: Long, name: String?, track: List<TrackPoint>
     return HikeSummary(
         device = device, hike = hike, name = name,
         startMs = hike * 1000,
-        endMs = track.lastOrNull()?.tsUtcMs ?: (hike * 1000),
+        // Конец не раньше начала (старые записи по неверным часам)
+        endMs = maxOf(track.lastOrNull()?.tsUtcMs ?: 0L, hike * 1000),
         km = trackKm(track),
         tempMin = temps.minOrNull() ?: Double.NaN,
         tempMax = temps.maxOrNull() ?: Double.NaN,

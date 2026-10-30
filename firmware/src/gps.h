@@ -26,5 +26,9 @@ uint32_t onSeconds();
 void sendCommand(const char* body);
 // Печатать сырой NMEA в USB (отладка)
 void setEcho(bool on);
+#ifdef FAKE_SENSORS
+// Эмуляция: вести трек от позиции телефона (первый раз после включения). true — перенесли сейчас
+bool fakeAnchor(double lat, double lon);
+#endif
 
 }  // namespace gps

@@ -167,6 +167,7 @@ class LinkManager(
 
     fun connectNow() {
         if (selectedId.value == null) return
+        AppLog.i("LINK", "подключить (кнопка)")
         userDisconnected = false
         if (!_scanner.value.scanning.value) _scanner.value.start()
         repo.connect()
@@ -175,7 +176,8 @@ class LinkManager(
     fun disconnectByUser() {
         AppLog.i("LINK", "отключено пользователем")
         userDisconnected = true
-        repo.disconnect()
+        // BYE: гаджет поймёт, что отключили нарочно, и не будет держать окно переподключения
+        if (repo.link.value == LinkState.CONNECTED) repo.bye() else repo.disconnect()
     }
 
     /** Перезапустить поиск (после выдачи разрешений или включения Bluetooth) */

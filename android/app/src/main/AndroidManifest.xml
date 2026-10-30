@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Bluetooth LE: поиск маячков и подключение к гаджету -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- neverForLocation: поиск маячков — не геолокация. Без этого Android 12+ в фоне (служба наблюдения,
+         выключенный экран) молча не отдаёт результаты — ночью маячок «не слышен» -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- Позиция телефона: проверка подмены на гаджете и «где гаджет»; до Android 12 нужна и для поиска BLE -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

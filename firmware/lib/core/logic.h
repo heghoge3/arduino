@@ -5,6 +5,11 @@
 
 namespace logic {
 
+// Часы переставили на d секунд (телефон, GPS): сдвинуть запомненный момент. 0 — «не было», не трогаем
+inline void shiftTime(uint32_t& t, int32_t d) {
+  if (t) t += (uint32_t)d;
+}
+
 enum Power : uint8_t { CAMP = 0, MOVING = 1, ECONOMY = 2, CRITICAL = 3 };
 enum GpsMode : uint8_t { GPS_ALWAYS = 0, GPS_PULSE = 1 };
 
@@ -42,6 +47,7 @@ class PowerLogic {
   bool gpsPulsed(GpsMode mode) const;
 
   PowerConfig& config() { return cfg_; }
+  void shiftTime(int32_t d) { logic::shiftTime(burstStart_, d); logic::shiftTime(lastStepTime_, d); }
 
  private:
   PowerConfig cfg_;
@@ -61,6 +67,7 @@ class GpsPulse {
   // true — GPS должен быть включён сейчас
   bool update(uint32_t now, bool hasFix, bool newPoint);
   void stop() { on_ = false; }
+  void shiftTime(int32_t d) { logic::shiftTime(onSince_, d); logic::shiftTime(nextStart_, d); }
 
  private:
   uint16_t period_ = 30, timeout_ = 20;
@@ -81,6 +88,7 @@ class Alerts {
   void ack(uint8_t mask) { acked_ |= mask & active_; }
   uint8_t active() const { return active_; }
   uint8_t unacked() const { return active_ & ~acked_; }
+  void shiftTime(int32_t d) { logic::shiftTime(lastWindow_, d); }
 
   uint32_t repeatS = 600;
   uint8_t maxRepeats = 3;

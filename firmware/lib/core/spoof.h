@@ -34,7 +34,7 @@ struct Config {
   uint32_t accelWindowS = 120;     // идут шаги, а позиция стоит столько секунд
   float accelStillM = 15.0f;
   uint32_t stepsWhileStill = 60;
-  uint32_t lastGoodMaxAgeS = 3600; // старше — скачок не проверяем
+  uint32_t lastGoodMaxAgeS = 300;  // GPS молчал дольше (пауза, стоянка, переезд на машине) — скачок не проверяем
 };
 
 struct Input {
@@ -67,6 +67,14 @@ class Detector {
   void setBlacklist(const double* lat, const double* lon, const uint16_t* radiusM, size_t n);
   void setPhone(double lat, double lon, float accuracyM, uint32_t time);
   void clearPhone() { phoneValid_ = false; }
+  // Забыть последнюю достоверную точку (эмуляция перенесла трек — иначе это «невозможный скачок»)
+  void forgetLastGood() { lastGoodValid_ = false; stillValid_ = false; }
+  // Часы переставили на d секунд: сдвинуть запомненные моменты (иначе «возраст» точек врёт)
+  void shiftTime(int32_t d) {
+    if (phoneTime_) phoneTime_ += (uint32_t)d;
+    if (lastGoodTime_) lastGoodTime_ += (uint32_t)d;
+    if (stillTime_) stillTime_ += (uint32_t)d;
+  }
 
   // Проверить очередной фикс. Чистые фиксы запоминаются как «последняя достоверная точка».
   Result check(const Input& in);
