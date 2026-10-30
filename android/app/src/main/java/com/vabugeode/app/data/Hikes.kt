@@ -2,6 +2,7 @@ package com.vabugeode.app.data
 
 import com.vabugeode.app.model.Mark
 import com.vabugeode.app.model.TrackPoint
+import com.vabugeode.app.model.PositionSource
 import com.vabugeode.app.protocol.Codec
 import com.vabugeode.app.protocol.MarkMsg
 import com.vabugeode.app.protocol.PointMsg
@@ -30,17 +31,38 @@ data class HikeSummary(
 }
 
 /**
- * Длина пути по точкам. В lat/lon уже лучшая оценка (GPS или по шагам),
- * ложные координаты подмены лежат отдельно (spoofLat/Lon) и сюда не попадают.
+ * Длина пути по достоверным точкам GPS/PDR. Сохранённая последняя позиция при src=NONE
+ * не считается новым измерением; через пропуски и подмену расстояние не соединяем.
  * Сдвиги меньше 3 м не считаем — это дрожание GPS на месте.
  */
+fun TrackPoint.isRoutePoint(): Boolean = !spoof && lat.isFinite() && lon.isFinite() &&
+    (src == PositionSource.GPS || src == PositionSource.PDR)
+
+data class RouteSegment(val points: List<TrackPoint>, val source: PositionSource)
+
+/** Не соединяем линией участки через подмену, паузу или отсутствие достоверной позиции. */
+fun routeSegments(track: List<TrackPoint>): List<RouteSegment> {
+    val out = ArrayList<RouteSegment>()
+    var cur = ArrayList<TrackPoint>()
+    fun flush() {
+        if (cur.size > 1) out += RouteSegment(cur.toList(), cur.first().src)
+        cur = ArrayList()
+    }
+    for (p in track) {
+        if (!p.isRoutePoint()) { flush(); continue }
+        if (cur.isNotEmpty() && cur.last().src != p.src) flush()
+        cur += p
+    }
+    flush()
+    return out
+}
+
 fun trackKm(track: List<TrackPoint>): Double {
     var m = 0.0
     var prev: TrackPoint? = null
     for (p in track) {
         // Пауза (переезд на машине) — переезд в километраж не идёт
-        if (p.src == com.vabugeode.app.model.PositionSource.PAUSE) { prev = null; continue }
-        if (p.lat.isNaN() || p.lon.isNaN()) continue
+        if (!p.isRoutePoint()) { prev = null; continue }
         val q = prev
         if (q == null) { prev = p; continue }
         val d = distanceM(q.lat, q.lon, p.lat, p.lon)

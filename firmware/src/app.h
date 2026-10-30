@@ -9,7 +9,7 @@
 #include "spoof.h"
 #include "steps.h"
 
-constexpr uint32_t PERSIST_MAGIC = 0x56424733;  // «VBG3»: применить новые пороги шагов вместо сохранённого Config
+constexpr uint32_t PERSIST_MAGIC = 0x56424734;  // «VBG4»: состояние подтверждения восстановления GPS
 constexpr uint8_t CAMP_BUF = 15;                // записей на стоянке до сброса на SD
 
 // Настройки (NVS): меняются командами с телефона

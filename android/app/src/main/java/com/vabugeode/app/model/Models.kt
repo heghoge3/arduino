@@ -31,6 +31,7 @@ enum class GpsFix(val title: String) {
 
 /** Причины подозрения на подмену. Биты маски spoof_reason (ТЗ, раздел 7). */
 enum class SpoofReason(val bit: Int, val title: String) {
+    RECOVERY(7, "Проверка восстановления"),
     BLACKLIST(0, "Точка из чёрного списка"),
     PHONE_MISMATCH(1, "Расходится с телефоном"),
     IMPOSSIBLE_JUMP(2, "Невозможный скачок"),

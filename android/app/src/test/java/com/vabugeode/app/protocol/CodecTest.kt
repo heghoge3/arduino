@@ -46,7 +46,7 @@ class CodecTest {
     @Test
     fun pointRoundTrip() {
         val p = PointMsg(
-            timeUtc = 1_793_000_010, lat = 60.12, lon = 30.55, src = 2, spoof = true, spoofMask = 0b101011,
+            timeUtc = 1_793_000_010, lat = 60.12, lon = 30.55, src = 2, spoof = true, spoofMask = 0b101011 or 0x80,
             spoofLat = 60.0346, spoofLon = 30.5693, tempRaw = 2.0, tempCorr = 0.5, humidity = 90.0,
             pressureHpa = 1003.5, altBaro = 110.0, altGps = 12.0, battMv = 3900, battPct = 79,
             sats = 10, hdop = 0.7, steps = 16890, headingDeg = 85.0, speedKmh = 31.5,

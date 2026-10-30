@@ -780,11 +780,16 @@ struct Watch {
 RTC_DATA_ATTR Watch g_w;
 
 const char* spoofText(uint8_t m, char* out, size_t cap) {
-  static const char* names[] = {"чёрный список", "телефон", "скачок", "SNR", "барометр", "шаги", "время"};
+  static const char* names[] = {"чёрный список", "телефон", "скачок", "SNR", "барометр", "шаги", "время", "проверка восстановления"};
   size_t n = 0;
   out[0] = 0;
-  for (int i = 0; i < 7; i++) {
-    if (m & (1 << i)) n += snprintf(out + n, n < cap ? cap - n : 0, "%s%s", n ? ", " : "", names[i]);
+  for (int i = 0; i < 8; i++) {
+    if (m & (1 << i)) {
+      if (n >= cap) break;
+      int wrote = snprintf(out + n, cap - n, "%s%s", n ? ", " : "", names[i]);
+      if (wrote < 0 || (size_t)wrote >= cap - n) break;
+      n += (size_t)wrote;
+    }
   }
   return out;
 }

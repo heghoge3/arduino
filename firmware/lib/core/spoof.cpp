@@ -42,7 +42,7 @@ Result Detector::check(const Input& in) {
 
   // 1. Чёрный список
   for (size_t i = 0; i < blN_; i++) {
-    if (distanceM(in.lat, in.lon, blLat_[i], blLon_[i]) < blR_[i]) { mask |= R_BLACKLIST; break; }
+    if (distanceM(in.lat, in.lon, blLat_[i], blLon_[i]) <= blR_[i]) { mask |= R_BLACKLIST; break; }
   }
 
   // 2. Сверка с телефоном
@@ -94,6 +94,24 @@ Result Detector::check(const Input& in) {
 
   const uint8_t weak = mask & ~STRONG;
   bool spoofed = (mask & STRONG) != 0 || bits(weak) >= 2;
+
+  if (spoofed) {
+    cleanCount_ = 0;
+  } else if (episode_) {
+    // Один чистый фикс между ложными не должен попадать в трек и становиться опорной точкой.
+    // После долгого перерыва подтверждение начинаем заново, а не считаем время без сигнала чистым.
+    if (!cleanCount_ || in.now < cleanLast_ || in.now - cleanLast_ > 3) {
+      cleanSince_ = in.now;
+      cleanCount_ = 1;
+    } else if (in.now > cleanLast_ && cleanCount_ < 255) {
+      cleanCount_++;
+    }
+    cleanLast_ = in.now;
+    if (in.now - cleanSince_ < cfg_.recoveryS || cleanCount_ < 3) {
+      spoofed = true;
+      mask |= R_RECOVERY;
+    }
+  }
 
   if (!spoofed) {
     lastGoodValid_ = true;

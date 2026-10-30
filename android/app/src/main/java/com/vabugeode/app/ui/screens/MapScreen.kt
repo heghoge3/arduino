@@ -5,6 +5,8 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.filled.Satellite
 import com.vabugeode.app.data.OfflineMap
+import com.vabugeode.app.data.isRoutePoint
+import com.vabugeode.app.data.routeSegments
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -357,28 +359,10 @@ private fun setupLayers(s: Style) {
 
 /** Режем трек на отрезки по источнику позиции: GPS — сплошной, по шагам — пунктир. */
 private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
-    val segments = ArrayList<Feature>()
-    var cur = ArrayList<Point>()
-    var curSrc: String? = null
-    for (p in track) {
-        // Пауза (переезд на машине) — линию рвём, а не тянем прямую через весь переезд
-        if (p.src == PositionSource.PAUSE) {
-            if (cur.size > 1) segments += lineFeature(cur, curSrc!!)
-            cur = ArrayList()
-            curSrc = null
-            continue
-        }
-        if (p.lat.isNaN() || p.lon.isNaN()) continue
-        val src = if (p.src == PositionSource.PDR) "pdr" else "gps"
-        val pt = Point.fromLngLat(p.lon, p.lat)
-        if (src != curSrc) {
-            if (cur.size > 1) segments += lineFeature(cur, curSrc!!)
-            // Отрезки стыкуем, чтобы не было дырок
-            cur = if (cur.isNotEmpty() && curSrc != null) arrayListOf(cur.last(), pt) else arrayListOf(pt)
-            curSrc = src
-        } else cur.add(pt)
+    val segments = routeSegments(track).map { segment ->
+        lineFeature(segment.points.map { Point.fromLngLat(it.lon, it.lat) },
+            if (segment.source == PositionSource.PDR) "pdr" else "gps")
     }
-    if (cur.size > 1 && curSrc != null) segments += lineFeature(cur, curSrc)
     s.getSourceAs<GeoJsonSource>("track")?.setGeoJson(FeatureCollection.fromFeatures(segments))
 
     val spoof = track.mapNotNull { p ->
@@ -395,16 +379,16 @@ private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
     }
     s.getSourceAs<GeoJsonSource>("marks")?.setGeoJson(FeatureCollection.fromFeatures(mk))
 
-    track.lastOrNull { !it.lat.isNaN() }?.let { p ->
-        s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)))
-    }
+    val me = track.lastOrNull { it.isRoutePoint() }
+    s.getSourceAs<GeoJsonSource>("me")?.setGeoJson(FeatureCollection.fromFeatures(
+        me?.let { listOf(Feature.fromGeometry(Point.fromLngLat(it.lon, it.lat))) } ?: emptyList()))
 }
 
 private fun lineFeature(pts: List<Point>, src: String) =
     Feature.fromGeometry(LineString.fromLngLats(pts)).apply { addStringProperty("src", src) }
 
 private fun fitTrack(map: MapLibreMap?, track: List<TrackPoint>, top: Int) {
-    val pts = track.filter { !it.lat.isNaN() && !it.lon.isNaN() }.map { LatLng(it.lat, it.lon) }
+    val pts = track.filter { it.isRoutePoint() }.map { LatLng(it.lat, it.lon) }
     fitPoints(map, pts, top)
 }
 

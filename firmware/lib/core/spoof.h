@@ -15,6 +15,7 @@ enum Reason : uint8_t {
   R_BARO = 1 << 4,
   R_ACCEL = 1 << 5,
   R_TIME = 1 << 6,
+  R_RECOVERY = 1 << 7,  // после подмены ждём подтверждения восстановления
 };
 
 // Сильные признаки — подмена по одному. Слабые — только если их два и больше (SNR, барометр, шаги).
@@ -35,6 +36,7 @@ struct Config {
   float accelStillM = 15.0f;
   uint32_t stepsWhileStill = 60;
   uint32_t lastGoodMaxAgeS = 300;  // GPS молчал дольше (пауза, стоянка, переезд на машине) — скачок не проверяем
+  uint32_t recoveryS = 10;
 };
 
 struct Input {
@@ -105,6 +107,8 @@ class Detector {
   uint32_t stillTime_ = 0, stillSteps_ = 0;
 
   bool episode_ = false;
+  uint32_t cleanSince_ = 0, cleanLast_ = 0;
+  uint8_t cleanCount_ = 0;
 };
 
 }  // namespace spoof

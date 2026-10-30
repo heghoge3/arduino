@@ -488,7 +488,8 @@ void test_spoof_weak_signs_need_two() {
 
   in.usedSnr = normal;
   in.altGps = 110;
-  r = d.check(in);
+  // После подмены сначала подтверждаем устойчивое восстановление.
+  for (uint32_t t = 1001; t <= 1011; t++) { in.now = t; r = d.check(in); }
   TEST_ASSERT_FALSE(r.spoof);
   TEST_ASSERT_EQUAL_UINT8(0, r.mask);
 }
@@ -507,6 +508,28 @@ void test_spoof_steps_but_standing() {
       TEST_ASSERT_TRUE(r.spoof);  // шаги + SNR — два слабых
     }
   }
+}
+
+void test_spoof_recovery() {
+  spoof::Detector d;
+  double lat[] = {60.1161}, lon[] = {31.3864};
+  uint16_t radius[] = {1000};
+  d.setBlacklist(lat, lon, radius, 1);
+  TEST_ASSERT_TRUE(d.check(inputAt(1000, lat[0], lon[0])).spoof);
+  for (uint32_t t = 1001; t <= 1010; t++) {
+    auto r = d.check(inputAt(t, 60.1161, 31.363));
+    TEST_ASSERT_TRUE(r.spoof);
+    TEST_ASSERT_TRUE(r.mask & spoof::R_RECOVERY);
+    TEST_ASSERT_FALSE(d.hasLastGood());
+  }
+  // Новый ложный фикс сбрасывает накопленное подтверждение.
+  TEST_ASSERT_TRUE(d.check(inputAt(1011, lat[0], lon[0])).spoof);
+  TEST_ASSERT_TRUE(d.check(inputAt(1012, 60.1161, 31.363)).spoof);
+  // Долгое отсутствие сигнала также не считается восстановлением.
+  TEST_ASSERT_TRUE(d.check(inputAt(1100, 60.1161, 31.363)).spoof);
+  for (uint32_t t = 1101; t < 1110; t++) TEST_ASSERT_TRUE(d.check(inputAt(t, 60.1161, 31.363)).spoof);
+  TEST_ASSERT_FALSE(d.check(inputAt(1110, 60.1161, 31.363)).spoof);
+  TEST_ASSERT_TRUE(d.hasLastGood());
 }
 
 // ---------------------------------------------------------------------------
@@ -694,6 +717,7 @@ int main(int, char**) {
   RUN_TEST(test_spoof_phone_and_time);
   RUN_TEST(test_spoof_weak_signs_need_two);
   RUN_TEST(test_spoof_steps_but_standing);
+  RUN_TEST(test_spoof_recovery);
   RUN_TEST(test_power_moving_and_camp);
   RUN_TEST(test_power_battery_hysteresis);
   RUN_TEST(test_gps_pulse);
