@@ -455,13 +455,15 @@ void test_spoof_jump_after_pause() {
 void test_spoof_phone_and_time() {
   spoof::Detector d;
   d.setPhone(60.1580, 30.5150, 50, 1000);
-  TEST_ASSERT_FALSE(d.check(inputAt(1100, 60.1600, 30.5200)).spoof);  // ~400 м — норма
-  spoof::Result r = d.check(inputAt(1200, 60.2500, 30.5150));          // ~10 км от телефона
+  spoof::Result r = d.check(inputAt(1001, 60.2500, 30.5150));  // ~10 км от телефона
   TEST_ASSERT_TRUE(r.mask & spoof::R_PHONE);
+  TEST_ASSERT_FALSE_MESSAGE(r.spoof, "ошибка телефона сама по себе не отвергает GPS");
+  TEST_ASSERT_TRUE(d.hasLastGood());
   // Позиция телефона устарела — проверка не работает
   spoof::Detector d2;
   d2.setPhone(60.1580, 30.5150, 50, 1000);
-  TEST_ASSERT_FALSE(d2.check(inputAt(1000 + 3600, 60.2500, 30.5150)).mask & spoof::R_PHONE);
+  TEST_ASSERT_TRUE(d2.check(inputAt(1030, 60.2500, 30.5150)).mask & spoof::R_PHONE);
+  TEST_ASSERT_FALSE(d2.check(inputAt(1031, 60.2500, 30.5150)).mask & spoof::R_PHONE);
 
   // Время GPS уехало на час от часов
   spoof::Detector d3;
@@ -469,12 +471,82 @@ void test_spoof_phone_and_time() {
   in.gpsTimeValid = true;
   in.gpsTime = 5000 + 3600;
   r = d3.check(in);
-  TEST_ASSERT_TRUE(r.spoof);
+  TEST_ASSERT_FALSE_MESSAGE(r.spoof, "ошибка часов сама по себе не отвергает координаты");
   TEST_ASSERT_TRUE(r.mask & spoof::R_TIME);
   // Время не проверено — сравнивать не с чем
   in.timeTrusted = false;
   spoof::Detector d4;
   TEST_ASSERT_FALSE(d4.check(in).mask & spoof::R_TIME);
+}
+
+void test_spoof_hike_clock_regression() {
+  // Вечерний журнал: R_TIME=0x40; при подключении телефон исправил часы на +540 с.
+  // Точное сырое UTC GPS в старом журнале отсутствует; моделируем отставание RTC.
+  const uint32_t correct = nmea::toUnix(2026, 10, 31, 17, 30, 5);
+  spoof::Detector d;
+  auto in = inputAt(correct - 540, 60.00100, 30.00200);
+  in.gpsTimeValid = true; in.gpsTime = correct;
+  auto r = d.check(in);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_TIME);
+  TEST_ASSERT_FALSE(r.spoof);
+  TEST_ASSERT_TRUE(d.hasLastGood());
+  uint8_t flat[] = {41, 42, 41, 42, 41};
+  in.usedSnr = flat; in.usedCount = 5;
+  TEST_ASSERT_FALSE(d.check(in).spoof);
+  // Пространственный скачок по-прежнему отбрасывается, даже при неверных часах.
+  in.now++; in.gpsTime++; in.lat = 60.1161; in.lon = 31.3864;
+  r = d.check(in);
+  TEST_ASSERT_TRUE(r.spoof);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_JUMP);
+}
+
+void test_spoof_phone_hike_regression() {
+  // Журнал: PHONE_POS в 10:44:33, первый хороший GPS в 10:50:53.
+  // Координаты телефона в старом журнале не записаны: для воспроизведения
+  // все координаты здесь условные; берём точку, отстоящую от условного GPS более чем на 3 км.
+  const uint32_t received = nmea::toUnix(2026, 10, 31, 7, 44, 33); // UTC, Москва +3
+  spoof::Detector d;
+  d.setPhone(59.95, 30.10, 50, received);
+  auto r = d.check(inputAt(received + 380, 60.00000, 30.00000));
+  TEST_ASSERT_FALSE(r.mask & spoof::R_PHONE);
+  TEST_ASSERT_FALSE(r.spoof);
+  TEST_ASSERT_DOUBLE_WITHIN(1e-7, 60.00000, d.lastGoodLat());
+
+  // Даже ошибочная НОВАЯ позиция телефона + один слабый признак не блокируют трек.
+  spoof::Detector fresh;
+  fresh.setPhone(59.95, 30.10, 50, received);
+  uint8_t flat[] = {41, 42, 41, 42, 41};
+  auto in = inputAt(received + 1, 60.00000, 30.00000);
+  in.usedSnr = flat; in.usedCount = 5;
+  r = fresh.check(in);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_PHONE);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_SNR_FLAT);
+  TEST_ASSERT_FALSE(r.spoof);
+  // Два независимых слабых признака по-прежнему работают.
+  in.altValid = in.baroValid = true; in.altGps = 400; in.altBaro = 100;
+  TEST_ASSERT_TRUE(fresh.check(in).spoof);
+
+  // Чёрный список не отключён при совпадении GPS с телефоном.
+  spoof::Detector blocked;
+  double lat[] = {60.00000}, lon[] = {30.00000}; uint16_t radius[] = {5000};
+  blocked.setBlacklist(lat, lon, radius, 1);
+  blocked.setPhone(lat[0], lon[0], 10, received);
+  r = blocked.check(inputAt(received + 1, lat[0], lon[0]));
+  TEST_ASSERT_TRUE(r.spoof);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_BLACKLIST);
+}
+
+void test_spoof_phone_rejects_unusable_references() {
+  for (float acc : {0.0f, -1.0f, 1001.0f, INFINITY, NAN}) {
+    spoof::Detector d;
+    d.setPhone(59.95, 30.10, acc, 1000);
+    TEST_ASSERT_FALSE(d.check(inputAt(1001, 60.00000, 30.00000)).mask & spoof::R_PHONE);
+  }
+  spoof::Detector d;
+  d.setPhone(59.95, 30.10, 50, 1000);
+  TEST_ASSERT_FALSE(d.check(inputAt(999, 60.00000, 30.00000)).mask & spoof::R_PHONE);
+  d.clearPhone();
+  TEST_ASSERT_FALSE(d.check(inputAt(1001, 60.00000, 30.00000)).mask & spoof::R_PHONE);
 }
 
 void test_spoof_weak_signs_need_two() {
@@ -1015,6 +1087,9 @@ int main(int, char**) {
   RUN_TEST(test_spoof_blacklist_and_jump);
   RUN_TEST(test_spoof_jump_after_pause);
   RUN_TEST(test_spoof_phone_and_time);
+  RUN_TEST(test_spoof_hike_clock_regression);
+  RUN_TEST(test_spoof_phone_hike_regression);
+  RUN_TEST(test_spoof_phone_rejects_unusable_references);
   RUN_TEST(test_spoof_weak_signs_need_two);
   RUN_TEST(test_spoof_steps_but_standing);
   RUN_TEST(test_spoof_recovery);

@@ -425,6 +425,15 @@ void onFix() {
   in.usedCount = used;
   in.steps = P.stepDet.count();
   spoof::Result r = P.spoof.check(in);
+  static bool clockMismatch = false;
+  bool mismatch = (r.mask & spoof::R_TIME) != 0;
+  if (mismatch && !clockMismatch) {
+    LOGW(M_RTC, "UTC GPS=%lu ESP=%lu; сбой времени",
+         (unsigned long)f.utc, (unsigned long)in.now);
+  } else if (!mismatch && clockMismatch && f.timeValid) {
+    LOGI(M_RTC, "время GPS снова совпадает с часами");
+  }
+  clockMismatch = mismatch;
 
   // Время от GPS — только если часы не проверены и нет подозрения
 #ifndef FAKE_SENSORS
@@ -682,6 +691,8 @@ void handleCommand(const uint8_t* data, size_t len) {
     }
     case proto::CMD_PHONE_POS:
       P.spoof.setPhone(c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM, N.now);
+      LOGI(M_SPOOF, "телефон %.5f,%.5f +/- %u м (30 с)",
+           c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM);
 #ifdef FAKE_SENSORS
       if (gps::fakeAnchor(c.lat7 / 1e7, c.lon7 / 1e7)) {
         P.spoof.forgetLastGood();
@@ -1116,7 +1127,12 @@ void secondTick() {
   if (ms - g_lastResyncMs >= 600000) {
     g_lastResyncMs = ms;
     int32_t delta = clockx::resync();
-    if (delta) onClockJump(delta);
+    int32_t rejected = clockx::rejectedResync();
+    if (rejected) LOGW(M_RTC, "DS1302: %+ld с отклонено; сверь с телефоном", (long)rejected);
+    if (delta) {
+      LOGD(M_RTC, "DS1302: поправка %+ld с", (long)delta);
+      onClockJump(delta);
+    }
   }
 
   watchState();

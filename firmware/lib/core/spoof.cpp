@@ -28,7 +28,7 @@ void Detector::setBlacklist(const double* lat, const double* lon, const uint16_t
 }
 
 void Detector::setPhone(double lat, double lon, float accuracyM, uint32_t time) {
-  if (!isfinite(lat)||!isfinite(lon)||lat < -90||lat>90||lon < -180||lon>180||!isfinite(accuracyM)||accuracyM<=0||blacklisted(lat,lon)) { phoneValid_=false; return; }
+  if (!isfinite(lat)||!isfinite(lon)||lat < -90||lat>90||lon < -180||lon>180||!isfinite(accuracyM)||accuracyM<=0||accuracyM>cfg_.phoneMaxAccuracyM||blacklisted(lat,lon)) { phoneValid_=false; return; }
   phoneValid_ = true;
   phoneLat_ = lat;
   phoneLon_ = lon;
@@ -58,7 +58,8 @@ Result Detector::check(const Input& in) {
     if (distanceM(in.lat, in.lon, blLat_[i], blLon_[i]) <= blR_[i]) { mask |= R_BLACKLIST; break; }
   }
 
-  // 2. Сверка с телефоном
+  // 2. Справочная сверка с телефоном. Время команды не равно времени фикса;
+  // даже свежая сетевая позиция не является доказательством подмены GPS.
   if (phoneValid_ && in.timeTrusted && in.now >= phoneTime_ && in.now - phoneTime_ <= cfg_.phoneFreshS) {
     float limit = phoneAcc_ * 2 > cfg_.phoneMinM ? phoneAcc_ * 2 : cfg_.phoneMinM;
     if (distanceM(in.lat, in.lon, phoneLat_, phoneLon_) > limit) mask |= R_PHONE;
@@ -99,13 +100,14 @@ Result Detector::check(const Input& in) {
     mask |= R_ACCEL;
   }
 
-  // 7. Время GPS против доверенных часов
+  // 7. Время GPS против часов. Ошибка RTC не доказывает подмену координат:
+  // показываем расхождение, но пространственные проверки работают отдельно.
   if (in.gpsTimeValid && in.timeTrusted) {
     uint32_t d = in.gpsTime > in.now ? in.gpsTime - in.now : in.now - in.gpsTime;
     if (d > cfg_.timeDiffS) mask |= R_TIME;
   }
 
-  const uint8_t weak = mask & ~STRONG;
+  const uint8_t weak = mask & WEAK;
   bool spoofed = (mask & STRONG) != 0 || bits(weak) >= 2;
 
   if (spoofed) {

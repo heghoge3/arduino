@@ -18,8 +18,11 @@ enum Reason : uint8_t {
   R_RECOVERY = 1 << 7,  // после подмены ждём подтверждения восстановления
 };
 
-// Сильные признаки — подмена по одному. Слабые — только если их два и больше (SNR, барометр, шаги).
-constexpr uint8_t STRONG = R_BLACKLIST | R_PHONE | R_JUMP | R_TIME;
+// Сильные признаки — подмена по одному. Слабые — только если их два и больше.
+// Телефон и время — справочные расхождения: кэш, GNSS телефона и RTC могут ошибаться.
+// Они не отвергают координаты и не добавляются к числу независимых слабых признаков.
+constexpr uint8_t STRONG = R_BLACKLIST | R_JUMP;
+constexpr uint8_t WEAK = R_SNR_FLAT | R_BARO | R_ACCEL;
 
 constexpr size_t MAX_BLACKLIST = 24;
 
@@ -27,7 +30,8 @@ struct Config {
   float maxSpeedMs = 11.0f;        // ~40 км/ч: пешком и на велосипеде быстрее не бывает
   float jumpSlackM = 200.0f;       // запас на погрешность
   float phoneMinM = 3000.0f;       // расхождение с телефоном: max(3 км, 2×точность)
-  uint32_t phoneFreshS = 600;      // позиция телефона годна 10 мин
+  uint32_t phoneFreshS = 30;       // справочная сверка только 30 с после получения
+  float phoneMaxAccuracyM = 1000; // грубую позицию по сети не используем для сверки
   float snrSpreadDb = 3.0f;        // разброс SNR у ≥5 спутников меньше — подозрительно
   uint8_t snrMinSats = 5;
   float baroDiffM = 100.0f;        // GPS против барометра

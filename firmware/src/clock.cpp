@@ -24,6 +24,7 @@ constexpr uint8_t REG_RAM0 = 0xC0;
 constexpr uint8_t RAM_MAGIC = 0xA7;
 
 bool g_present = false;
+int32_t g_rejectedResync = 0;
 // Ход времени ведут внутренние часы ESP32 (системное время): они идут и в глубоком сне.
 // Доверие и источник — в RTC-памяти, чтобы пережить сон, даже если DS1302 при пробуждении не ответил
 RTC_DATA_ATTR bool g_trusted = false;
@@ -237,13 +238,23 @@ int32_t offerGps(uint32_t utc, bool spoofSuspected) {
 }
 
 int32_t resync() {
+  g_rejectedResync = 0;
   if (!g_present || !g_trusted || readReg(REG_RAM0) != RAM_MAGIC) return 0;
   uint32_t utc;
   bool halted;
   if (!readClock(utc, halted) || halted || utc < 1700000000UL) return 0;
   int32_t delta = static_cast<int32_t>(utc - now());
+  // Раньше любая правдоподобная дата DS1302 сразу меняла системное время.
+  // Скачок на минуты портил метки времени и превращал корректный GPS в R_TIME.
+  // Большое расхождение требует независимой синхронизации с телефоном.
+  if (delta > 30 || delta < -30) {
+    g_rejectedResync = delta;
+    return 0;
+  }
   setBase(utc);
   return delta;
 }
+
+int32_t rejectedResync() { return g_rejectedResync; }
 
 }  // namespace clockx

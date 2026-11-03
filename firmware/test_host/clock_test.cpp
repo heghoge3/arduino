@@ -146,4 +146,19 @@ int main() {
   assert(clockx::resync() == 0);
   assert(clockx::now() == before);
   puts("PASS: untrusted RTC is not used for periodic resync");
+
+  // Вечерний поход: RTC/системное время разошлись на 9 минут.
+  // Большую поправку нельзя молча применять, сохраняя «проверенные» часы.
+  const int jumps[] = {-540, 540};
+  for (int jump : jumps) {
+    clockx::setFromPhone(utc);
+    fakeUtc = utc + jump;
+    assert(clockx::resync() == 0);
+    assert(clockx::now() == utc + jump);
+    assert(clockx::rejectedResync() == -jump);
+  }
+  clockx::setFromPhone(utc);
+  assert(clockx::resync() == 0);
+  assert(clockx::rejectedResync() == 0);
+  puts("PASS: large RTC corrections are reported and cannot overwrite running time");
 }
