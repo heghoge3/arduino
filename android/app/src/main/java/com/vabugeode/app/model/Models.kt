@@ -67,7 +67,9 @@ data class GpsState(
     val satellites: List<Satellite>,
     val spoof: Boolean,
     val spoofMask: Int,
-)
+) {
+    val recovering: Boolean get() = GpsEvidence.recoveryOnly(spoofMask)
+}
 
 /** Питание по INA219. */
 data class PowerState(

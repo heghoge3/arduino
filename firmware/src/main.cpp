@@ -322,7 +322,7 @@ proto::Status makeStatus() {
 proto::Beacon makeBeacon() {
   proto::Beacon b{};
   b.mode = P.power.state();
-  b.flags = (P.recording ? proto::B_RECORDING : 0) | (N.fix && !N.spoof ? proto::B_FIX : 0) |
+  b.flags = (P.recording ? proto::B_RECORDING : 0) | (N.fix && !N.spoof && !N.recovering ? proto::B_FIX : 0) |
             (N.spoof ? proto::B_SPOOF : 0) | (clockx::trusted() ? proto::B_TIME_OK : 0) |
             (storage::sdOk() ? proto::B_SD_OK : 0);
   b.alerts = P.alerts.unacked();
@@ -399,6 +399,7 @@ void onFix() {
     N.satsUsed = f.satsUsed;
     N.hdop = f.hdop;
     N.spoof = false;
+    N.recovering = false;
     N.spoofMask = 0;
     N.src = 0;  // позиция — последняя достоверная
     N.altValid = false;
@@ -448,11 +449,14 @@ void onFix() {
   N.fixType = f.fixType;
   N.satsUsed = f.satsUsed;
   N.hdop = f.hdop;
-  N.spoof = r.spoof;
+  N.spoof = r.detected();
+  N.recovering = r.recovering();
   N.spoofMask = r.mask;
   if (r.spoof) {
-    P.spoofMaskLast = r.mask;
-    P.spoofAlertUntil = N.now + 60;  // тревога держится минуту после последнего подозрительного фикса
+    if (N.spoof) {
+      P.spoofMaskLast = r.mask;
+      P.spoofAlertUntil = N.now + 60;
+    }
     // GPS отвергнут; ниже допускается только отдельная оценка по шагам и компасу.
     N.src = 0;
     N.altValid = false;
@@ -508,7 +512,7 @@ void logPoint(bool startAnchor=false) {
   p.src = paused ? proto::SRC_PAUSE : (haveGps ? 1 : (havePdr ? 2 : 0));
   p.startAnchor=startAnchor;
   p.spoof = !paused && N.spoof;
-  p.spoofMask = p.spoof ? N.spoofMask : 0;
+  p.spoofMask = p.spoof || (!paused && !startAnchor && N.recovering) ? N.spoofMask : 0;
   if (p.spoof) {
     const nmea::Fix& f = gps::parser().fix();
     p.spoofLat7 = c7(f.lat);
@@ -796,7 +800,7 @@ void handleCommand(const uint8_t* data, size_t len) {
         if (!P.startAnchor) { N.haveLat=false; N.src=0; }
       }
       if(N.src==1 && N.haveLat && P.spoof.blacklisted(N.lat,N.lon)) {
-        N.src=0; N.fix=false; N.spoof=true; N.spoofMask|=spoof::R_BLACKLIST; N.haveLat=false;
+        N.src=0; N.fix=false; N.spoof=true; N.recovering=false; N.spoofMask|=spoof::R_BLACKLIST; N.haveLat=false;
       }
       LOGI(M_SPOOF,"зон блокировки %u; первый радиус %u м",c.blCount,c.blCount?c.bl[0].radiusM:0);
       break;
@@ -880,6 +884,7 @@ struct Watch {
   bool secured, gpsOn, fix, nmeaDead, spoof, envBad, pwrBad, sdBad, trusted, low, crit;
   bool noBme, noIna, noMpu, noOled, noCompass;
   uint32_t gpsOnUp, fixUp, spoofUp, lastBeatUp;
+  bool recovering;
 };
 RTC_DATA_ATTR Watch g_w;
 
@@ -933,7 +938,7 @@ void watchState() {
     // Поля датчиков и SD хранят «плохо» (true — не работает), как и сравниваются ниже
     g_w = Watch{true, (uint8_t)radio::state(), radio::secured(), N.gpsOn, N.fix, nmeaDead, N.spoof, !N.env.ok, !N.pwr.ok,
                 !storage::sdOk(), clockx::trusted(), P.power.low(), P.power.critical(), !pr.bme, !pr.ina, !pr.mpu,
-                !pr.oled, !pr.compass, up, 0, 0, up};
+                !pr.oled, !pr.compass, up, 0, 0, up, N.recovering};
     return;
   }
   // Bluetooth
@@ -985,6 +990,12 @@ void watchState() {
     }
   }
   // Датчики и SD
+  if (N.recovering != g_w.recovering) {
+    g_w.recovering = N.recovering;
+    if (N.recovering) LOGI(M_GPS, "GPS: проверка восстановления 10 с");
+    else if (N.src == 1) LOGI(M_GPS, "GPS: восстановление подтверждено");
+    else LOGI(M_GPS, "GPS: проверка восстановления прервана");
+  }
   edge(!N.env.ok, g_w.envBad, logbuf::ERR, logbuf::M_SENS, "BME280 не читается", "BME280 снова читается");
   edge(!N.pwr.ok, g_w.pwrBad, logbuf::ERR, logbuf::M_SENS, "INA219 не читается", "INA219 снова читается");
   edge(!pr.bme, g_w.noBme, logbuf::WARN, logbuf::M_SENS, "BME280 пропал с шины I2C", "BME280 нашёлся на шине");
@@ -1053,6 +1064,7 @@ void secondTick() {
   if (!N.gpsOn || !gps::fixFresh() || !gps::parser().fix().valid) {
     N.fix = false;
     N.spoof = false;  // тревога сама держится ещё минуту (spoofAlertUntil)
+    N.recovering = false;
     N.spoofMask = 0;
   }
   N.satsView = gps::parser().satCount();
@@ -1350,6 +1362,7 @@ uint8_t buildChecks(proto::Check* c) {
   if (!gps::isOn()) c[n++] = {7, 0, 7, 0};
   else if (gps::onSeconds() > 5 && !gps::alive()) c[n++] = {7, 2, 4, 0};
   else if (N.spoof) c[n++] = {7, 1, 5, 0};
+  else if (N.recovering) c[n++] = {7, 1, 6, 0};
   else if (!N.fix) c[n++] = {7, 1, 6, 0};
   else c[n++] = {7, 0, 0, 0};
   if (!N.pwr.batteryKnown()) c[n++] = {8, 1, 12, 0};

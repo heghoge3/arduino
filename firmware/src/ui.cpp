@@ -139,6 +139,7 @@ void drawPage1() {
   oled.drawUTF8(w + 2, 26, "°C");
   char g[32];
   if (N.spoof) snprintf(g, sizeof(g), "ПОДМЕНА GPS!");
+  else if (N.recovering) snprintf(g, sizeof(g), "GPS: проверка");
   else if (!N.gpsOn) snprintf(g, sizeof(g), "GPS выкл (стоянка)");
   else if (!N.fix) snprintf(g, sizeof(g), "GPS: поиск, %u сп.", N.satsView);
   else snprintf(g, sizeof(g), "GPS: %u сп. HDOP %.1f", N.satsUsed, N.hdop);

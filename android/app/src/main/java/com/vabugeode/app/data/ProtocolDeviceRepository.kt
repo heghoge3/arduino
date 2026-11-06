@@ -7,6 +7,7 @@ import com.vabugeode.app.model.DeviceStatus
 import com.vabugeode.app.model.EnvState
 import com.vabugeode.app.model.GpsFix
 import com.vabugeode.app.model.GpsState
+import com.vabugeode.app.model.GpsEvidence
 import com.vabugeode.app.model.LinkState
 import com.vabugeode.app.model.Mark
 import com.vabugeode.app.model.MarkType
@@ -638,6 +639,9 @@ class ProtocolDeviceRepository(
 
     private fun StatusMsg.toStatus(sats: SatsMsg?): DeviceStatus {
         val fixE = GpsFix.entries.getOrElse(fix) { GpsFix.OFF }
+        val blocked = src == 1 && isBlocked(lat, lon, blacklist.value)
+        val mask = spoofMask or if (blocked) 1 else 0
+        val recovering = GpsEvidence.recoveryOnly(mask)
         val satellites = if (has(Proto.F_GPS_ON)) sats?.sats.orEmpty().map {
             Satellite(sysName(it.system), it.prn, it.snr, it.used)
         } else emptyList()
@@ -648,7 +652,7 @@ class ProtocolDeviceRepository(
             gps = GpsState(
                 fix = fixE, satsUsed = satsUsed, satsInView = satsView, hdop = hdop ?: 99.9,
                 speedKmh = speedKmh, courseDeg = courseDeg, altGps = altGps,
-                satellites = satellites, spoof = has(Proto.F_SPOOF) || (src==1&&isBlocked(lat,lon,blacklist.value)), spoofMask = spoofMask or if (src==1&&isBlocked(lat,lon,blacklist.value)) 1 else 0,
+                satellites = satellites, spoof = (has(Proto.F_SPOOF) && !recovering) || blocked, spoofMask = mask,
             ),
             env = EnvState(
                 tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN,
@@ -660,9 +664,9 @@ class ProtocolDeviceRepository(
                 charging = has(Proto.F_CHARGING), usedMah = usedMah.toDouble(), hoursLeft = hoursLeft,
             ),
             steps = steps.toInt(), headingDeg = headingDeg, distanceKm = distanceM / 1000.0,
-            positionSource = if (src==1 && isBlocked(lat,lon,blacklist.value)) PositionSource.NONE else srcOf(src),
-            lat = lat?.takeUnless { src!=4 && isBlocked(lat,lon,blacklist.value) },
-            lon = lon?.takeUnless { src!=4 && isBlocked(lat,lon,blacklist.value) },
+            positionSource = if ((recovering && src != 4) || blocked) PositionSource.NONE else srcOf(src),
+            lat = lat?.takeUnless { src!=4 && (recovering || isBlocked(lat,lon,blacklist.value)) },
+            lon = lon?.takeUnless { src!=4 && (recovering || isBlocked(lat,lon,blacklist.value)) },
         )
     }
 
@@ -736,7 +740,8 @@ class ProtocolDeviceRepository(
                 19 -> "GPS + шаги. Без GPS — пунктир между привязками, гироскоп выключен"
                 4 -> "Нет данных NMEA — проверьте TX/RX и питание"
                 5 -> "NMEA идёт, но подозрение на подмену"
-                6 -> "Ищет спутники${st?.let { " (${it.gps.satsInView} видно)" } ?: ""}"
+                6 -> if (c.id == 7 && st?.gps?.recovering == true) "Проверка восстановления GPS: ждём устойчивые координаты"
+                    else "Ищет спутники${st?.let { " (${it.gps.satsInView} видно)" } ?: ""}"
                 7 -> "Выключен — стоянка, экономия заряда"
                 8 -> "Низкий заряд${st?.let { " — ${it.power.percent} %" } ?: ""}"
                 9 -> "Карта не вставлена или не читается"
@@ -815,15 +820,23 @@ class ProtocolDeviceRepository(
 }
 
 /** Пакеты из базы и по радио → модель экранов */
-internal fun PointMsg.toTrackPoint() = TrackPoint(
-    tsUtcMs = timeUtc * 1000, lat = lat ?: Double.NaN, lon = lon ?: Double.NaN,
-    altGps = altGps, sats = sats, hdop = hdop ?: 99.9, speedKmh = speedKmh,
-    spoof = spoof, spoofMask = spoofMask, spoofLat = spoofLat, spoofLon = spoofLon,
-    tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN, humidity = humidity,
-    pressureHpa = pressureHpa, altBaro = altBaro ?: Double.NaN,
-    battV = battMv / 1000.0, battMa = 0.0, battPercent = battPct,
-    steps = steps.toInt(), headingDeg = headingDeg, src = if (startAnchor) PositionSource.START else srcOfCode(src), markId = null,
-)
+internal fun PointMsg.toTrackPoint(): TrackPoint {
+    val recoveryOnly = GpsEvidence.recoveryOnly(spoofMask)
+    val recovering = recoveryOnly && !startAnchor
+    return TrackPoint(
+        tsUtcMs = timeUtc * 1000, lat = if (recovering) Double.NaN else lat ?: Double.NaN,
+        lon = if (recovering) Double.NaN else lon ?: Double.NaN,
+        altGps = altGps.takeUnless { recovering }, sats = sats, hdop = hdop ?: 99.9,
+        speedKmh = if (recovering) 0.0 else speedKmh,
+        spoof = spoof && !recoveryOnly, spoofMask = spoofMask,
+        spoofLat = spoofLat.takeUnless { recoveryOnly }, spoofLon = spoofLon.takeUnless { recoveryOnly },
+        tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN, humidity = humidity,
+        pressureHpa = pressureHpa, altBaro = altBaro ?: Double.NaN,
+        battV = battMv / 1000.0, battMa = 0.0, battPercent = battPct,
+        steps = steps.toInt(), headingDeg = headingDeg,
+        src = if (recovering) PositionSource.NONE else if (startAnchor) PositionSource.START else srcOfCode(src), markId = null,
+    )
+}
 
 internal fun MarkMsg.toMark() = Mark(
     id = id, tsUtcMs = timeUtc * 1000,

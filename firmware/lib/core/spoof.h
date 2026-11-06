@@ -24,6 +24,10 @@ enum Reason : uint8_t {
 constexpr uint8_t STRONG = R_BLACKLIST | R_JUMP;
 constexpr uint8_t WEAK = R_SNR_FLAT | R_BARO | R_ACCEL;
 
+// Ожидание чистых фиксов не является новым обнаружением подмены.
+// Допускается один слабый/справочный признак, но не сильный и не два слабых.
+bool recoveryOnly(uint8_t mask);
+
 constexpr size_t MAX_BLACKLIST = 24;
 
 struct Config {
@@ -59,8 +63,10 @@ struct Input {
 };
 
 struct Result {
-  bool spoof;
+  bool spoof; // фикс отвергнут, в том числе пока идёт восстановление
   uint8_t mask;
+  bool recovering() const { return spoof && recoveryOnly(mask); }
+  bool detected() const { return spoof && !recoveryOnly(mask); }
 };
 
 // Расстояние по поверхности, м

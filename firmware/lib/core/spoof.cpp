@@ -42,6 +42,10 @@ static int bits(uint8_t v) {
   return n;
 }
 
+bool recoveryOnly(uint8_t mask) {
+  return (mask & R_RECOVERY) && !(mask & STRONG) && bits(mask & WEAK) < 2;
+}
+
 bool Detector::blacklisted(double lat, double lon) const {
   for (size_t i = 0; i < blN_; i++) if (distanceM(lat, lon, blLat_[i], blLon_[i]) <= blR_[i]) return true;
   return false;

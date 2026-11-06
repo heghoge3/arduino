@@ -611,6 +611,43 @@ void test_spoof_recovery() {
   TEST_ASSERT_TRUE(d.hasLastGood());
 }
 
+void test_recovery_is_rejected_without_reporting_new_spoof() {
+  spoof::Detector d;
+  double lat[] = {60.1161}, lon[] = {31.3864}; uint16_t radius[] = {5000};
+  d.setBlacklist(lat, lon, radius, 1);
+  auto detected = d.check(inputAt(1000, lat[0], lon[0]));
+  TEST_ASSERT_TRUE(detected.detected());
+  TEST_ASSERT_FALSE(detected.recovering());
+  for (uint32_t t = 4000; t <= 4010; ++t) {
+    auto r = d.check(inputAt(t, 60.0, 30.0));
+    TEST_ASSERT_FALSE(r.detected());
+    TEST_ASSERT_EQUAL(t < 4010, r.recovering());
+    TEST_ASSERT_EQUAL(t < 4010, r.spoof); // пока ждём, GPS не становится достоверным
+    TEST_ASSERT_EQUAL(t >= 4010, d.hasLastGood());
+    // Так запись уходит старому APK: NONE без красной координаты, маска сохранена.
+    proto::Point p{};
+    p.time=t; p.src=r.spoof ? 0 : 1; p.spoof=r.detected(); p.spoofMask=r.mask;
+    uint8_t bytes[proto::POINT_SIZE]; proto::Point decoded{};
+    TEST_ASSERT_EQUAL_UINT(proto::POINT_SIZE, proto::encodePoint(p,bytes,sizeof(bytes)));
+    TEST_ASSERT_TRUE(proto::decodePoint(bytes,sizeof(bytes),decoded));
+    TEST_ASSERT_FALSE(decoded.spoof);
+    TEST_ASSERT_EQUAL_UINT8(t < 4010 ? 0 : 1, decoded.src);
+    TEST_ASSERT_EQUAL_UINT8(t < 4010 ? spoof::R_RECOVERY : 0, decoded.spoofMask);
+    TEST_ASSERT_EQUAL_INT32(0, decoded.spoofLat7);
+    TEST_ASSERT_EQUAL_INT32(0, decoded.spoofLon7);
+  }
+  // Смешанные маски: сильный признак и две слабые причины не скрываются восстановлением.
+  TEST_ASSERT_TRUE(spoof::recoveryOnly(spoof::R_RECOVERY | spoof::R_SNR_FLAT | spoof::R_PHONE | spoof::R_TIME));
+  for (uint8_t evidence : {spoof::R_BLACKLIST, spoof::R_JUMP,
+          (spoof::Reason)(spoof::R_SNR_FLAT|spoof::R_BARO),
+          (spoof::Reason)(spoof::R_SNR_FLAT|spoof::R_ACCEL),
+          (spoof::Reason)(spoof::R_BARO|spoof::R_ACCEL)}) {
+    spoof::Result r{true,(uint8_t)(spoof::R_RECOVERY|evidence)};
+    TEST_ASSERT_TRUE(r.detected());
+    TEST_ASSERT_FALSE(r.recovering());
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Логика состояний
 // ---------------------------------------------------------------------------
@@ -1093,6 +1130,7 @@ int main(int, char**) {
   RUN_TEST(test_spoof_weak_signs_need_two);
   RUN_TEST(test_spoof_steps_but_standing);
   RUN_TEST(test_spoof_recovery);
+  RUN_TEST(test_recovery_is_rejected_without_reporting_new_spoof);
   RUN_TEST(test_power_moving_and_camp);
   RUN_TEST(test_power_battery_hysteresis);
   RUN_TEST(test_gps_pulse);

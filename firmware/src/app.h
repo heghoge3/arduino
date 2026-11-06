@@ -90,6 +90,7 @@ struct Snapshot {
   float hdop;
   float speedKmh, courseDeg;
   bool spoof;
+  bool recovering;    // фикс ещё не принят, но новых признаков подмены нет
   uint8_t spoofMask;
   uint8_t src;          // 0 нет, 1 GPS, 2 PDR
   float trend3h;        // гПа за 3 ч, NAN — мало данных

@@ -224,6 +224,10 @@ private fun TempHero(st: DeviceStatus, track: List<TrackPoint>, sun: SunSchedule
 private fun GpsCard(st: DeviceStatus) {
     val g = st.gps
     val (color, icon, title, text) = when {
+        g.recovering && g.fix != GpsFix.OFF -> Quad(
+            Palette.Warn, Icons.Filled.GpsFixed, "Проверка восстановления GPS",
+            "Сигнал появился. Ждём устойчивые координаты; шаги продолжают считаться.",
+        )
         g.spoof -> Quad(
             Palette.Bad, Icons.Filled.Warning, "Подозрение на подмену GPS",
             "Приёмник уверенно показывает ${g.fix.title}, но координаты ложные. Эти точки не идут в трек — позиция считается по шагам.",
