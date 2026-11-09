@@ -51,6 +51,7 @@ class BleTransport(
     private var gatt: BluetoothGatt? = null
     private var cmdChar: BluetoothGattCharacteristic? = null
     private var setupJob: Job? = null
+    private var connectTimeoutJob: Job? = null
 
     // GATT в Android выполняет одну операцию за раз: следующая — только после ответа на предыдущую
     private val opLock = Mutex()
@@ -58,6 +59,7 @@ class BleTransport(
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            if (g !== gatt) return  // запоздалый ответ предыдущей попытки
             // Коды Android: 0 ок, 8 потеря связи, 19 гаджет отключился сам, 22 отключил телефон, 133 общая ошибка стека
             AppLog.log(if (status == BluetoothGatt.GATT_SUCCESS) AppLog.DBG else AppLog.WARN, "GATT", "состояние $newState, код $status")
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
@@ -71,22 +73,24 @@ class BleTransport(
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+            if (g !== gatt) return
             AppLog.d("GATT", "MTU $mtu, код $status")
             complete(status)
         }
-        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) = complete(status)
-        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) = complete(status)
-        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) = complete(status)
+        override fun onServicesDiscovered(g: BluetoothGatt, status: Int) { if (g === gatt) complete(status) }
+        override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) { if (g === gatt) complete(status) }
+        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) { if (g === gatt) complete(status) }
 
         // Android 13+
-        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) =
-            onNotify(c.uuid, value)
+        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) {
+            if (g === gatt) onNotify(c.uuid, value)
+        }
 
         // Android 12 и старше
         @Deprecated("Deprecated in Java")
         @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
-            if (Build.VERSION.SDK_INT < 33) onNotify(c.uuid, c.value ?: return)
+            if (g === gatt && Build.VERSION.SDK_INT < 33) onNotify(c.uuid, c.value ?: return)
         }
     }
 
@@ -117,6 +121,7 @@ class BleTransport(
     }
 
     private suspend fun setup(g: BluetoothGatt) {
+        if (g !== gatt) return
         // Сначала MTU: самый длинный пакет 99 байт, при MTU 23 не пролезет
         op { g.requestMtu(Proto.MTU) }
         if (op(10_000) { g.discoverServices() } != BluetoothGatt.GATT_SUCCESS) {
@@ -139,6 +144,9 @@ class BleTransport(
                 return
             }
         }
+        if (g !== gatt) return
+        connectTimeoutJob?.cancel()
+        connectTimeoutJob = null
         lastError.value = null
         state.value = LinkState.CONNECTED
     }
@@ -161,12 +169,15 @@ class BleTransport(
     }
 
     private fun fail(g: BluetoothGatt, why: String) {
+        if (g !== gatt) return
         AppLog.e("GATT", why)
         lastError.value = why
         g.disconnect()
     }
 
     private fun cleanup() {
+        connectTimeoutJob?.cancel()
+        connectTimeoutJob = null
         setupJob?.cancel()
         pending?.complete(BluetoothGatt.GATT_FAILURE)
         gatt?.close()
@@ -195,11 +206,12 @@ class BleTransport(
             state.value = LinkState.DISCONNECTED
             return
         }
-        // Гаджет мог уснуть между маячками — не висим вечно. Ждём дольше периода маячка (30 с),
+        // Гаджет мог уснуть между маячками — не висим вечно. На стоянке период маячка 60 с,
         // чтобы система успела поймать хотя бы один выход в эфир
-        scope.launch {
+        val attempt = gatt
+        connectTimeoutJob = scope.launch {
             delay(CONNECT_TIMEOUT_MS)
-            if (state.value == LinkState.CONNECTING) {
+            if (gatt === attempt && state.value == LinkState.CONNECTING) {
                 AppLog.w("GATT", "гаджет не ответил за ${CONNECT_TIMEOUT_MS / 1000} с")
                 lastError.value = "Гаджет не ответил за ${CONNECT_TIMEOUT_MS / 1000} с"
                 gatt?.disconnect()
@@ -267,6 +279,6 @@ class BleTransport(
         private const val TIMEOUT = -1
         // Нет шифрования/сопряжения (5, 15) и типичная ошибка Android при сопряжении (137)
         private val AUTH_ERRORS = setOf(5, 15, 137)
-        private const val CONNECT_TIMEOUT_MS = 35_000L
+        private const val CONNECT_TIMEOUT_MS = 90_000L
     }
 }

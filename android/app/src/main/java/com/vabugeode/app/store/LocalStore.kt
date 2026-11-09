@@ -54,6 +54,15 @@ class AppLogRow(
 /** Поход в базе: сколько точек и за какое время (ts — Unix-с) */
 data class HikeKey(val device: String, val hike: Long, val n: Int, val first: Long, val last: Long)
 
+/** Только явно выбранные пользователем походы участвуют в достижениях. */
+@Entity(tableName = "achievement_selections", primaryKeys = ["device", "hike"])
+data class AchievementSelection(val device: String, val hike: Long, val enabled: Boolean)
+
+@Entity(tableName = "achievement_unlocks", primaryKeys = ["id"])
+data class AchievementUnlock(val id: String, val unlockedMs: Long, val seenMs: Long = 0)
+
+data class AchievementKey(val device: String, val hike: Long, val n: Int, val last: Long, val marks: Int, val lastMark: Int)
+
 /** Последнее известное состояние гаджета + где его последний раз слышали */
 @Entity(tableName = "gadgets", primaryKeys = ["device"])
 class GadgetRow(
@@ -73,6 +82,27 @@ class GadgetRow(
 
 @Dao
 interface StoreDao {
+    @Query("INSERT OR IGNORE INTO achievement_selections(device,hike,enabled) SELECT :device,:hike,1 WHERE :device != 'virtual' AND EXISTS(SELECT 1 FROM points WHERE device=:device AND hike=:hike)")
+    suspend fun includeAchievementHike(device: String, hike: Long)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM achievement_selections WHERE device=:device AND hike=:hike AND enabled=1)")
+    suspend fun isAchievementHike(device: String, hike: Long): Boolean
+
+    @Query("SELECT * FROM achievement_selections WHERE enabled = 1")
+    fun achievementSelections(): kotlinx.coroutines.flow.Flow<List<AchievementSelection>>
+
+    @Query("SELECT p.device, p.hike, COUNT(*) AS n, MAX(p.ts) AS last, (SELECT COUNT(*) FROM marks m WHERE m.device=p.device AND m.hike=p.hike) AS marks, COALESCE((SELECT MAX(m.id) FROM marks m WHERE m.device=p.device AND m.hike=p.hike),0) AS lastMark FROM points p INNER JOIN achievement_selections s ON p.device=s.device AND p.hike=s.hike WHERE s.enabled=1 AND p.device != 'virtual' GROUP BY p.device,p.hike ORDER BY p.hike")
+    fun achievementKeys(): kotlinx.coroutines.flow.Flow<List<AchievementKey>>
+
+    @Query("SELECT * FROM achievement_unlocks")
+    suspend fun achievementUnlocks(): List<AchievementUnlock>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putAchievementUnlocks(rows: List<AchievementUnlock>)
+
+    @Query("UPDATE achievement_unlocks SET seenMs=:now WHERE id=:id")
+    suspend fun seeAchievement(id: String, now: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putPoints(rows: List<PointRow>)
 
@@ -104,6 +134,7 @@ interface StoreDao {
     /** Удалить поход только из телефона — файл на SD гаджета остаётся копией */
     @Transaction
     suspend fun deleteHike(device: String, hike: Long) {
+        if (isAchievementHike(device, hike)) return
         deletePoints(device, hike)
         deleteMarks(device, hike)
         deleteHikeName(device, hike)
@@ -198,9 +229,16 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `achievement_selections` (`device` TEXT NOT NULL, `hike` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, PRIMARY KEY(`device`, `hike`))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `achievement_unlocks` (`id` TEXT NOT NULL, `unlockedMs` INTEGER NOT NULL, `seenMs` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+    }
+}
+
 @Database(
-    entities = [PointRow::class, MarkRow::class, GadgetRow::class, HikeRow::class, GadgetLogRow::class, AppLogRow::class],
-    version = 3,
+    entities = [PointRow::class, MarkRow::class, GadgetRow::class, HikeRow::class, GadgetLogRow::class, AppLogRow::class, AchievementSelection::class, AchievementUnlock::class],
+    version = 4,
     exportSchema = false,
 )
 abstract class StoreDb : RoomDatabase() {
@@ -212,7 +250,7 @@ abstract class StoreDb : RoomDatabase() {
         /** Одна база на процесс: её пишут и экраны, и фоновое наблюдение */
         fun get(context: Context): StoreDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, StoreDb::class.java, "vabugeode.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build().also { instance = it }
         }
     }

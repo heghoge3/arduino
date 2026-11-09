@@ -7,6 +7,7 @@ import com.vabugeode.app.model.DeviceStatus
 import com.vabugeode.app.model.EnvState
 import com.vabugeode.app.model.GpsFix
 import com.vabugeode.app.model.GpsState
+import com.vabugeode.app.model.GpsEvidence
 import com.vabugeode.app.model.LinkState
 import com.vabugeode.app.model.Mark
 import com.vabugeode.app.model.MarkType
@@ -40,6 +41,10 @@ import com.vabugeode.app.store.saveState
 import com.vabugeode.app.transport.Packet
 import com.vabugeode.app.transport.Transport
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
+import com.vabugeode.app.protocol.HikeResultMsg
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -136,6 +141,66 @@ class ProtocolDeviceRepository(
     private val _notices = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val notices: SharedFlow<String> = _notices
 
+    // Настройки телефона отправляются только прошивкам с поддержкой 0x17.
+    var pdrSettings = Cmd.PdrSettings(75, 0, false)
+    val navigationState = MutableStateFlow<Int?>(null)
+    val compassState = MutableStateFlow<Int?>(null) // INFO: 0 готов, 3 не откалиброван, 13 идёт калибровка
+    fun setPdrSettings(strideCm: Int, offset10: Int, inverted: Boolean) {
+        require(strideCm in 30..150 && offset10 in -1800..1800)
+        pdrSettings = Cmd.PdrSettings(strideCm, offset10, inverted)
+        if (link.value == LinkState.CONNECTED && supportsPdr()) send(pdrSettings)
+    }
+    private fun supportsPdr(): Boolean = lastInfo?.let { it.fwMajor > 0 || it.fwMinor > 1 || (it.fwMinor == 1 && it.fwPatch >= 14) } == true
+    fun anchorFromPhone(lat: Double, lon: Double, accuracyM: Int) {
+        require(lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0 && accuracyM in 1..1000)
+        send(Cmd.PhonePos(lat, lon, accuracyM))
+    }
+    fun calibrateCompass(start: Boolean) {
+        if (link.value != LinkState.CONNECTED || !supportsPdr()) return
+        send(Cmd.CalibCompass(start))
+        if (!start) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
+    }
+
+    val temperatureOffset100 = MutableStateFlow<Int?>(null)
+    val settingBusy = MutableStateFlow(false)
+    private val settingMutex = Mutex()
+    private var settingReply: Pair<Int, CompletableDeferred<Int>>? = null
+    fun supportsEconomy(): Boolean = lastInfo?.let { it.fwMajor>0 || it.fwMinor>1 || (it.fwMinor==1 && it.fwPatch>=16) } == true
+    private fun blacklistCommand() = Cmd.Blacklist(blacklist.value.map { Cmd.Blacklist.Entry(it.lat,it.lon,it.radiusM) }, supportsEconomy())
+    private suspend fun changeSetting(cmd: Cmd): Boolean = settingMutex.withLock {
+        if (link.value!=LinkState.CONNECTED || !supportsEconomy()) {
+            _notices.tryEmit("Нужно подключить гаджет с прошивкой 0.1.16 или новее"); return@withLock false
+        }
+        val target=transport
+        val reply=CompletableDeferred<Int>()
+        settingReply=Codec.cmdCode(Codec.encode(cmd)) to reply
+        settingBusy.value=true
+        try {
+            val bytes=Codec.encode(cmd)
+            val result=withTimeoutOrNull(10_000) {
+                if (sendLock.withLock { target===transport && target.send(bytes) }) {
+                    addLog(LogEntry(System.currentTimeMillis(),true,cmdName(bytes),bytes.size,bytes.toHex()))
+                    reply.await()
+                } else null
+            }
+            if (target!==transport || link.value!=LinkState.CONNECTED || result!=Proto.ACK_OK) {
+                _notices.tryEmit("Нет подтверждения изменения от гаджета. Переподключитесь и проверьте настройку.")
+                false
+            } else true
+        } finally { settingReply=null; settingBusy.value=false }
+    }
+    suspend fun setTemperatureOffset(value: Int): Boolean {
+        require(value in -2000..2000)
+        val ok=changeSetting(Cmd.TemperatureOffset(value))
+        if (ok) { temperatureOffset100.value=value; _notices.tryEmit("Поправка температуры сохранена на гаджете") }
+        return ok
+    }
+    suspend fun setStart(lat: Double,lon: Double): Boolean {
+        require(lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0)
+        val hike=hikeStartMs.value?.div(1000) ?: return false
+        return changeSetting(Cmd.SetStart(hike,lat,lon))
+    }
+
     val deviceName: String get() = transport.deviceName
 
     // Трек и метки копим во внутренних структурах и публикуем пачками:
@@ -176,8 +241,8 @@ class ProtocolDeviceRepository(
                 delay(150)
                 if (dirty) {
                     dirty = false
-                    track.value = ArrayList(points.values)
-                    marks.value = ArrayList(markMap.values)
+                    track.value = excludeBlacklisted(ArrayList(points.values),blacklist.value)
+                    marks.value = excludeBlacklistedMarks(ArrayList(markMap.values),blacklist.value)
                 }
             }
         }
@@ -200,6 +265,10 @@ class ProtocolDeviceRepository(
         markMap.clear()
         lastSats = null
         lastInfo = null
+        compassState.value = null
+        navigationState.value = null
+        temperatureOffset100.value = null
+        settingReply?.second?.cancel()
         hikeStartSec = null
         hikeStartMs.value = null
         status.value = null
@@ -255,6 +324,8 @@ class ProtocolDeviceRepository(
         g.info?.let { b ->
             (runCatching { Codec.decodeMsg(b) }.getOrNull() as? InfoMsg)?.let {
                 lastInfo = it
+                temperatureOffset100.value=it.tempOffset100
+                navigationState.value=it.checks.firstOrNull { c -> c.id==10 }?.code
                 info.value = buildInfo(it, status.value)
             }
         }
@@ -325,11 +396,50 @@ class ProtocolDeviceRepository(
 
     // BLE не принимает параллельные записи — команды строго по очереди
     private val sendLock = Mutex()
+    private val hikeLock = Mutex()
+    private var hikeReply: Triple<Int, Long, CompletableDeferred<Int>>? = null
+    val hikeBusy = MutableStateFlow(false)
+
+    suspend fun manageHike(hike: Long, delete: Boolean): Boolean = hikeLock.withLock {
+        val selected = transport
+        if (link.value != LinkState.CONNECTED || stats.value.syncing) {
+            _notices.tryEmit("Подключитесь к гаджету и дождитесь окончания синхронизации")
+            return@withLock false
+        }
+        val code = if (delete) Proto.CMD_DELETE_HIKE else Proto.CMD_NEW_HIKE
+        val cmd = if (delete) Cmd.DeleteHike(hike) else Cmd.NewHike(hike)
+        val reply = CompletableDeferred<Int>()
+        hikeBusy.value = true
+        hikeReply = Triple(code, hike, reply)
+        try {
+            val sent = sendLock.withLock { selected.send(Codec.encode(cmd)) }
+            val result = if (sent) withTimeoutOrNull(15_000) { reply.await() } else null
+            if (transport !== selected || result != Proto.ACK_OK) {
+                _notices.tryEmit(when (result) {
+                    Proto.ACK_UNSUPPORTED -> "Обновите прошивку до 0.1.13 для управления походами"
+                    Proto.ACK_BUSY -> "Гаджет занят, поход ещё текущий или SD недоступна. Дождитесь синхронизации и повторите"
+                    else -> "Нет подтверждения гаджета. Поход в телефоне не удалён; переподключитесь перед повтором"
+                })
+                return@withLock false
+            }
+            persist(force = true)
+            true
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            AppLog.e("HIKE", "операция с походом не завершена: ${e.message}")
+            _notices.tryEmit("Не удалось завершить операцию. Копия в телефоне не удалена")
+            false
+        } finally {
+            hikeReply = null
+            hikeBusy.value = false
+        }
+    }
 
     private fun send(cmd: Cmd) {
+        val target=transport
         scope.launch {
             val bytes = Codec.encode(cmd)
-            if (sendLock.withLock { transport.send(bytes) }) {
+            if (sendLock.withLock { target===transport && target.send(bytes) }) {
                 addLog(LogEntry(System.currentTimeMillis(), true, cmdName(bytes), bytes.size, bytes.toHex()))
                 stats.value = stats.value.copy(packetsOut = stats.value.packetsOut + 1)
             } else {
@@ -343,9 +453,24 @@ class ProtocolDeviceRepository(
     override fun clap() = send(Cmd.Clap)
     override fun setRecording(on: Boolean) {
         send(Cmd.Record(on))
+        if (on) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
         send(Cmd.GetInfo) // мог начаться новый поход
     }
     override fun findDevice() = send(Cmd.Find)
+
+    fun achievementChime() {
+        val supported=lastInfo?.let {it.fwMajor>0 || it.fwMinor>1 || (it.fwMinor==1&&it.fwPatch>=17)}==true
+        if(supported && link.value==LinkState.CONNECTED && status.value?.recording==true) send(Cmd.AchievementChime)
+    }
+
+    fun setBlacklistRadius(index: Int, radiusM: Int) {
+        require(index in blacklist.value.indices && radiusM in 100..50000)
+        dirty=true
+        blacklist.value = blacklist.value.mapIndexed { i, p -> if (i == index) p.copy(radiusM = radiusM) else p }
+        if (link.value == LinkState.CONNECTED) {
+            send(blacklistCommand())
+        }
+    }
 
     fun refreshInfo() = send(Cmd.GetInfo)
 
@@ -357,8 +482,8 @@ class ProtocolDeviceRepository(
         val now = System.currentTimeMillis()
         val tz = java.util.TimeZone.getDefault().getOffset(now) / 60_000
         send(Cmd.SetTime(now / 1000, tz))
+        send(blacklistCommand())
         phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
-        send(Cmd.Blacklist(blacklist.value.map { Cmd.Blacklist.Entry(it.lat, it.lon, it.radiusM) }))
         // Дальше — по ответу INFO: понять, тот же ли поход, и догрузить недостающее
         send(Cmd.GetInfo)
     }
@@ -400,6 +525,9 @@ class ProtocolDeviceRepository(
                 hikeStartSec?.let { h -> synchronized(pendingPoints) { pendingMarks += MarkRow(transport.key, h, msg.id, p.data) } }
             }
             is PointMsg -> {
+                // В одной секунде обычная запись могла предшествовать ручной привязке.
+                // Поздняя выгрузка старой записи не должна затереть эту привязку.
+                if (points[msg.timeUtc*1000]?.src==PositionSource.START && !msg.startAnchor) return
                 points[msg.timeUtc * 1000] = msg.toTrackPoint()
                 dirty = true
                 hikeStartSec?.let { h -> synchronized(pendingPoints) { pendingPoints += PointRow(transport.key, h, msg.timeUtc, p.data) } }
@@ -424,15 +552,32 @@ class ProtocolDeviceRepository(
                     )
                 }
             }
-            is AckMsg -> if (msg.result != Proto.ACK_OK) {
+            is HikeResultMsg -> {
+                hikeReply?.let { (code, hike, reply) ->
+                    if (code == msg.cmd && hike == msg.hike) reply.complete(msg.result)
+                }
+            }
+            is AckMsg -> {
+                settingReply?.let { (code,reply) -> if (code==msg.cmd) reply.complete(msg.result) }
+                if (msg.result != Proto.ACK_OK && !(msg.cmd==Proto.CMD_ACHIEVEMENT && msg.result==Proto.ACK_BUSY)) {
+                hikeReply?.let { (code, _, reply) -> if (code == msg.cmd) reply.complete(msg.result) }
                 AppLog.w("BLE", "гаджет отклонил ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
-                _notices.tryEmit("Устройство отклонило ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
+                _notices.tryEmit(if (msg.cmd == Proto.CMD_CALIB_COMPASS && msg.result == Proto.ACK_BAD_ARGS)
+                    "Калибровка не сохранена: вращайте по всем трём осям не менее 20 с, затем положите горизонтально и повторите."
+                    else "Устройство отклонило ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
+                }
             }
         }
     }
 
     private fun onInfo(m: InfoMsg) {
+        val firstInfo = syncAfterInfo
         lastInfo = m
+        m.tempOffset100?.let { temperatureOffset100.value=it }
+        if (firstInfo && supportsEconomy()) send(blacklistCommand())
+        compassState.value = m.checks.firstOrNull { it.id == 4 }?.code
+        navigationState.value = m.checks.firstOrNull { it.id == 10 }?.code
+        if (firstInfo && supportsPdr()) send(pdrSettings)
         val newHike = m.hikeStartUtc != hikeStartSec
         if (newHike) {
             // Другой поход на устройстве: в памяти — только его точки. Что уже скачано раньше, берём из базы,
@@ -440,6 +585,7 @@ class ProtocolDeviceRepository(
             AppLog.i("SYNC", "поход на гаджете ${m.hikeStartUtc}, в приложении был $hikeStartSec")
             hikeStartSec = m.hikeStartUtc
             hikeStartMs.value = m.hikeStartUtc?.let { it * 1000 }
+            if (!firstInfo) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
             points.clear()
             markMap.clear()
             dirty = true
@@ -493,6 +639,9 @@ class ProtocolDeviceRepository(
 
     private fun StatusMsg.toStatus(sats: SatsMsg?): DeviceStatus {
         val fixE = GpsFix.entries.getOrElse(fix) { GpsFix.OFF }
+        val blocked = src == 1 && isBlocked(lat, lon, blacklist.value)
+        val mask = spoofMask or if (blocked) 1 else 0
+        val recovering = GpsEvidence.recoveryOnly(mask)
         val satellites = if (has(Proto.F_GPS_ON)) sats?.sats.orEmpty().map {
             Satellite(sysName(it.system), it.prn, it.snr, it.used)
         } else emptyList()
@@ -503,7 +652,7 @@ class ProtocolDeviceRepository(
             gps = GpsState(
                 fix = fixE, satsUsed = satsUsed, satsInView = satsView, hdop = hdop ?: 99.9,
                 speedKmh = speedKmh, courseDeg = courseDeg, altGps = altGps,
-                satellites = satellites, spoof = has(Proto.F_SPOOF), spoofMask = spoofMask,
+                satellites = satellites, spoof = (has(Proto.F_SPOOF) && !recovering) || blocked, spoofMask = mask,
             ),
             env = EnvState(
                 tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN,
@@ -515,7 +664,9 @@ class ProtocolDeviceRepository(
                 charging = has(Proto.F_CHARGING), usedMah = usedMah.toDouble(), hoursLeft = hoursLeft,
             ),
             steps = steps.toInt(), headingDeg = headingDeg, distanceKm = distanceM / 1000.0,
-            positionSource = srcOf(src), lat = lat, lon = lon,
+            positionSource = if ((recovering && src != 4) || blocked) PositionSource.NONE else srcOf(src),
+            lat = lat?.takeUnless { src!=4 && (recovering || isBlocked(lat,lon,blacklist.value)) },
+            lon = lon?.takeUnless { src!=4 && (recovering || isBlocked(lat,lon,blacklist.value)) },
         )
     }
 
@@ -535,7 +686,7 @@ class ProtocolDeviceRepository(
     companion object {
         private fun sysName(s: Int) = when (s) { 0 -> "GPS"; 1 -> "BDS"; 2 -> "GLO"; else -> "GAL" }
 
-        private fun srcOf(s: Int) = when (s) { 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; 3 -> PositionSource.PAUSE; else -> PositionSource.NONE }
+        private fun srcOf(s: Int) = when (s) { 4 -> PositionSource.START; 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; 3 -> PositionSource.PAUSE; else -> PositionSource.NONE }
 
         private fun f(fmt: String, vararg a: Any) = String.format(Locale("ru"), fmt, *a)
 
@@ -556,6 +707,7 @@ class ProtocolDeviceRepository(
                 7 -> "GPS ATGM336H"
                 8 -> "Аккумулятор"
                 9 -> "Часы DS1302"
+                10 -> "Приблизительный маршрут"
                 else -> "Узел #${c.id}"
             }
             val okDetail = when (c.id) {
@@ -568,16 +720,28 @@ class ProtocolDeviceRepository(
                 7 -> st?.let { f("NMEA идёт, %d спутн., HDOP %.1f", it.gps.satsUsed, it.gps.hdop) }
                 8 -> st?.let { f("%d %%, хватит на ~%.0f ч", it.power.percent, it.power.hoursLeft) }
                 9 -> "Идут, время сверено"
+                10 -> "Направление автоматически настроено по GPS и ходьбе"
                 else -> null
             } ?: "Отвечает"
             val detail = when (c.code) {
                 0 -> okDetail
                 1 -> "Не найден на шине — проверьте провода и питание"
                 2 -> "Неверный chip id — возможно, другой датчик (BMP280?)"
-                3 -> "Обнаружен; калибровка и направление пока не поддерживаются"
+                3 -> if (c.id == 4 && c.addr == 0x2C && (info.fwMajor > 0 || info.fwMinor > 1 || (info.fwMinor == 1 && info.fwPatch >= 14)))
+                    if (info.fwMajor > 0 || info.fwMinor > 1 || info.fwPatch >= 15)
+                        "Дополнительный компас не откалиброван; автоматический маршрут работает без него"
+                    else "Нужна калибровка: Настройки → Маршрут по шагам" else "Обнаружен; калибровка и направление пока не поддерживаются"
+                13 -> "Калибровка: вращайте корпус по трём осям, затем завершите в настройках"
+                14 -> "Нужна короткая прогулка с достоверным GPS; шаги считаются при любой ориентации"
+                15 -> "Гироскоп настроится автоматически, когда гаджет пару секунд неподвижен"
+                16 -> "Нет устойчивого направления ходьбы; приблизительная линия может прерваться"
+                17 -> "Долго без GPS: ошибка направления накапливается"
+                18 -> "Обнаружен; отключён для экономии питания"
+                19 -> "GPS + шаги. Без GPS — пунктир между привязками, гироскоп выключен"
                 4 -> "Нет данных NMEA — проверьте TX/RX и питание"
                 5 -> "NMEA идёт, но подозрение на подмену"
-                6 -> "Ищет спутники${st?.let { " (${it.gps.satsInView} видно)" } ?: ""}"
+                6 -> if (c.id == 7 && st?.gps?.recovering == true) "Проверка восстановления GPS: ждём устойчивые координаты"
+                    else "Ищет спутники${st?.let { " (${it.gps.satsInView} видно)" } ?: ""}"
                 7 -> "Выключен — стоянка, экономия заряда"
                 8 -> "Низкий заряд${st?.let { " — ${it.power.percent} %" } ?: ""}"
                 9 -> "Карта не вставлена или не читается"
@@ -591,6 +755,7 @@ class ProtocolDeviceRepository(
         }
 
         fun msgName(m: Any): String = when (m) {
+            is HikeResultMsg -> "HIKE_RESULT ${m.hike}: ${ackText(m.result)}"
             is StatusMsg -> "STATUS #${m.seq}"
             is SatsMsg -> "SATS ×${m.sats.size}"
             is InfoMsg -> "INFO"
@@ -606,12 +771,19 @@ class ProtocolDeviceRepository(
         fun cmdName(bytes: ByteArray) = cmdNameByCode(Codec.cmdCode(bytes))
 
         fun cmdNameByCode(code: Int) = when (code) {
+            Proto.CMD_NEW_HIKE -> "NEW_HIKE"
+            Proto.CMD_DELETE_HIKE -> "DELETE_HIKE"
+            Proto.CMD_PDR_SETTINGS -> "PDR_SETTINGS"
+            Proto.CMD_TEMP_OFFSET -> "TEMP_OFFSET"
+            Proto.CMD_SET_START -> "SET_START"
+            Proto.CMD_BLACKLIST_V2 -> "BLACKLIST"
             Proto.CMD_SET_TIME -> "SET_TIME"
             Proto.CMD_PHONE_POS -> "PHONE_POS"
             Proto.CMD_RECORD -> "RECORD"
             Proto.CMD_MARK -> "MARK"
             Proto.CMD_CLAP -> "CLAP"
             Proto.CMD_FIND -> "FIND"
+            Proto.CMD_ACHIEVEMENT -> "ACHIEVEMENT"
             Proto.CMD_SET_INTERVALS -> "SET_INTERVALS"
             Proto.CMD_CALIB_ALT -> "CALIB_ALT"
             Proto.CMD_CALIB_COMPASS -> "CALIB_COMPASS"
@@ -648,15 +820,23 @@ class ProtocolDeviceRepository(
 }
 
 /** Пакеты из базы и по радио → модель экранов */
-internal fun PointMsg.toTrackPoint() = TrackPoint(
-    tsUtcMs = timeUtc * 1000, lat = lat ?: Double.NaN, lon = lon ?: Double.NaN,
-    altGps = altGps, sats = sats, hdop = hdop ?: 99.9, speedKmh = speedKmh,
-    spoof = spoof, spoofMask = spoofMask, spoofLat = spoofLat, spoofLon = spoofLon,
-    tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN, humidity = humidity,
-    pressureHpa = pressureHpa, altBaro = altBaro ?: Double.NaN,
-    battV = battMv / 1000.0, battMa = 0.0, battPercent = battPct,
-    steps = steps.toInt(), headingDeg = headingDeg, src = srcOfCode(src), markId = null,
-)
+internal fun PointMsg.toTrackPoint(): TrackPoint {
+    val recoveryOnly = GpsEvidence.recoveryOnly(spoofMask)
+    val recovering = recoveryOnly && !startAnchor
+    return TrackPoint(
+        tsUtcMs = timeUtc * 1000, lat = if (recovering) Double.NaN else lat ?: Double.NaN,
+        lon = if (recovering) Double.NaN else lon ?: Double.NaN,
+        altGps = altGps.takeUnless { recovering }, sats = sats, hdop = hdop ?: 99.9,
+        speedKmh = if (recovering) 0.0 else speedKmh,
+        spoof = spoof && !recoveryOnly, spoofMask = spoofMask,
+        spoofLat = spoofLat.takeUnless { recoveryOnly }, spoofLon = spoofLon.takeUnless { recoveryOnly },
+        tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN, humidity = humidity,
+        pressureHpa = pressureHpa, altBaro = altBaro ?: Double.NaN,
+        battV = battMv / 1000.0, battMa = 0.0, battPercent = battPct,
+        steps = steps.toInt(), headingDeg = headingDeg,
+        src = if (recovering) PositionSource.NONE else if (startAnchor) PositionSource.START else srcOfCode(src), markId = null,
+    )
+}
 
 internal fun MarkMsg.toMark() = Mark(
     id = id, tsUtcMs = timeUtc * 1000,
@@ -664,4 +844,4 @@ internal fun MarkMsg.toMark() = Mark(
     text = text, lat = lat, lon = lon,
 )
 
-private fun srcOfCode(s: Int) = when (s) { 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; 3 -> PositionSource.PAUSE; else -> PositionSource.NONE }
+private fun srcOfCode(s: Int) = when (s) { 4 -> PositionSource.START; 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; 3 -> PositionSource.PAUSE; else -> PositionSource.NONE }

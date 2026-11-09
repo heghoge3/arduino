@@ -60,18 +60,25 @@ import com.vabugeode.app.ui.screens.HomeScreen
 import com.vabugeode.app.ui.screens.MapScreen
 import com.vabugeode.app.ui.screens.HikesScreen
 import com.vabugeode.app.ui.screens.SettingsScreen
+import com.vabugeode.app.ui.screens.AchievementsScreen
 import com.vabugeode.app.ui.theme.Palette
 import com.vabugeode.app.ui.theme.VabuTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private var achievementRequest by mutableStateOf(0)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Palette.Bg.toArgb()),
             navigationBarStyle = SystemBarStyle.dark(Palette.Bg.toArgb()),
         )
-        setContent { VabuTheme { App() } }
+        if(intent.getBooleanExtra("achievements",false))achievementRequest++
+        setContent { VabuTheme { App(openAchievements = achievementRequest) } }
+    }
+    override fun onNewIntent(intent:android.content.Intent){
+        super.onNewIntent(intent)
+        if(intent.getBooleanExtra("achievements",false))achievementRequest++
     }
 }
 
@@ -84,9 +91,11 @@ private enum class Tab(val title: String, val icon: ImageVector) {
 }
 
 @Composable
-internal fun App(vm: AppViewModel = viewModel()) {
+internal fun App(vm: AppViewModel = viewModel(), openAchievements:Int=0) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var settings by rememberSaveable { mutableStateOf(false) }
+    var achievements by rememberSaveable {mutableStateOf(openAchievements>0)}
+    LaunchedEffect(openAchievements){if(openAchievements>0)achievements=true}
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val link by vm.repo.link.collectAsStateWithLifecycle()
@@ -101,6 +110,7 @@ internal fun App(vm: AppViewModel = viewModel()) {
 
     // Ответы устройства, которые надо показать (отказ команды, нет связи)
     LaunchedEffect(Unit) { vm.repo.notices.collect { toast(it) } }
+    LaunchedEffect(Unit) { vm.achievementNotices.collect {toast(it)} }
 
     // Приложение на экране — слушаем маячки и подключаемся; свернули — перестаём искать
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
@@ -117,7 +127,8 @@ internal fun App(vm: AppViewModel = viewModel()) {
     }
 
     BackHandler(enabled = settings) { settings = false }
-    BackHandler(enabled = !settings && tab != Tab.HOME) { tab = Tab.HOME }
+    BackHandler(enabled = !settings && !achievements && tab != Tab.HOME) { tab = Tab.HOME }
+    BackHandler(enabled = !settings && achievements) {achievements=false;tab=Tab.HIKES}
 
     Scaffold(
         containerColor = Palette.Bg,
@@ -131,11 +142,11 @@ internal fun App(vm: AppViewModel = viewModel()) {
                     .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (settings) {
-                    IconButton(onClick = { settings = false }) {
+                if (settings || achievements) {
+                    IconButton(onClick = { if(settings)settings=false else {achievements=false;tab=Tab.HIKES} }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад", tint = Palette.Text)
                     }
-                    Text("Настройки", style = MaterialTheme.typography.titleLarge, color = Palette.Text)
+                    Text(if(settings)"Настройки" else "Достижения", style = MaterialTheme.typography.titleLarge, color = Palette.Text)
                 } else {
                     Spacer(Modifier.width(8.dp))
                     Logo()
@@ -159,13 +170,15 @@ internal fun App(vm: AppViewModel = viewModel()) {
         },
         bottomBar = {
             if (!settings) {
-                TermNavBar(tab) { tab = it }
+                TermNavBar(if(achievements)Tab.HIKES else tab) { achievements=false;tab = it }
             }
         },
         modifier = Modifier.fillMaxSize().scanlines(),
     ) { padding ->
         if (settings) {
             SettingsScreen(vm, padding)
+        } else if(achievements) {
+            AchievementsScreen(vm,padding)
         } else androidx.compose.animation.Crossfade(tab, animationSpec = androidx.compose.animation.core.tween(200), label = "tab") { tab -> when (tab) {
             Tab.HOME -> HomeScreen(
                 vm, padding,
@@ -174,7 +187,7 @@ internal fun App(vm: AppViewModel = viewModel()) {
             )
             Tab.MAP -> MapScreen(vm, padding, onAdded = ::toast)
             Tab.CHARTS -> ChartsScreen(vm, padding)
-            Tab.HIKES -> HikesScreen(vm, padding)
+            Tab.HIKES -> HikesScreen(vm, padding) {achievements=true}
             Tab.DEVICE -> DeviceScreen(vm, padding)
         } }
     }

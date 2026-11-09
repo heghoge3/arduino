@@ -4,6 +4,25 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.drawscope.clipRect
 import com.vabugeode.app.astro.SunSchedule
@@ -79,35 +98,90 @@ fun LineChart(
         Canvas(modifier) {}
         return
     }
-    val t0 = all.minOf { it.first }
-    val t1 = max(all.maxOf { it.first }, t0 + 60_000)
-    var vMin = all.minOf { it.second }
-    var vMax = all.maxOf { it.second }
+    val fullStart = all.minOf { it.first }
+    val fullEnd = max(all.maxOf { it.first }, fullStart + 60_000)
+    val fullSpan = fullEnd - fullStart
+    var viewport by remember(fullStart) { mutableStateOf(ChartViewport()) }
+    val minimumSpan = max(1.0 / 64, min(60_000.0 / fullSpan, 1.0))
+    val currentMinimum by rememberUpdatedState(minimumSpan)
+    val t0 = fullStart + (viewport.start * fullSpan).toLong()
+    val t1 = max(t0 + 1, fullStart + ((viewport.start + viewport.span) * fullSpan).toLong())
+    val visibleSeries = series.map { it.copy(points = chartWindowPoints(it.points, t0, t1)) }
+    val visible = visibleSeries.flatMap { it.points }
+    var vMin = visible.minOf { it.second }
+    var vMax = visible.maxOf { it.second }
     if (vMax - vMin < 1e-6) { vMin -= 1; vMax += 1 }
     val padV = (vMax - vMin) * 0.12
     vMin -= padV; vMax += padV
 
     val axisStyle = TextStyle(color = Palette.TextFaint, fontSize = 10.sp)
-    val gestureMod = if (interactive) Modifier.pointerInput(Unit) {
+    val gestureMod = if (interactive) Modifier.pointerInput(fullStart, showAxes) {
         awaitEachGesture {
             val down = awaitFirstDown()
             touchX = down.position.x
-            var dx = 0f; var dy = 0f
+            var travel = Offset.Zero
+            var horizontal = false
+            var vertical = false
+            var multiple = false
             while (true) {
                 val ev = awaitPointerEvent()
-                val c = ev.changes.firstOrNull() ?: break
-                if (!c.pressed) break
-                dx += abs(c.position.x - c.previousPosition.x)
-                dy += abs(c.position.y - c.previousPosition.y)
-                touchX = c.position.x
-                // Забираем жест только если палец ведут по горизонтали — иначе страница скроллится
-                if (dx > dy) c.consume()
+                val pressed = ev.changes.filter { it.pressed }
+                if (pressed.isEmpty()) break
+                if (!multiple && !horizontal && ev.changes.any { it.isConsumed }) break
+                val left = if (showAxes) 40.dp.toPx() else 0f
+                val width = (size.width - left - 6.dp.toPx()).coerceAtLeast(1f)
+                if (pressed.size >= 2) {
+                    multiple = true
+                    touchX = null
+                    val centroid = ev.calculateCentroid(useCurrent = false)
+                    val pan = ev.calculatePan().x / width
+                    val anchor = ((centroid.x - left) / width).toDouble()
+                    viewport = viewport.transform(ev.calculateZoom().toDouble(), anchor, pan.toDouble(), currentMinimum)
+                    ev.changes.forEach { it.consume() }
+                } else if (multiple) {
+                    // После отпускания второго пальца не превращаем масштабирование в рывок ползунка.
+                    ev.changes.forEach { it.consume() }
+                } else {
+                    val c = pressed.first()
+                    val delta = c.position - c.previousPosition
+                    travel += delta
+                    if (!horizontal && !vertical && travel.getDistance() > viewConfiguration.touchSlop) {
+                        horizontal = abs(travel.x) > abs(travel.y)
+                        vertical = !horizontal
+                    }
+                    if (horizontal) {
+                        if (viewport.zoomed) {
+                            viewport = viewport.transform(1.0, 0.5, (delta.x / width).toDouble(), currentMinimum)
+                            touchX = null
+                        } else touchX = c.position.x
+                        c.consume()
+                    } else if (vertical) touchX = null // вертикальный жест остаётся прокрутке страницы
+                    else touchX = c.position.x
+                }
             }
             touchX = null
         }
     } else Modifier
 
-    Canvas(modifier.then(gestureMod)) {
+    Column(modifier) {
+        if (interactive && showAxes) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("${Fmt.num(viewport.zoom, 1)}×", color = Palette.TextDim, fontSize = 11.sp)
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { viewport = viewport.transform(0.5, 0.5, 0.0, minimumSpan) }, enabled = viewport.zoomed) {
+                Icon(Icons.Default.Remove, contentDescription = "Отдалить график", tint = Palette.TextDim)
+            }
+            IconButton(onClick = { viewport = viewport.transform(2.0, 0.5, 0.0, minimumSpan) }, enabled = viewport.span > minimumSpan + 0.000001) {
+                Icon(Icons.Default.Add, contentDescription = "Приблизить график", tint = Palette.TextDim)
+            }
+            IconButton(onClick = { viewport = ChartViewport(); touchX = null }, enabled = viewport.zoomed) {
+                Icon(Icons.Default.Restore, contentDescription = "Показать весь период", tint = Palette.TextDim)
+            }
+        }
+    Canvas(Modifier.weight(1f).fillMaxWidth().then(gestureMod).semantics {
+        contentDescription = "График"
+        stateDescription = "Масштаб ${Fmt.num(viewport.zoom, 1)}"
+    }) {
+
         val left = if (showAxes) 40.dp.toPx() else 0f
         val bottom = if (showAxes) 20.dp.toPx() else 0f
         val top = if (showAxes) 32.dp.toPx() else 4.dp.toPx()  // сверху место под солнышки и время над ними
@@ -175,13 +249,7 @@ fun LineChart(
                 v += step
             }
             // Подписи времени по X: каждый час (или полчаса на коротком интервале)
-            val stepMs = when {
-                t1 - t0 <= 2 * HOUR -> HOUR / 2
-                t1 - t0 <= 8 * HOUR -> HOUR
-                t1 - t0 <= 24 * HOUR -> 3 * HOUR
-                t1 - t0 <= 48 * HOUR -> 6 * HOUR
-                else -> 12 * HOUR
-            }
+            val stepMs = chartTimeStep(t1 - t0)
             val zone = ZoneId.systemDefault()
             val offset = zone.rules.getOffset(Instant.ofEpochMilli(t0)).totalSeconds * 1000L
             var t = (floor((t0 + offset).toDouble() / stepMs).toLong() + 1) * stepMs - offset
@@ -189,7 +257,7 @@ fun LineChart(
             var lastRight = Float.NEGATIVE_INFINITY
             while (t < t1) {
                 val xx = x(t)
-                val tl = measurer.measure(Fmt.time(t), axisStyle)
+                val tl = measurer.measure(if (stepMs < 60_000) Fmt.timeSec(t) else Fmt.time(t), axisStyle)
                 val l = xx - tl.size.width / 2
                 if (l > left && xx + tl.size.width / 2 < left + w && l > lastRight + 6.dp.toPx()) {
                     drawText(tl, topLeft = Offset(l, top + h + 4.dp.toPx()))
@@ -229,8 +297,8 @@ fun LineChart(
 
         // Ряды
         val maxPts = max(60, (w / 2.5f).toInt())
-        clipRect(left = 0f, top = 0f, right = left + w * reveal.value + 2f, bottom = size.height) {
-            series.forEach { s -> drawSeries(s, maxPts, ::x, ::y, top + h) }
+        clipRect(left = left, top = top, right = left + w * reveal.value, bottom = top + h) {
+            visibleSeries.forEach { s -> drawSeries(s, maxPts, ::x, ::y, top + h) }
         }
 
         // Ползунок
@@ -241,8 +309,8 @@ fun LineChart(
             val lines = mutableListOf(Fmt.time(t))
             series.forEach { s ->
                 val p = nearest(s.points, t) ?: return@forEach
-                drawCircle(Palette.Bg, 6.dp.toPx(), Offset(x(p.first), y(p.second)))
-                drawCircle(s.color, 4.dp.toPx(), Offset(x(p.first), y(p.second)))
+                drawCircle(Palette.Bg, 6.dp.toPx(), Offset(x(p.first).coerceIn(left, left + w), y(p.second)))
+                drawCircle(s.color, 4.dp.toPx(), Offset(x(p.first).coerceIn(left, left + w), y(p.second)))
                 lines += "${s.label}: ${Fmt.num(p.second, digits)} $unit"
             }
             val text = lines.joinToString("\n")
@@ -254,9 +322,9 @@ fun LineChart(
             drawText(tl, topLeft = Offset(bx + pad, top + 4.dp.toPx() + pad))
         }
     }
+    }
 }
 
-private const val HOUR = 3_600_000L
 private val NIGHT = Color(0x4A2A2F66)
 
 /** Солнышко на линии горизонта: половина диска, лучи и стрелка вверх (восход) или вниз (закат) */

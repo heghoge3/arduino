@@ -7,8 +7,8 @@
 namespace steps {
 
 struct Config {
-  float threshold = 0.12f;    // g над средним — начало шага
-  float release = 0.03f;      // g — опустились ниже, можно ловить следующий
+  float threshold = 0.06f;    // g над средним — мягкая ходьба с устройством в руке
+  float release = 0.015f;     // g — опустились ниже, можно ловить следующий
   uint32_t refractoryMs = 280;
   uint32_t maxGapMs = 2000;   // реже — это не ходьба, а отдельные толчки
   float baseAlpha = 0.02f;    // скорость следования за «средним» (гравитация, наклон)
@@ -24,6 +24,8 @@ class Detector {
 
   uint32_t count() const { return count_; }
   void setCount(uint32_t c) { count_ = c; }
+  // После deep sleep millis начинается заново; фильтры и интервалы начинаем с нового отсчёта.
+  void resume() { init_ = false; armed_ = true; pending_ = false; haveStep_ = false; }
 
  private:
   Config cfg_;

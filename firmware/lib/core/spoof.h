@@ -15,10 +15,18 @@ enum Reason : uint8_t {
   R_BARO = 1 << 4,
   R_ACCEL = 1 << 5,
   R_TIME = 1 << 6,
+  R_RECOVERY = 1 << 7,  // после подмены ждём подтверждения восстановления
 };
 
-// Сильные признаки — подмена по одному. Слабые — только если их два и больше (SNR, барометр, шаги).
-constexpr uint8_t STRONG = R_BLACKLIST | R_PHONE | R_JUMP | R_TIME;
+// Сильные признаки — подмена по одному. Слабые — только если их два и больше.
+// Телефон и время — справочные расхождения: кэш, GNSS телефона и RTC могут ошибаться.
+// Они не отвергают координаты и не добавляются к числу независимых слабых признаков.
+constexpr uint8_t STRONG = R_BLACKLIST | R_JUMP;
+constexpr uint8_t WEAK = R_SNR_FLAT | R_BARO | R_ACCEL;
+
+// Ожидание чистых фиксов не является новым обнаружением подмены.
+// Допускается один слабый/справочный признак, но не сильный и не два слабых.
+bool recoveryOnly(uint8_t mask);
 
 constexpr size_t MAX_BLACKLIST = 24;
 
@@ -26,7 +34,8 @@ struct Config {
   float maxSpeedMs = 11.0f;        // ~40 км/ч: пешком и на велосипеде быстрее не бывает
   float jumpSlackM = 200.0f;       // запас на погрешность
   float phoneMinM = 3000.0f;       // расхождение с телефоном: max(3 км, 2×точность)
-  uint32_t phoneFreshS = 600;      // позиция телефона годна 10 мин
+  uint32_t phoneFreshS = 30;       // справочная сверка только 30 с после получения
+  float phoneMaxAccuracyM = 1000; // грубую позицию по сети не используем для сверки
   float snrSpreadDb = 3.0f;        // разброс SNR у ≥5 спутников меньше — подозрительно
   uint8_t snrMinSats = 5;
   float baroDiffM = 100.0f;        // GPS против барометра
@@ -35,6 +44,7 @@ struct Config {
   float accelStillM = 15.0f;
   uint32_t stepsWhileStill = 60;
   uint32_t lastGoodMaxAgeS = 300;  // GPS молчал дольше (пауза, стоянка, переезд на машине) — скачок не проверяем
+  uint32_t recoveryS = 10;
 };
 
 struct Input {
@@ -53,8 +63,10 @@ struct Input {
 };
 
 struct Result {
-  bool spoof;
+  bool spoof; // фикс отвергнут, в том числе пока идёт восстановление
   uint8_t mask;
+  bool recovering() const { return spoof && recoveryOnly(mask); }
+  bool detected() const { return spoof && !recoveryOnly(mask); }
 };
 
 // Расстояние по поверхности, м
@@ -67,6 +79,12 @@ class Detector {
   void setBlacklist(const double* lat, const double* lon, const uint16_t* radiusM, size_t n);
   void setPhone(double lat, double lon, float accuracyM, uint32_t time);
   void clearPhone() { phoneValid_ = false; }
+  bool blacklisted(double lat, double lon) const;
+  void restoreLastGood(double lat,double lon,uint32_t time) {
+    if (lat>=-90&&lat<=90&&lon>=-180&&lon<=180&&!blacklisted(lat,lon)) {
+      lastGoodValid_=true;lastGoodLat_=lat;lastGoodLon_=lon;lastGoodTime_=time;
+    }
+  }
   // Забыть последнюю достоверную точку (эмуляция перенесла трек — иначе это «невозможный скачок»)
   void forgetLastGood() { lastGoodValid_ = false; stillValid_ = false; }
   // Часы переставили на d секунд: сдвинуть запомненные моменты (иначе «возраст» точек врёт)
@@ -105,6 +123,9 @@ class Detector {
   uint32_t stillTime_ = 0, stillSteps_ = 0;
 
   bool episode_ = false;
+  uint32_t cleanSince_ = 0, cleanLast_ = 0;
+  uint8_t cleanCount_ = 0;
+  double cleanLat_=0,cleanLon_=0;
 };
 
 }  // namespace spoof

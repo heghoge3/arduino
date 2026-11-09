@@ -133,7 +133,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             KeyValue("Ток сейчас", "${Fmt.num(pw.currentMa, 0)} мА")
             KeyValue("Израсходовано", "${Fmt.num(pw.usedMah, 0)} мА·ч")
             Text(
-                "Цель ТЗ: 2 суток на ~1300 мА·ч (с поправкой на холод).",
+                "Время приблизительное: холод и работа GPS меняют расход.",
                 style = MaterialTheme.typography.labelMedium, color = Palette.TextFaint,
             )
         }

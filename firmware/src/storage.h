@@ -24,6 +24,8 @@ uint32_t freeMb();
 // Открыть (или продолжить) поход с этим временем старта
 void openHike(uint32_t hikeStart);
 uint32_t hikeStart();
+// Удаление только неоткрытого похода; отсутствие файлов считается успешным повтором удаления.
+bool deleteHike(uint32_t hike);
 // Часы переставили на d секунд: сдвинуть время у точек и меток с номеров fromPoint/fromMark
 // (записаны по неверным часам) в памяти и в .bin на SD. CSV не трогаем — он для ПК, правка дорогая
 void shiftTimes(uint32_t fromPoint, uint32_t fromMark, int32_t d);
@@ -36,6 +38,7 @@ uint32_t pointCount();
 bool readPoint(uint32_t index, proto::Point& out);
 uint32_t firstPointSince(uint32_t utc);
 uint32_t lastPointTime();
+void forEachPoint(void (*visit)(const proto::Point&));
 
 bool appendMark(const proto::Mark& m);
 uint32_t markCount();

@@ -16,6 +16,7 @@ enum class PowerMode(val title: String) {
 /** Источник позиции точки трека. */
 enum class PositionSource(val title: String) {
     GPS("GPS"),
+    START("Старт задан"),
     PDR("По шагам"),
     PAUSE("GPS выкл"),   // GPS выключен кнопкой (переезд): датчики пишутся, координат нет
     NONE("Нет"),
@@ -31,6 +32,7 @@ enum class GpsFix(val title: String) {
 
 /** Причины подозрения на подмену. Биты маски spoof_reason (ТЗ, раздел 7). */
 enum class SpoofReason(val bit: Int, val title: String) {
+    RECOVERY(7, "Проверка восстановления"),
     BLACKLIST(0, "Точка из чёрного списка"),
     PHONE_MISMATCH(1, "Расходится с телефоном"),
     IMPOSSIBLE_JUMP(2, "Невозможный скачок"),
@@ -65,7 +67,9 @@ data class GpsState(
     val satellites: List<Satellite>,
     val spoof: Boolean,
     val spoofMask: Int,
-)
+) {
+    val recovering: Boolean get() = GpsEvidence.recoveryOnly(spoofMask)
+}
 
 /** Питание по INA219. */
 data class PowerState(

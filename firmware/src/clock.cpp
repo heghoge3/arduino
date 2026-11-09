@@ -24,11 +24,13 @@ constexpr uint8_t REG_RAM0 = 0xC0;
 constexpr uint8_t RAM_MAGIC = 0xA7;
 
 bool g_present = false;
+int32_t g_rejectedResync = 0;
 // Ход времени ведут внутренние часы ESP32 (системное время): они идут и в глубоком сне.
 // Доверие и источник — в RTC-памяти, чтобы пережить сон, даже если DS1302 при пробуждении не ответил
 RTC_DATA_ATTR bool g_trusted = false;
 RTC_DATA_ATTR Source g_source = SRC_NONE;
 RTC_DATA_ATTR bool g_sysValid = false;  // системное время уже ставили (до сна)
+RTC_DATA_ATTR uint32_t g_bootUtc = 0;   // начало работы, сохраняется во сне и сдвигается вместе с часами
 
 void writeByte(uint8_t v, bool reading = false) {
   pinMode(PIN_RTC_DAT, OUTPUT);
@@ -135,6 +137,8 @@ void writeClock(uint32_t utc) {
 }
 
 void setBase(uint32_t utc) {
+  if (g_bootUtc) g_bootUtc += utc - static_cast<uint32_t>(time(nullptr));
+  else g_bootUtc = utc;
   timeval tv{static_cast<time_t>(utc), 0};
   settimeofday(&tv, nullptr);
   g_sysValid = true;
@@ -153,6 +157,7 @@ uint32_t buildTime() {
 }  // namespace
 
 bool begin(bool cold) {
+  if (cold) g_bootUtc = 0;
   pinMode(PIN_RTC_CLK, OUTPUT);
   pinMode(PIN_RTC_RST, OUTPUT);
   digitalWrite(PIN_RTC_RST, LOW);
@@ -176,10 +181,10 @@ bool begin(bool cold) {
   g_present = first && readReg(probeReg) == 0xA5;
   writeReg(probeReg, saved);
   writeReg(REG_WP, 0x80);
-  if (!g_present && !cold && g_sysValid) {
-    // Проснулись, а DS1302 не ответил (контакт, сбой чтения): внутренние часы шли во сне — верим им,
-    // доверие прежнее. Иначе время откатилось бы на время сборки посреди похода
-    return false;
+  if (!cold && g_sysValid) {
+    // Внутренние часы идут во сне. Не заменяем их ни старым RTC, ни временем сборки:
+    // __TIME__ может быть в местном часовом поясе компьютера, а здесь нужен UTC.
+    return g_present;
   }
   if (!g_present) {
     g_trusted = false;
@@ -187,8 +192,8 @@ bool begin(bool cold) {
     setBase(buildTime());
     return false;
   }
-  if (!readClock(utc, halted) || utc < buildTime()) {
-    // Часы показывают прошлое (новый модуль, 2000 год) — точно не проверены
+  if (!readClock(utc, halted) || utc < 1700000000UL) {
+    // Отбрасываем дату нового модуля, но не сравниваем UTC с локальным временем сборки.
     halted = true;
     utc = buildTime();
   }
@@ -206,6 +211,10 @@ bool begin(bool cold) {
 }
 
 uint32_t now() { return static_cast<uint32_t>(time(nullptr)); }
+uint32_t uptimeS() {
+  uint32_t t = now();
+  return g_bootUtc && t >= g_bootUtc ? t - g_bootUtc : 0;
+}
 
 bool trusted() { return g_trusted; }
 Source source() { return g_source; }
@@ -228,11 +237,24 @@ int32_t offerGps(uint32_t utc, bool spoofSuspected) {
   return delta;
 }
 
-void resync() {
-  if (!g_present) return;
+int32_t resync() {
+  g_rejectedResync = 0;
+  if (!g_present || !g_trusted || readReg(REG_RAM0) != RAM_MAGIC) return 0;
   uint32_t utc;
   bool halted;
-  if (readClock(utc, halted) && !halted) setBase(utc);
+  if (!readClock(utc, halted) || halted || utc < 1700000000UL) return 0;
+  int32_t delta = static_cast<int32_t>(utc - now());
+  // Раньше любая правдоподобная дата DS1302 сразу меняла системное время.
+  // Скачок на минуты портил метки времени и превращал корректный GPS в R_TIME.
+  // Большое расхождение требует независимой синхронизации с телефоном.
+  if (delta > 30 || delta < -30) {
+    g_rejectedResync = delta;
+    return 0;
+  }
+  setBase(utc);
+  return delta;
 }
+
+int32_t rejectedResync() { return g_rejectedResync; }
 
 }  // namespace clockx

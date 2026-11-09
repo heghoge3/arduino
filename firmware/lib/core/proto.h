@@ -28,6 +28,7 @@ enum Msg : uint8_t {
   MSG_ACK = 0x07,
   MSG_ALERT = 0x08,
   MSG_LOG = 0x09,
+  MSG_HIKE_RESULT = 0x0A,
 };
 
 // Команды телефона
@@ -52,6 +53,13 @@ enum CmdCode : uint8_t {
   CMD_ACK_ALERT = 0x12,
   CMD_SYNC_LOG = 0x13,
   CMD_SET_DEBUG = 0x14,
+  CMD_NEW_HIKE = 0x15,
+  CMD_DELETE_HIKE = 0x16,
+  CMD_PDR_SETTINGS = 0x17,
+  CMD_TEMP_OFFSET = 0x18,
+  CMD_SET_START = 0x19,
+  CMD_BLACKLIST_V2=0x1A,
+  CMD_ACHIEVEMENT=0x1B,
 };
 
 enum AckResult : uint8_t {
@@ -148,6 +156,9 @@ struct Info {
   uint16_t gpsPulseS, beaconS;
   uint8_t nChecks;
   Check checks[MAX_CHECKS];
+  bool hasSettings=false;
+  int16_t tempOffset100=0;
+  uint16_t strideCm=75;
 };
 
 struct Mark {
@@ -164,6 +175,7 @@ struct Point {
   int32_t lat7, lon7;
   uint8_t src;
   bool spoof;
+  bool startAnchor = false;
   uint8_t spoofMask;
   int32_t spoofLat7, spoofLon7;
   int16_t tempRaw100, tempCorr100;
@@ -201,6 +213,7 @@ size_t encodeMark(const Mark& m, uint8_t* out, size_t cap);
 size_t encodePoint(const Point& m, uint8_t* out, size_t cap);
 size_t encodeSyncDone(uint8_t what, uint32_t count, uint8_t* out, size_t cap);
 size_t encodeAck(uint8_t cmd, uint8_t result, uint8_t* out, size_t cap);
+size_t encodeHikeResult(uint8_t cmd, uint8_t result, uint32_t hike, uint8_t* out, size_t cap);
 size_t encodeAlert(uint32_t time, uint8_t alerts, uint8_t fresh, uint8_t battPct, uint8_t spoofMask, uint8_t* out, size_t cap);
 size_t encodeLog(const LogLine& m, uint8_t* out, size_t cap);
 // Сводка маячка — 18 байт (без company id)

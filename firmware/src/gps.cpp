@@ -14,6 +14,7 @@ nmea::Parser g_parser;
 bool g_on = false;
 bool g_newFix = false;
 uint32_t g_lastFixCount = 0;
+uint32_t g_lastValidFixMs=0;
 bool g_echo = false;
 uint32_t g_lastSentenceMs = 0;
 uint32_t g_onSinceMs = 0;
@@ -143,8 +144,11 @@ const nmea::Parser& parser() { return g_parser; }
 bool takeNewFix() {
   bool v = g_newFix;
   g_newFix = false;
+  if (v && g_parser.fix().valid) g_lastValidFixMs=millis();
   return v && g_parser.fix().valid;
 }
+
+bool fixFresh() { return g_on && g_lastValidFixMs && millis()-g_lastValidFixMs<3000; }
 
 bool alive() { return g_on && millis() - g_lastSentenceMs < 3000; }
 

@@ -4,12 +4,14 @@
 #include <Adafruit_INA219.h>
 #include <Arduino.h>
 #include <Wire.h>
+#include <Preferences.h>
 #include <math.h>
 
 #include "clock.h"
 #include "dlog.h"
 #include "config.h"
 #include "pins.h"
+#include "compass.h"
 
 namespace sensors {
 
@@ -26,6 +28,13 @@ Adafruit_BME280 bme;
 Adafruit_INA219 ina(ADDR_INA);
 Presence g_pres{};
 float g_seaLevel = DEF_SEA_LEVEL_HPA;
+float g_temperatureOffset=0;
+compass::Calibration g_compassCal;
+compass::Recorder g_compassRecorder;
+bool g_calibrating = false;
+uint32_t g_calStarted = 0, g_headingAt = 0;
+float g_heading = NAN;
+bool g_gyroRunning=false;
 
 uint8_t readReg(uint8_t addr, uint8_t reg) {
   Wire.beginTransmission(addr);
@@ -42,11 +51,13 @@ void writeReg(uint8_t addr, uint8_t reg, uint8_t v) {
   Wire.endTransmission();
 }
 
-// MPU6050: акселерометр ±2 g, фильтр 44 Гц, гироскоп в standby (экономия)
+// MPU6050: акселерометр ±2 g, гироскоп ±500 °/с, фильтр 44 Гц. Во сне гироскоп выключен.
 void mpuInit() {
   writeReg(ADDR_MPU, 0x6B, 0x00);  // PWR_MGMT_1: проснуться
   delay(5);
-  writeReg(ADDR_MPU, 0x6C, 0x07);  // PWR_MGMT_2: гироскоп выкл
+  writeReg(ADDR_MPU, 0x6C, 0x07);  // экономный режим: гироскоп выключен
+  writeReg(ADDR_MPU, 0x1B, 0x08);  // GYRO_CONFIG: ±500 °/с
+  g_gyroRunning = false;
   writeReg(ADDR_MPU, 0x1A, 0x03);  // CONFIG: DLPF 44 Гц
   writeReg(ADDR_MPU, 0x1C, 0x00);  // ACCEL_CONFIG: ±2 g
   writeReg(ADDR_MPU, 0x38, 0x00);  // прерывания выкл, пока не спим
@@ -120,8 +131,14 @@ void begin(bool coldBoot) {
     writeReg(ADDR_QMC, 0x09, 0x00);
   }
   if (g_pres.compass && g_pres.compassAddr == ADDR_QMC_P) {
-    // QMC5883P: другой адрес и регистр режима, пока тоже standby.
+    // Экономный режим: магнитометр не нужен для GPS/шагов.
     writeReg(ADDR_QMC_P, 0x0A, 0x00);
+    Preferences prefs;
+    if (prefs.begin("compass", true)) {
+      if (prefs.getBytesLength("cal") == sizeof(g_compassCal)) prefs.getBytes("cal", &g_compassCal, sizeof(g_compassCal));
+      prefs.end();
+    }
+    g_heading = NAN;
   }
   (void)coldBoot;
 #endif
@@ -168,6 +185,7 @@ Env readEnv() {
   if (heat < 0 || isnan(heat)) heat = 0;
   e.tempCorr = e.tempRaw - heat;
 #endif
+  e.tempCorr += g_temperatureOffset;
   e.altBaro = 44330.0f * (1.0f - powf(e.pressHpa / g_seaLevel, 1.0f / 5.255f));
   return e;
 }
@@ -238,20 +256,121 @@ bool readAccel(float& ax, float& ay, float& az) {
 #endif
 }
 
+bool readMotionSample(MotionSample& s) {
+#ifdef FAKE_SENSORS
+  s.gx=s.gy=s.gz=0; s.gyro=false;
+  return readAccel(s.ax,s.ay,s.az);
+#else
+  if (!g_pres.mpu) return false;
+  Wire.beginTransmission(ADDR_MPU); Wire.write(0x3B);
+  if (Wire.endTransmission(false) || Wire.requestFrom(ADDR_MPU,(uint8_t)14)!=14) return false;
+  int16_t raw[7];
+  for (int j=0;j<7;j++) { uint8_t hi=Wire.read(),lo=Wire.read(); raw[j]=(int16_t)((uint16_t)hi<<8|lo); }
+  s.ax=raw[0]/16384.0f; s.ay=raw[1]/16384.0f; s.az=raw[2]/16384.0f;
+  s.gx=raw[4]/65.5f; s.gy=raw[5]/65.5f; s.gz=raw[6]/65.5f; s.gyro=g_gyroRunning;
+  return true;
+#endif
+}
+void pollCompass(float offset, bool inverted) {
+#ifndef FAKE_SENSORS
+  if (g_calibrating && millis() - g_calStarted > 180000) {
+    g_calibrating = false; LOGW(M_SENS, "калибровка компаса отменена: тайм-аут");
+  }
+  if (!g_pres.compass || g_pres.compassAddr != ADDR_QMC_P) return;
+  uint8_t status = readReg(ADDR_QMC_P, 0x09);
+  if (status & 0x02) { g_heading = NAN; return; }
+  if (!(status & 0x01)) return;
+  Wire.beginTransmission(ADDR_QMC_P); Wire.write(0x01);
+  if (Wire.endTransmission(false) || Wire.requestFrom(ADDR_QMC_P, (uint8_t)6) != 6) { g_heading = NAN; return; }
+  float m[3];
+  for (int i = 0; i < 3; i++) {
+    uint8_t lo = Wire.read(), hi = Wire.read();
+    m[i] = (int16_t)((uint16_t)hi << 8 | lo);
+    if (fabsf(m[i]) >= 32760) { g_heading = NAN; return; }
+  }
+  if (g_calibrating) {
+    g_compassRecorder.add(m);
+    g_heading = NAN;
+    return;
+  }
+  float gravity[3];
+  if (!readAccel(gravity[0], gravity[1], gravity[2])) { g_heading = NAN; return; }
+  float candidate = compass::heading(g_compassCal, m, gravity, offset, inverted);
+  if (isfinite(candidate)) { g_heading = candidate; g_headingAt = millis(); }
+#else
+  (void)offset; (void)inverted;
+#endif
+}
+
+float compassHeading() { return !g_calibrating && millis() - g_headingAt <= 2000 ? g_heading : NAN; }
+bool compassCalibrating() { return g_calibrating; }
+bool compassReady() { return g_pres.compass && g_pres.compassAddr == ADDR_QMC_P && compass::valid(g_compassCal); }
+bool calibrateCompass(bool start) {
+  if (!g_pres.compass || g_pres.compassAddr != ADDR_QMC_P) return false;
+  if (start) {
+    g_compassRecorder.reset(); g_calibrating = true; g_calStarted = millis(); g_heading = NAN;
+    return true;
+  }
+  if (!g_calibrating || millis() - g_calStarted < 20000) return false;
+  float g[3]; compass::Calibration candidate;
+  if (!readAccel(g[0], g[1], g[2]) || !g_compassRecorder.finish(g, candidate)) return false;
+  Preferences prefs;
+  if (!prefs.begin("compass", false)) return false;
+  bool saved = prefs.putBytes("cal", &candidate, sizeof(candidate)) == sizeof(candidate);
+  prefs.end();
+  if (!saved) return false;
+  g_compassCal = candidate; g_calibrating = false; g_heading = NAN;
+  LOGI(M_SENS, "калибровка компаса сохранена: %lu отсчётов", (unsigned long)g_compassRecorder.samples());
+  return true;
+}
+
+bool armMotion(bool sensitive) {
+#ifndef FAKE_SENSORS
+  if (!g_pres.mpu) return false;
+  mpuInit();
+  writeReg(ADDR_MPU, 0x6C, 0x07); g_gyroRunning=false; // сон/диагностика MOT — без гироскопа
+  // Сначала проверяем обычный motion detector без CYCLE/LP_WAKE 1,25 Гц.
+  // Редкие отсчёты могли пропускать короткое движение; экономию вернём после замеров.
+  delay(100);
+  writeReg(ADDR_MPU, 0x1C, 0x04);  // ACCEL_HPF 0,63 Гц
+  writeReg(ADDR_MPU, 0x1F, sensitive ? 1 : 20);  // тест: 2 мг; сон: 40 мг
+  writeReg(ADDR_MPU, 0x20, sensitive ? 1 : 20);  // тест: 1 мс; сон: 20 мс
+  writeReg(ADDR_MPU, 0x37, 0x20);  // активный HIGH, защёлка до чтения INT_STATUS
+  delay(100);
+  readReg(ADDR_MPU, 0x3A);
+  writeReg(ADDR_MPU, 0x38, 0x40);  // MOT_INT
+  return true;
+#else
+  (void)sensitive;
+  return false;
+#endif
+}
+
+bool readMotion(MotionStatus& out) {
+#ifndef FAKE_SENSORS
+  if (!g_pres.mpu) return false;
+  out.enabled = readReg(ADDR_MPU, 0x38);
+  out.config = readReg(ADDR_MPU, 0x37);
+  out.power = readReg(ADDR_MPU, 0x6B);
+  out.who = readReg(ADDR_MPU, 0x75);
+  out.accel = readReg(ADDR_MPU, 0x1C);
+  out.threshold = readReg(ADDR_MPU, 0x1F);
+  out.duration = readReg(ADDR_MPU, 0x20);
+  out.control = readReg(ADDR_MPU, 0x69);
+  out.status = readReg(ADDR_MPU, 0x3A);
+  return true;
+#else
+  (void)out;
+  return false;
+#endif
+}
+
+void stopMotion() { clearMotion(); }
+
 void prepareSleep() {
 #ifndef FAKE_SENSORS
-  if (g_pres.mpu) {
-    // Прерывание движения в циклическом режиме (порядок по InvenSense AN; проверить на железе):
-    writeReg(ADDR_MPU, 0x6B, 0x00);
-    writeReg(ADDR_MPU, 0x1C, 0x01);  // ACCEL_HPF 5 Гц — реагировать на изменение, не на гравитацию
-    writeReg(ADDR_MPU, 0x1F, 3);     // MOT_THR: ~96 мг
-    writeReg(ADDR_MPU, 0x20, 1);     // MOT_DUR: 1 мс
-    writeReg(ADDR_MPU, 0x37, 0x20);  // INT: активный HIGH, защёлка до чтения INT_STATUS
-    writeReg(ADDR_MPU, 0x38, 0x40);  // включить только MOT_INT
-    readReg(ADDR_MPU, 0x3A);         // сбросить старое
-    writeReg(ADDR_MPU, 0x6C, 0x07);  // LP_WAKE 1,25 Гц, гироскоп выкл
-    writeReg(ADDR_MPU, 0x6B, 0x28);  // CYCLE=1, датчик температуры выкл
-  }
+  if (g_pres.compass && g_pres.compassAddr == ADDR_QMC_P) writeReg(ADDR_QMC_P, 0x0A, 0x00);
+  armMotion(true);  // тот же детектор, для которого на плате подтверждены MOT=1 и INT=HIGH
   if (g_pres.ina) ina.powerSave(true);
 #endif
 }
@@ -264,6 +383,8 @@ void clearMotion() {
   }
 #endif
 }
+
+void setTemperatureOffset(int16_t hundredths) { g_temperatureOffset=hundredths/100.0f; }
 
 void setSeaLevel(float hpa) { g_seaLevel = hpa; }
 float seaLevel() { return g_seaLevel; }

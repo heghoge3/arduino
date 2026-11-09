@@ -41,6 +41,21 @@ Env readEnv();
 Power readPower();
 // Ускорение в g. false — MPU6050 не отвечает
 bool readAccel(float& ax, float& ay, float& az);
+struct MotionSample { float ax, ay, az, gx, gy, gz; bool gyro; };
+bool readMotionSample(MotionSample& sample);
+// Дополнительный магнитный компас; для автоматического PDR не требуется.
+// Пока поддерживается QMC5883P. Для направления плата компаса должна быть горизонтальна.
+void pollCompass(float offsetDeg, bool inverted);
+float compassHeading(); // NAN — нет калибровки, сильный наклон, помеха или устаревшее чтение
+bool calibrateCompass(bool start);
+bool compassCalibrating();
+bool compassReady();
+
+// Проверка защёлкнутого прерывания движения без сна ESP32.
+bool armMotion(bool sensitive = false);
+struct MotionStatus { uint8_t enabled, config, power, status, who, accel, threshold, duration, control; };
+bool readMotion(MotionStatus& out);  // чтение INT_STATUS сбрасывает защёлку
+void stopMotion();
 
 // Перед глубоким сном: MPU6050 в режим «будить при движении», остальное в сон
 void prepareSleep();
@@ -50,6 +65,7 @@ void clearMotion();
 // Калибровка высоты по известной точке; давление на уровне моря хранится в NVS
 void calibrateAltitude(float knownAltM);
 void setSeaLevel(float hpa);
+void setTemperatureOffset(int16_t hundredths);
 float seaLevel();
 
 bool i2cProbe(uint8_t addr);

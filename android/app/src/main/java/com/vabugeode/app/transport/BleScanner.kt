@@ -1,5 +1,9 @@
 package com.vabugeode.app.transport
 
+import android.Manifest
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
@@ -59,6 +63,10 @@ class BleScanner(
 
     override fun start() {
         if (scanning.value) return
+        if (Build.VERSION.SDK_INT>=31 && listOf(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT)
+            .any { ContextCompat.checkSelfPermission(context,it)!=PackageManager.PERMISSION_GRANTED }) {
+            error.value="Нет разрешения на поиск Bluetooth"; return
+        }
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
         if (adapter == null) {
             error.value = "В телефоне нет Bluetooth"

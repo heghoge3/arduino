@@ -6,6 +6,13 @@
 #include <string.h>
 
 #include <string>
+#include <set>
+#include "hike_files.h"
+#include "pdr.h"
+#include "walk_distance.h"
+#include "blacklist_defaults.h"
+#include "compass.h"
+#include "inertial.h"
 
 #include "logbuf.h"
 #include "logic.h"
@@ -448,13 +455,15 @@ void test_spoof_jump_after_pause() {
 void test_spoof_phone_and_time() {
   spoof::Detector d;
   d.setPhone(60.1580, 30.5150, 50, 1000);
-  TEST_ASSERT_FALSE(d.check(inputAt(1100, 60.1600, 30.5200)).spoof);  // ~400 м — норма
-  spoof::Result r = d.check(inputAt(1200, 60.2500, 30.5150));          // ~10 км от телефона
+  spoof::Result r = d.check(inputAt(1001, 60.2500, 30.5150));  // ~10 км от телефона
   TEST_ASSERT_TRUE(r.mask & spoof::R_PHONE);
+  TEST_ASSERT_FALSE_MESSAGE(r.spoof, "ошибка телефона сама по себе не отвергает GPS");
+  TEST_ASSERT_TRUE(d.hasLastGood());
   // Позиция телефона устарела — проверка не работает
   spoof::Detector d2;
   d2.setPhone(60.1580, 30.5150, 50, 1000);
-  TEST_ASSERT_FALSE(d2.check(inputAt(1000 + 3600, 60.2500, 30.5150)).mask & spoof::R_PHONE);
+  TEST_ASSERT_TRUE(d2.check(inputAt(1030, 60.2500, 30.5150)).mask & spoof::R_PHONE);
+  TEST_ASSERT_FALSE(d2.check(inputAt(1031, 60.2500, 30.5150)).mask & spoof::R_PHONE);
 
   // Время GPS уехало на час от часов
   spoof::Detector d3;
@@ -462,12 +471,82 @@ void test_spoof_phone_and_time() {
   in.gpsTimeValid = true;
   in.gpsTime = 5000 + 3600;
   r = d3.check(in);
-  TEST_ASSERT_TRUE(r.spoof);
+  TEST_ASSERT_FALSE_MESSAGE(r.spoof, "ошибка часов сама по себе не отвергает координаты");
   TEST_ASSERT_TRUE(r.mask & spoof::R_TIME);
   // Время не проверено — сравнивать не с чем
   in.timeTrusted = false;
   spoof::Detector d4;
   TEST_ASSERT_FALSE(d4.check(in).mask & spoof::R_TIME);
+}
+
+void test_spoof_hike_clock_regression() {
+  // Вечерний журнал: R_TIME=0x40; при подключении телефон исправил часы на +540 с.
+  // Точное сырое UTC GPS в старом журнале отсутствует; моделируем отставание RTC.
+  const uint32_t correct = nmea::toUnix(2026, 10, 31, 17, 30, 5);
+  spoof::Detector d;
+  auto in = inputAt(correct - 540, 60.00100, 30.00200);
+  in.gpsTimeValid = true; in.gpsTime = correct;
+  auto r = d.check(in);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_TIME);
+  TEST_ASSERT_FALSE(r.spoof);
+  TEST_ASSERT_TRUE(d.hasLastGood());
+  uint8_t flat[] = {41, 42, 41, 42, 41};
+  in.usedSnr = flat; in.usedCount = 5;
+  TEST_ASSERT_FALSE(d.check(in).spoof);
+  // Пространственный скачок по-прежнему отбрасывается, даже при неверных часах.
+  in.now++; in.gpsTime++; in.lat = 60.1161; in.lon = 31.3864;
+  r = d.check(in);
+  TEST_ASSERT_TRUE(r.spoof);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_JUMP);
+}
+
+void test_spoof_phone_hike_regression() {
+  // Журнал: PHONE_POS в 10:44:33, первый хороший GPS в 10:50:53.
+  // Координаты телефона в старом журнале не записаны: для воспроизведения
+  // все координаты здесь условные; берём точку, отстоящую от условного GPS более чем на 3 км.
+  const uint32_t received = nmea::toUnix(2026, 10, 31, 7, 44, 33); // UTC, Москва +3
+  spoof::Detector d;
+  d.setPhone(59.95, 30.10, 50, received);
+  auto r = d.check(inputAt(received + 380, 60.00000, 30.00000));
+  TEST_ASSERT_FALSE(r.mask & spoof::R_PHONE);
+  TEST_ASSERT_FALSE(r.spoof);
+  TEST_ASSERT_DOUBLE_WITHIN(1e-7, 60.00000, d.lastGoodLat());
+
+  // Даже ошибочная НОВАЯ позиция телефона + один слабый признак не блокируют трек.
+  spoof::Detector fresh;
+  fresh.setPhone(59.95, 30.10, 50, received);
+  uint8_t flat[] = {41, 42, 41, 42, 41};
+  auto in = inputAt(received + 1, 60.00000, 30.00000);
+  in.usedSnr = flat; in.usedCount = 5;
+  r = fresh.check(in);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_PHONE);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_SNR_FLAT);
+  TEST_ASSERT_FALSE(r.spoof);
+  // Два независимых слабых признака по-прежнему работают.
+  in.altValid = in.baroValid = true; in.altGps = 400; in.altBaro = 100;
+  TEST_ASSERT_TRUE(fresh.check(in).spoof);
+
+  // Чёрный список не отключён при совпадении GPS с телефоном.
+  spoof::Detector blocked;
+  double lat[] = {60.00000}, lon[] = {30.00000}; uint16_t radius[] = {5000};
+  blocked.setBlacklist(lat, lon, radius, 1);
+  blocked.setPhone(lat[0], lon[0], 10, received);
+  r = blocked.check(inputAt(received + 1, lat[0], lon[0]));
+  TEST_ASSERT_TRUE(r.spoof);
+  TEST_ASSERT_TRUE(r.mask & spoof::R_BLACKLIST);
+}
+
+void test_spoof_phone_rejects_unusable_references() {
+  for (float acc : {0.0f, -1.0f, 1001.0f, INFINITY, NAN}) {
+    spoof::Detector d;
+    d.setPhone(59.95, 30.10, acc, 1000);
+    TEST_ASSERT_FALSE(d.check(inputAt(1001, 60.00000, 30.00000)).mask & spoof::R_PHONE);
+  }
+  spoof::Detector d;
+  d.setPhone(59.95, 30.10, 50, 1000);
+  TEST_ASSERT_FALSE(d.check(inputAt(999, 60.00000, 30.00000)).mask & spoof::R_PHONE);
+  d.clearPhone();
+  TEST_ASSERT_FALSE(d.check(inputAt(1001, 60.00000, 30.00000)).mask & spoof::R_PHONE);
 }
 
 void test_spoof_weak_signs_need_two() {
@@ -488,7 +567,8 @@ void test_spoof_weak_signs_need_two() {
 
   in.usedSnr = normal;
   in.altGps = 110;
-  r = d.check(in);
+  // После подмены сначала подтверждаем устойчивое восстановление.
+  for (uint32_t t = 1001; t <= 1011; t++) { in.now = t; r = d.check(in); }
   TEST_ASSERT_FALSE(r.spoof);
   TEST_ASSERT_EQUAL_UINT8(0, r.mask);
 }
@@ -506,6 +586,65 @@ void test_spoof_steps_but_standing() {
       TEST_ASSERT_TRUE(r.mask & spoof::R_ACCEL);
       TEST_ASSERT_TRUE(r.spoof);  // шаги + SNR — два слабых
     }
+  }
+}
+
+void test_spoof_recovery() {
+  spoof::Detector d;
+  double lat[] = {60.1161}, lon[] = {31.3864};
+  uint16_t radius[] = {1000};
+  d.setBlacklist(lat, lon, radius, 1);
+  TEST_ASSERT_TRUE(d.check(inputAt(1000, lat[0], lon[0])).spoof);
+  for (uint32_t t = 1001; t <= 1010; t++) {
+    auto r = d.check(inputAt(t, 60.1161, 31.363));
+    TEST_ASSERT_TRUE(r.spoof);
+    TEST_ASSERT_TRUE(r.mask & spoof::R_RECOVERY);
+    TEST_ASSERT_FALSE(d.hasLastGood());
+  }
+  // Новый ложный фикс сбрасывает накопленное подтверждение.
+  TEST_ASSERT_TRUE(d.check(inputAt(1011, lat[0], lon[0])).spoof);
+  TEST_ASSERT_TRUE(d.check(inputAt(1012, 60.1161, 31.363)).spoof);
+  // Долгое отсутствие сигнала также не считается восстановлением.
+  TEST_ASSERT_TRUE(d.check(inputAt(1100, 60.1161, 31.363)).spoof);
+  for (uint32_t t = 1101; t < 1110; t++) TEST_ASSERT_TRUE(d.check(inputAt(t, 60.1161, 31.363)).spoof);
+  TEST_ASSERT_FALSE(d.check(inputAt(1110, 60.1161, 31.363)).spoof);
+  TEST_ASSERT_TRUE(d.hasLastGood());
+}
+
+void test_recovery_is_rejected_without_reporting_new_spoof() {
+  spoof::Detector d;
+  double lat[] = {60.1161}, lon[] = {31.3864}; uint16_t radius[] = {5000};
+  d.setBlacklist(lat, lon, radius, 1);
+  auto detected = d.check(inputAt(1000, lat[0], lon[0]));
+  TEST_ASSERT_TRUE(detected.detected());
+  TEST_ASSERT_FALSE(detected.recovering());
+  for (uint32_t t = 4000; t <= 4010; ++t) {
+    auto r = d.check(inputAt(t, 60.0, 30.0));
+    TEST_ASSERT_FALSE(r.detected());
+    TEST_ASSERT_EQUAL(t < 4010, r.recovering());
+    TEST_ASSERT_EQUAL(t < 4010, r.spoof); // пока ждём, GPS не становится достоверным
+    TEST_ASSERT_EQUAL(t >= 4010, d.hasLastGood());
+    // Так запись уходит старому APK: NONE без красной координаты, маска сохранена.
+    proto::Point p{};
+    p.time=t; p.src=r.spoof ? 0 : 1; p.spoof=r.detected(); p.spoofMask=r.mask;
+    uint8_t bytes[proto::POINT_SIZE]; proto::Point decoded{};
+    TEST_ASSERT_EQUAL_UINT(proto::POINT_SIZE, proto::encodePoint(p,bytes,sizeof(bytes)));
+    TEST_ASSERT_TRUE(proto::decodePoint(bytes,sizeof(bytes),decoded));
+    TEST_ASSERT_FALSE(decoded.spoof);
+    TEST_ASSERT_EQUAL_UINT8(t < 4010 ? 0 : 1, decoded.src);
+    TEST_ASSERT_EQUAL_UINT8(t < 4010 ? spoof::R_RECOVERY : 0, decoded.spoofMask);
+    TEST_ASSERT_EQUAL_INT32(0, decoded.spoofLat7);
+    TEST_ASSERT_EQUAL_INT32(0, decoded.spoofLon7);
+  }
+  // Смешанные маски: сильный признак и две слабые причины не скрываются восстановлением.
+  TEST_ASSERT_TRUE(spoof::recoveryOnly(spoof::R_RECOVERY | spoof::R_SNR_FLAT | spoof::R_PHONE | spoof::R_TIME));
+  for (uint8_t evidence : {spoof::R_BLACKLIST, spoof::R_JUMP,
+          (spoof::Reason)(spoof::R_SNR_FLAT|spoof::R_BARO),
+          (spoof::Reason)(spoof::R_SNR_FLAT|spoof::R_ACCEL),
+          (spoof::Reason)(spoof::R_BARO|spoof::R_ACCEL)}) {
+    spoof::Result r{true,(uint8_t)(spoof::R_RECOVERY|evidence)};
+    TEST_ASSERT_TRUE(r.detected());
+    TEST_ASSERT_FALSE(r.recovering());
   }
 }
 
@@ -655,6 +794,15 @@ void test_steps_noise_and_bumps() {
   TEST_ASSERT_EQUAL_UINT32(0, e.count());
 }
 
+void test_steps_gentle_and_resume() {
+  steps::Detector d;
+  TEST_ASSERT_INT_WITHIN(4, 36, (int)simulateWalk(d, 1.8f, 0.12f, 0.01f, 20000, 600000));
+  uint32_t before = d.count();
+  d.resume();
+  TEST_ASSERT_EQUAL_UINT32(before, d.count());
+  TEST_ASSERT_INT_WITHIN(4, 36, (int)simulateWalk(d, 1.8f, 0.12f, 0.01f, 20000));
+}
+
 void test_sunset() {
   // Петербург, 26.10.2026: закат ~17:17–17:20 МСК (как в приложении), 21.06 ~22:26
   uint32_t t;
@@ -664,6 +812,299 @@ void test_sunset() {
   TEST_ASSERT_INT_WITHIN(5 * 60, nmea::toUnix(2026, 6, 21, 19, 26, 0), (int)t);
   // Мурманск, полярная ночь
   TEST_ASSERT_FALSE(sun::sunset(nmea::toUnix(2026, 12, 20, 12, 0, 0), 68.97, 33.07, t));
+}
+
+void test_hike_commands() {
+  uint8_t cmd[] = {proto::VERSION, proto::CMD_DELETE_HIKE, 0x40, 0x02, 0xDF, 0x6A};
+  proto::Command c{};
+  TEST_ASSERT_EQUAL(proto::ACK_OK, proto::decodeCommand(cmd, sizeof(cmd), c));
+  TEST_ASSERT_EQUAL_UINT32(1793000000, c.time);
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(cmd, sizeof(cmd) - 1, c));
+  cmd[1] = proto::CMD_NEW_HIKE;
+  TEST_ASSERT_EQUAL(proto::ACK_OK, proto::decodeCommand(cmd, sizeof(cmd), c));
+  uint8_t out[8];
+  TEST_ASSERT_EQUAL(8, proto::encodeHikeResult(proto::CMD_DELETE_HIKE, proto::ACK_OK, 1793000000, out, sizeof(out)));
+  TEST_ASSERT_EQUAL(proto::MSG_HIKE_RESULT, out[1]);
+  TEST_ASSERT_EQUAL_MEMORY(cmd + 2, out + 4, 4);
+}
+
+void test_pdr_steps_and_missing_reference() {
+  pdr::Tracker p;
+  TEST_ASSERT_FALSE(p.advance(10, 90)); // без начальной позиции координаты не выдумываем
+  TEST_ASSERT_TRUE(p.anchor(60, 30, 0));
+  TEST_ASSERT_TRUE(p.advance(10, 0));
+  TEST_ASSERT_DOUBLE_WITHIN(0.05, 7.5, spoof::distanceM(60, 30, p.lat(), p.lon()));
+  TEST_ASSERT_DOUBLE_WITHIN(0.000001, 30, p.lon());
+  double a = p.lat(), b = p.lon();
+  TEST_ASSERT_TRUE(p.advance(20, 90));
+  TEST_ASSERT_DOUBLE_WITHIN(0.05, 7.5, spoof::distanceM(a, b, p.lat(), p.lon()));
+  TEST_ASSERT_FLOAT_WITHIN(0.001, 15, p.distance());
+  TEST_ASSERT_TRUE(p.advance(20, 180)); // без шагов нет движения
+  TEST_ASSERT_FALSE(p.advance(21, NAN));
+  TEST_ASSERT_FALSE(p.valid());
+  TEST_ASSERT_TRUE(p.anchor(60, 30, 100));
+  TEST_ASSERT_FALSE(p.advance(0, 0)); // сброс счётчика не вызывает телепортацию
+}
+
+static std::set<std::string> testFiles;
+static std::string failRemove;
+static bool fileExists(const char* p) { return testFiles.count(p); }
+static bool fileRemove(const char* p) { if (failRemove == p) return false; return testFiles.erase(p); }
+void test_delete_archived_hike_files() {
+  const uint32_t old = 1793000000, current = old + 60;
+  char paths[4][40], other[4][40];
+  hikefiles::pathsForHike(old, paths[0], paths[1], paths[2], paths[3]);
+  TEST_ASSERT_EQUAL_STRING("/tracks/20261026_073320.csv", paths[0]);
+  TEST_ASSERT_EQUAL_STRING("/tracks/20261026_073320.bin", paths[1]);
+  TEST_ASSERT_EQUAL_STRING("/marks/20261026_073320.csv", paths[2]);
+  TEST_ASSERT_EQUAL_STRING("/marks/20261026_073320.bin", paths[3]);
+  hikefiles::pathsForHike(current, other[0], other[1], other[2], other[3]);
+  testFiles.clear(); failRemove.clear();
+  for (auto& p : paths) testFiles.insert(p);
+  for (auto& p : other) testFiles.insert(p);
+  testFiles.insert("/blacklist.json"); testFiles.insert("/logs/all.bin");
+  TEST_ASSERT_FALSE(hikefiles::removeArchived(current, current, true, fileExists, fileRemove));
+  TEST_ASSERT_FALSE(hikefiles::removeArchived(old, current, false, fileExists, fileRemove));
+  TEST_ASSERT_EQUAL(10, testFiles.size());
+  failRemove = paths[0];
+  TEST_ASSERT_FALSE(hikefiles::removeArchived(old, current, true, fileExists, fileRemove));
+  TEST_ASSERT_TRUE(fileExists(paths[0]));
+  failRemove.clear();
+  TEST_ASSERT_TRUE(hikefiles::removeArchived(old, current, true, fileExists, fileRemove));
+  TEST_ASSERT_TRUE(hikefiles::removeArchived(old, current, true, fileExists, fileRemove)); // повтор после потери ответа
+  TEST_ASSERT_EQUAL(6, testFiles.size());
+  for (auto& p : other) TEST_ASSERT_TRUE(fileExists(p));
+  TEST_ASSERT_TRUE(fileExists("/blacklist.json"));
+}
+
+void test_compass_calibration_and_rejection() {
+  compass::Recorder recorder; recorder.reset();
+  float g[3] = {0, 0, 1}, m[3]; compass::Calibration cal{};
+  TEST_ASSERT_FALSE(recorder.finish(g, cal));
+  // Full three-axis rotations in a field with axis scaling and hard-iron offsets.
+  const float offsets[] = {100, -200, 300}, radii[] = {9000, 6000, 7500};
+  for (int n = 0; n < 120; n++) {
+    for (int j = 0; j < 3; j++) m[j] = offsets[j];
+    m[n % 3] += (n % 6 < 3 ? 1 : -1) * radii[n % 3];
+    recorder.add(m);
+  }
+  TEST_ASSERT_TRUE(recorder.finish(g, cal));
+  TEST_ASSERT_TRUE(compass::valid(cal));
+  m[0] = offsets[0] + radii[0]; m[1] = offsets[1]; m[2] = offsets[2];
+  TEST_ASSERT_FLOAT_WITHIN(.01, 0, compass::heading(cal, m, g, 0));
+  m[0] = offsets[0]; m[1] += radii[1];
+  TEST_ASSERT_FLOAT_WITHIN(.01, 90, compass::heading(cal, m, g, 0));
+  TEST_ASSERT_FLOAT_WITHIN(.01, 225, compass::heading(cal, m, g, -45, true));
+  float tilted[] = {1, 0, 0};
+  TEST_ASSERT_TRUE(isnan(compass::heading(cal, m, tilted, 0)));
+  m[1] *= 4; TEST_ASSERT_TRUE(isnan(compass::heading(cal, m, g, 0)));
+  cal.field = NAN; TEST_ASSERT_FALSE(compass::valid(cal));
+  // Rotating on a flat table cannot calibrate the third axis.
+  recorder.reset();
+  for (int n = 0; n < 120; n++) {
+    float a = n * M_PI / 30; float flat[] = {(float)cos(a) * 7500, (float)sin(a) * 7500, 100};
+    recorder.add(flat);
+  }
+  TEST_ASSERT_FALSE(recorder.finish(g, cal));
+}
+void test_pdr_commands_validation() {
+  uint8_t data[] = {proto::VERSION, proto::CMD_PDR_SETTINGS, 75, 0, 0x3E, 0xFE, 1}; // -450 tenths
+  proto::Command c;
+  TEST_ASSERT_EQUAL(proto::ACK_OK, proto::decodeCommand(data, sizeof(data), c));
+  TEST_ASSERT_EQUAL(75, c.a); TEST_ASSERT_EQUAL(-450, c.altDm); TEST_ASSERT_EQUAL(1, c.flag);
+  data[2] = 0; TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(data, sizeof(data), c));
+  data[2] = 75; data[6] = 2; TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(data, sizeof(data), c));
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(data, sizeof(data) - 1, c));
+  uint8_t calibrate[] = {proto::VERSION, proto::CMD_CALIB_COMPASS, 2};
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS, proto::decodeCommand(calibrate, sizeof(calibrate), c));
+}
+
+struct SimPose {
+  float q[4];
+  static SimPose euler(float yaw,float pitch,float roll) {
+    float c=cosf(yaw/2),s=sinf(yaw/2),cp=cosf(pitch/2),sp=sinf(pitch/2),cr=cosf(roll/2),sr=sinf(roll/2);
+    return {{c*cp*cr+s*sp*sr,c*cp*sr-s*sp*cr,c*sp*cr+s*cp*sr,s*cp*cr-c*sp*sr}};
+  }
+  void toBody(const float world[3],float out[3]) const {
+    float w=q[0],x=q[1],y=q[2],z=q[3];
+    out[0]=(1-2*(y*y+z*z))*world[0]+2*(x*y+w*z)*world[1]+2*(x*z-w*y)*world[2];
+    out[1]=2*(x*y-w*z)*world[0]+(1-2*(x*x+z*z))*world[1]+2*(y*z+w*x)*world[2];
+    out[2]=2*(x*z+w*y)*world[0]+2*(y*z-w*x)*world[1]+(1-2*(x*x+y*y))*world[2];
+  }
+  void angularVelocity(const SimPose& previous,float out[3]) const {
+    // q(previous)^-1 * q(now), body angular velocity over 40 ms.
+    float w=previous.q[0],x=-previous.q[1],y=-previous.q[2],z=-previous.q[3];
+    float v[]={w*q[1]+x*q[0]+y*q[3]-z*q[2], w*q[2]-x*q[3]+y*q[0]+z*q[1], w*q[3]+x*q[2]-y*q[1]+z*q[0]};
+    float a=w*q[0]-x*q[1]-y*q[2]-z*q[3],n=sqrtf(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+    float k=n>1e-8f ? 2*atan2f(n,a)/n/.04f*180/M_PI : 0;
+    for(int j=0;j<3;j++) out[j]=v[j]*k;
+  }
+};
+struct WalkSimulation {
+  inertial::Navigator nav;
+  SimPose previous=SimPose::euler(1.8f,.7f,-.5f);
+  uint32_t ms=100,steps=0;
+  float walkTime=0;
+  double latitude=60,longitude=30;
+  WalkSimulation(float roll=-.5f) {
+    previous=SimPose::euler(1.8f,.7f,roll);
+    float gravity[]={0,0,1},a[3]; previous.toBody(gravity,a);
+    for(int j=0;j<90;j++) { nav.feed(a[0],a[1],a[2],.2f,-.1f,.3f,0,ms); ms+=40; }
+  }
+  void walk(float seconds,float fromCourse,float toCourse,bool gps,bool rotate=false) {
+    int samples=lroundf(seconds/.04f);
+    for(int i=0;i<samples;i++) {
+      float t=(i+1)*.04f,course=fromCourse+(toCourse-fromCourse)*t/seconds,rad=course*M_PI/180;
+      float gait=.16f*sinf(2*M_PI*1.8f*walkTime);
+      float world[]={gait*cosf(rad),-gait*sinf(rad),1+.08f*cosf(2*M_PI*1.8f*walkTime)};
+      SimPose pose=rotate ? SimPose::euler(1.8f+walkTime*.7f,.7f+.5f*sinf(walkTime*.4f),-.5f+.4f*sinf(walkTime*.3f)) : previous;
+      float a[3],g[3]; pose.toBody(world,a); pose.angularVelocity(previous,g);
+      steps=(uint32_t)(walkTime*1.8f);
+      nav.feed(a[0],a[1],a[2],g[0]+.2f,g[1]-.1f,g[2]+.3f,steps,ms);
+      latitude+=1.4*.04*cos(rad)/111194.93;
+      longitude+=1.4*.04*sin(rad)/(111194.93*cos(latitude*M_PI/180));
+      if(gps && i%25==0) nav.offerGps(latitude,longitude,steps,ms);
+      previous=pose; walkTime+=.04f; ms+=40;
+    }
+  }
+  float heading() const { return nav.heading(ms-40); }
+};
+static float headingError(float actual,float expected) { return fabsf(fmodf(actual-expected+540,360)-180); }
+void test_inertial_free_orientation_and_turn() {
+  WalkSimulation s;
+  TEST_ASSERT_TRUE(s.nav.gyroReady());
+  s.walk(14,0,0,true,true);
+  TEST_ASSERT_TRUE(s.nav.aligned());
+  TEST_ASSERT_TRUE(headingError(s.heading(),0)<10);
+  s.walk(12,0,0,false,true); // Turning/tilting the device, walking straight.
+  char message[100]; snprintf(message,sizeof(message),"heading after rotating device: %.1f",s.heading());
+  TEST_ASSERT_TRUE_MESSAGE(isfinite(s.heading()),message);
+  TEST_ASSERT_TRUE_MESSAGE(headingError(s.heading(),0)<20,"device rotation must not become a route turn");
+  s.walk(5,0,90,false,true); // Person turns with the device held at changing angles.
+  s.walk(8,90,90,false,true);
+  TEST_ASSERT_TRUE_MESSAGE(headingError(s.heading(),90)<20,"walking turn should change the estimated route");
+}
+void test_inertial_upside_down_left_turn_and_bias() {
+  WalkSimulation s(3.0f);
+  s.walk(14,0,0,true);
+  TEST_ASSERT_TRUE(s.nav.aligned());
+  s.walk(5,0,-90,false); s.walk(8,-90,-90,false);
+  TEST_ASSERT_TRUE(headingError(s.heading(),270)<10);
+  s.walk(5,-90,-180,false); s.walk(8,-180,-180,false);
+  TEST_ASSERT_TRUE(headingError(s.heading(),180)<10);
+  TEST_ASSERT_TRUE(s.nav.keepAwake(s.ms));
+  TEST_ASSERT_FALSE(s.nav.keepAwake(s.ms+300000));
+  // Datasheet permits substantial zero-rate offsets; a stationary unit must auto-calibrate.
+  inertial::Navigator factoryBias;
+  for (uint32_t t=100;t<5000;t+=40) factoryBias.feed(0,0,-1,15,-10,8,0,t);
+  TEST_ASSERT_TRUE(factoryBias.gyroReady());
+  float measured[3]; factoryBias.copyBias(measured);
+  TEST_ASSERT_FLOAT_WITHIN(.01,15,measured[0]);
+  TEST_ASSERT_FLOAT_WITHIN(.01,-10,measured[1]);
+  TEST_ASSERT_FLOAT_WITHIN(.01,8,measured[2]);
+  TEST_ASSERT_TRUE(isnan(factoryBias.heading(5000))); // Bias alone cannot invent north.
+}
+void test_inertial_unknown_and_discontinuity() {
+  WalkSimulation s;
+  s.walk(10,0,0,false,true);
+  TEST_ASSERT_FALSE(s.nav.aligned()); TEST_ASSERT_TRUE(isnan(s.heading()));
+  s.walk(14,0,0,true,true);
+  TEST_ASSERT_TRUE(s.nav.aligned());
+  TEST_ASSERT_TRUE(isnan(s.nav.heading(s.ms+11000)));
+  float bias[3]; TEST_ASSERT_TRUE(s.nav.copyBias(bias));
+  s.nav.feed(0,0,1,0,0,0,s.steps,s.ms+1000); // Missing rotation samples breaks orientation.
+  TEST_ASSERT_FALSE(s.nav.aligned());
+  TEST_ASSERT_TRUE(s.nav.gyroReady()); // Sensor bias survives an orientation reset.
+  s.nav.restoreBias(bias);
+  TEST_ASSERT_FALSE(s.nav.offerGps(NAN,30,s.steps,s.ms+1000));
+  TEST_ASSERT_FALSE(s.nav.aligned());
+  s.nav.feed(0,0,1,0,0,500,s.steps,s.ms+1040); // Saturated gyro cannot produce a valid heading.
+  TEST_ASSERT_FALSE(s.nav.aligned());
+}
+
+
+void test_economy_distance_without_gps_or_double_chord() {
+  walking::Distance d; d.reset();
+  d.update(100,0,true,true,60,30,1,.75);
+  d.update(110,130,true,true,60.0009,30,1,.75);
+  double first=d.meters(); TEST_ASSERT_DOUBLE_WITHIN(1,100,first);
+  d.update(120,230,true,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,first+75,d.meters());
+  d.update(125,250,true,true,60.0018,30,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,first+90,d.meters()); // no GPS chord after loss
+  double before=d.meters();
+  d.update(126,1000,false,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,before,d.meters());
+  d.update(127,1000,true,true,61,31,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,before,d.meters()); // no car transfer on resume
+  d.update(128,5,true,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,before,d.meters()); // counter reset is not 2^32 steps
+  d.update(129,15,true,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,before+7.5,d.meters());
+  walking::Distance noPosition; noPosition.reset();
+  noPosition.update(100,40,true,false,0,0,1,.75);
+  TEST_ASSERT_DOUBLE_WITHIN(.01,30,noPosition.meters());
+}
+void test_final_commands_and_start_packet() {
+  uint8_t chime[]={proto::VERSION,proto::CMD_ACHIEVEMENT};
+  proto::Command sound{};
+  TEST_ASSERT_EQUAL(proto::ACK_OK,proto::decodeCommand(chime,sizeof(chime),sound));
+  TEST_ASSERT_EQUAL(proto::CMD_ACHIEVEMENT,sound.code);
+  uint8_t badChime[]={proto::VERSION,proto::CMD_ACHIEVEMENT,1};
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS,proto::decodeCommand(badChime,sizeof(badChime),sound));
+  uint8_t temp[]={proto::VERSION,proto::CMD_TEMP_OFFSET,0xA2,0xFE};
+  proto::Command c{};
+  TEST_ASSERT_EQUAL(proto::ACK_OK,proto::decodeCommand(temp,sizeof(temp),c));
+  TEST_ASSERT_EQUAL(-350,c.altDm);
+  temp[2]=0xFF;temp[3]=0x7F;
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS,proto::decodeCommand(temp,sizeof(temp),c));
+  uint8_t start[14]={proto::VERSION,proto::CMD_SET_START};
+  uint32_t id=1793000000; int32_t lat=601000000,lon=303000000;
+  memcpy(start+2,&id,4);memcpy(start+6,&lat,4);memcpy(start+10,&lon,4);
+  TEST_ASSERT_EQUAL(proto::ACK_OK,proto::decodeCommand(start,sizeof(start),c));
+  TEST_ASSERT_EQUAL(lat,c.lat7); TEST_ASSERT_EQUAL(lon,c.lon7);
+  lat=910000000;memcpy(start+6,&lat,4);
+  TEST_ASSERT_EQUAL(proto::ACK_BAD_ARGS,proto::decodeCommand(start,sizeof(start),c));
+  proto::Point point{}; point.startAnchor=true; point.spoof=true; point.steps=123;
+  uint8_t bytes[proto::POINT_SIZE];proto::encodePoint(point,bytes,sizeof(bytes));
+  TEST_ASSERT_EQUAL(0x0C,bytes[14]);
+  proto::Point decoded{}; TEST_ASSERT_TRUE(proto::decodePoint(bytes,sizeof(bytes),decoded));
+  TEST_ASSERT_TRUE(decoded.startAnchor); TEST_ASSERT_TRUE(decoded.spoof); TEST_ASSERT_EQUAL(123,decoded.steps);
+  proto::Info info{}; info.hasSettings=true;info.tempOffset100=-350;info.strideCm=82;
+  uint8_t packet[128];size_t n=proto::encodeInfo(info,packet,sizeof(packet));
+  TEST_ASSERT_EQUAL(33,n); TEST_ASSERT_EQUAL(0xA2,packet[n-4]);TEST_ASSERT_EQUAL(82,packet[n-2]);
+}
+void test_blacklist_defaults_and_observed_false_position() {
+  proto::BlEntry parsed[proto::MAX_BLACKLIST];uint8_t count=0;
+  TEST_ASSERT_TRUE(blacklistdefaults::parse("[\n  [60.0346000,30.5693000,5000],\n [60.1161000,31.3864000,2250]\n]",parsed,count));
+  TEST_ASSERT_EQUAL(2,count); TEST_ASSERT_EQUAL(601161000,parsed[1].lat7);TEST_ASSERT_EQUAL(2250,parsed[1].radiusM);
+  TEST_ASSERT_FALSE(blacklistdefaults::parse("[[NaN,30,5000]]",parsed,count));
+  TEST_ASSERT_FALSE(blacklistdefaults::parse("[[60,30,0]]",parsed,count));
+  proto::BlEntry known={601161000,313864000,1000};
+  TEST_ASSERT_TRUE(blacklistdefaults::migrate(known)); TEST_ASSERT_EQUAL(5000,known.radiusM);
+  known.radiusM=2250; TEST_ASSERT_FALSE(blacklistdefaults::migrate(known));
+  proto::BlEntry custom={601000000,300000000,1000};TEST_ASSERT_FALSE(blacklistdefaults::migrate(custom));
+  double lat[]={60.1161},lon[]={31.3864};uint16_t radius[]={5000};
+  spoof::Detector detector;detector.setBlacklist(lat,lon,radius,1);
+  TEST_ASSERT_TRUE(detector.blacklisted(60.11741,31.36770));
+  spoof::Input input{};input.now=100;input.lat=60.11741;input.lon=31.36770;
+  for(unsigned t=100;t<140;t++) {input.now=t;auto r=detector.check(input);TEST_ASSERT_TRUE(r.spoof);TEST_ASSERT_BITS_HIGH(spoof::R_BLACKLIST,r.mask);}
+  input.lat=NAN; TEST_ASSERT_TRUE(detector.check(input).spoof);
+}
+void test_recovery_requires_coherent_positions() {
+  double la[]={60},lo[]={30};uint16_t radius[]={1000};
+  spoof::Detector detector;detector.setBlacklist(la,lo,radius,1);
+  spoof::Input input{};input.now=100;input.lat=60;input.lon=30;
+  TEST_ASSERT_TRUE(detector.check(input).spoof);
+  input.lon=31;
+  for (unsigned t=101;t<131;t++) {
+    input.now=t;input.lat=60+(t-101)*.001; // no trusted reference, fake 100 m/s drift
+    TEST_ASSERT_TRUE(detector.check(input).spoof);
+  }
+  input.lat=61;
+  bool clean=false;
+  for(unsigned t=131;t<146;t++) {input.now=t;clean=!detector.check(input).spoof;}
+  TEST_ASSERT_TRUE(clean);
 }
 
 int main(int, char**) {
@@ -683,8 +1124,13 @@ int main(int, char**) {
   RUN_TEST(test_spoof_blacklist_and_jump);
   RUN_TEST(test_spoof_jump_after_pause);
   RUN_TEST(test_spoof_phone_and_time);
+  RUN_TEST(test_spoof_hike_clock_regression);
+  RUN_TEST(test_spoof_phone_hike_regression);
+  RUN_TEST(test_spoof_phone_rejects_unusable_references);
   RUN_TEST(test_spoof_weak_signs_need_two);
   RUN_TEST(test_spoof_steps_but_standing);
+  RUN_TEST(test_spoof_recovery);
+  RUN_TEST(test_recovery_is_rejected_without_reporting_new_spoof);
   RUN_TEST(test_power_moving_and_camp);
   RUN_TEST(test_power_battery_hysteresis);
   RUN_TEST(test_gps_pulse);
@@ -692,7 +1138,20 @@ int main(int, char**) {
   RUN_TEST(test_clock_jump_back);
   RUN_TEST(test_steps_walking);
   RUN_TEST(test_steps_noise_and_bumps);
+  RUN_TEST(test_steps_gentle_and_resume);
   RUN_TEST(test_sunset);
+  RUN_TEST(test_hike_commands);
+  RUN_TEST(test_pdr_steps_and_missing_reference);
+  RUN_TEST(test_compass_calibration_and_rejection);
+  RUN_TEST(test_inertial_free_orientation_and_turn);
+  RUN_TEST(test_inertial_unknown_and_discontinuity);
+  RUN_TEST(test_inertial_upside_down_left_turn_and_bias);
+  RUN_TEST(test_pdr_commands_validation);
+  RUN_TEST(test_economy_distance_without_gps_or_double_chord);
+  RUN_TEST(test_final_commands_and_start_packet);
+  RUN_TEST(test_blacklist_defaults_and_observed_false_position);
+  RUN_TEST(test_recovery_requires_coherent_positions);
+  RUN_TEST(test_delete_archived_hike_files);
   RUN_TEST(test_log_vector);
   RUN_TEST(test_log_ring);
   RUN_TEST(test_log_format_and_days);

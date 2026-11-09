@@ -545,6 +545,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     fun firstMarkSince(sinceSec: Long): Int = markList.indexOfFirst { it.tsUtcMs >= sinceSec * 1000 }.let { if (it < 0) markList.size else it }
 
     private fun srcCode(s: PositionSource) = when (s) {
+        PositionSource.START -> 4
         PositionSource.PAUSE -> 3
         PositionSource.NONE -> 0
         PositionSource.GPS -> 1
@@ -556,6 +557,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     fun handle(cmd: Cmd): Int {
         logLine(3, 9, "команда ${cmd::class.simpleName}")
         when (cmd) {
+            is Cmd.NewHike, is Cmd.DeleteHike -> return Proto.ACK_UNSUPPORTED // история демо хранится в телефоне
             is Cmd.SetTime -> {
                 if (!timeSynced) logLine(2, 6, "время с телефона, часы проверены")
                 timeSynced = true // время в демо ускорено — телефонное не применяем
@@ -568,6 +570,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             }
             Cmd.Clap -> addMarkInternal(MarkType.SYNC, "")
             Cmd.Find -> {} // пищать нечему
+            Cmd.AchievementChime -> {}
             is Cmd.SetIntervals -> {
                 if (cmd.movingSec !in 1..3600 || cmd.idleSec !in 1..3600) return Proto.ACK_BAD_ARGS
                 movingIntervalMs = cmd.movingSec * 1000L
@@ -575,6 +578,8 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             }
             is Cmd.CalibAlt -> {}
             is Cmd.CalibCompass -> {}
+            is Cmd.PdrSettings -> {}
+            is Cmd.TemperatureOffset, is Cmd.SetStart -> return Proto.ACK_UNSUPPORTED
             is Cmd.Blacklist -> blacklist = cmd.points
             Cmd.GetInfo, is Cmd.SyncTrack, is Cmd.SyncMarks, is Cmd.SyncLog -> {} // ответы шлёт транспорт
             is Cmd.SetDebug -> debug = cmd.on

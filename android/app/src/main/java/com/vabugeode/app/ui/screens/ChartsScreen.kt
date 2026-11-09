@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vabugeode.app.model.TrackPoint
+import com.vabugeode.app.data.chartInsight
 import com.vabugeode.app.ui.AppViewModel
 import com.vabugeode.app.ui.Fmt
 import com.vabugeode.app.ui.components.ChartSeries
@@ -192,6 +193,11 @@ private fun BigChart(m: Metric, track: List<TrackPoint>, sun: SunSchedule?) {
             unit = m.unit, digits = m.digits,
             sun = sun, bands = bands,
         )
+        val insight = remember(m, track) { chartInsight(m.name, track) }
+        if (insight != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(insight, style = MaterialTheme.typography.bodySmall, color = Palette.TextDim)
+        }
         // Какие отрезки есть на графике — подписи цветом
         val kinds = bands.distinctBy { it.label }
         if (kinds.isNotEmpty()) {

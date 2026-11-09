@@ -31,6 +31,7 @@ object Proto {
     const val MSG_ACK = 0x07
     const val MSG_ALERT = 0x08
     const val MSG_LOG = 0x09
+    const val MSG_HIKE_RESULT = 0x0A
 
     // Команды телефона
     const val CMD_SET_TIME = 0x01
@@ -53,6 +54,13 @@ object Proto {
     const val CMD_ACK_ALERT = 0x12
     const val CMD_SYNC_LOG = 0x13
     const val CMD_SET_DEBUG = 0x14
+    const val CMD_NEW_HIKE = 0x15
+    const val CMD_DELETE_HIKE = 0x16
+    const val CMD_TEMP_OFFSET = 0x18
+    const val CMD_SET_START = 0x19
+    const val CMD_BLACKLIST_V2 = 0x1A
+    const val CMD_ACHIEVEMENT = 0x1B
+    const val CMD_PDR_SETTINGS = 0x17
 
     // Результаты ACK
     const val ACK_OK = 0
@@ -162,6 +170,8 @@ data class InfoMsg(
     val gpsMode: Int = 0,
     val gpsPulseS: Int = 30,
     val beaconS: Int = 30,
+    val tempOffset100: Int? = null,
+    val strideCm: Int? = null,
 ) : DeviceMsg
 
 data class MarkMsg(
@@ -195,6 +205,7 @@ data class PointMsg(
     val steps: Long,
     val headingDeg: Double,
     val speedKmh: Double,
+    val startAnchor: Boolean = false,
 ) : DeviceMsg
 
 data class SyncDoneMsg(val what: Int, val count: Long) : DeviceMsg
@@ -230,17 +241,25 @@ data class BeaconMsg(
 // Команды телефона → устройство
 // ---------------------------------------------------------------------------
 
+data class HikeResultMsg(val cmd: Int, val result: Int, val hike: Long) : DeviceMsg
+
 sealed interface Cmd {
+    data class NewHike(val expectedHike: Long) : Cmd
+    data class DeleteHike(val hike: Long) : Cmd
     data class SetTime(val timeUtc: Long, val tzOffsetMin: Int) : Cmd
     data class PhonePos(val lat: Double, val lon: Double, val accuracyM: Int) : Cmd
     data class Record(val on: Boolean) : Cmd
     data class Mark(val type: Int, val text: String) : Cmd
     data object Clap : Cmd
     data object Find : Cmd
+    data object AchievementChime : Cmd
     data class SetIntervals(val movingSec: Int, val idleSec: Int) : Cmd
     data class CalibAlt(val altM: Double) : Cmd
     data class CalibCompass(val start: Boolean) : Cmd
-    data class Blacklist(val points: List<Entry>) : Cmd {
+    data class TemperatureOffset(val hundredths: Int) : Cmd
+    data class SetStart(val hike: Long, val lat: Double, val lon: Double) : Cmd
+    data class PdrSettings(val strideCm: Int, val headingOffset10: Int, val inverted: Boolean) : Cmd
+    data class Blacklist(val points: List<Entry>, val explicitRadius: Boolean = false) : Cmd {
         data class Entry(val lat: Double, val lon: Double, val radiusM: Int)
     }
     data object GetInfo : Cmd
@@ -264,6 +283,8 @@ object Codec {
     // ---- Телефон: команды → байты ----
 
     fun encode(cmd: Cmd): ByteArray = when (cmd) {
+        is Cmd.NewHike -> packet(Proto.CMD_NEW_HIKE, 4) { u32(cmd.expectedHike) }
+        is Cmd.DeleteHike -> packet(Proto.CMD_DELETE_HIKE, 4) { u32(cmd.hike) }
         is Cmd.SetTime -> packet(Proto.CMD_SET_TIME, 6) { u32(cmd.timeUtc); i16(cmd.tzOffsetMin) }
         is Cmd.PhonePos -> packet(Proto.CMD_PHONE_POS, 10) { coord(cmd.lat); coord(cmd.lon); u16(cmd.accuracyM) }
         is Cmd.Record -> packet(Proto.CMD_RECORD, 1) { u8(if (cmd.on) 1 else 0) }
@@ -275,14 +296,18 @@ object Codec {
         Cmd.Find -> packet(Proto.CMD_FIND, 0) {}
         is Cmd.SetIntervals -> packet(Proto.CMD_SET_INTERVALS, 4) { u16(cmd.movingSec); u16(cmd.idleSec) }
         is Cmd.CalibAlt -> packet(Proto.CMD_CALIB_ALT, 2) { i16(scaled(cmd.altM, 10.0)) }
+        is Cmd.TemperatureOffset -> packet(Proto.CMD_TEMP_OFFSET, 2) { i16(cmd.hundredths) }
+        is Cmd.SetStart -> packet(Proto.CMD_SET_START, 12) { u32(cmd.hike); coord(cmd.lat); coord(cmd.lon) }
+        is Cmd.PdrSettings -> packet(Proto.CMD_PDR_SETTINGS, 5) { u16(cmd.strideCm); i16(cmd.headingOffset10); u8(if (cmd.inverted) 1 else 0) }
         is Cmd.CalibCompass -> packet(Proto.CMD_CALIB_COMPASS, 1) { u8(if (cmd.start) 1 else 0) }
         is Cmd.Blacklist -> {
             require(cmd.points.size <= Proto.MAX_BLACKLIST) { "Чёрный список: не больше ${Proto.MAX_BLACKLIST} точек" }
-            packet(Proto.CMD_BLACKLIST, 1 + 10 * cmd.points.size) {
+            packet(if (cmd.explicitRadius) Proto.CMD_BLACKLIST_V2 else Proto.CMD_BLACKLIST, 1 + 10 * cmd.points.size) {
                 u8(cmd.points.size)
                 cmd.points.forEach { coord(it.lat); coord(it.lon); u16(it.radiusM) }
             }
         }
+        Cmd.AchievementChime -> packet(Proto.CMD_ACHIEVEMENT, 0) {}
         Cmd.GetInfo -> packet(Proto.CMD_GET_INFO, 0) {}
         is Cmd.Session -> packet(Proto.CMD_SESSION, 1) { u8(if (cmd.live) 1 else 0) }
         Cmd.Bye -> packet(Proto.CMD_BYE, 0) {}
@@ -300,6 +325,8 @@ object Codec {
     fun decodeCmd(data: ByteArray): Cmd {
         val r = reader(data)
         return when (val code = r.u8()) {
+            Proto.CMD_NEW_HIKE -> Cmd.NewHike(r.u32())
+            Proto.CMD_DELETE_HIKE -> Cmd.DeleteHike(r.u32())
             Proto.CMD_SET_TIME -> Cmd.SetTime(r.u32(), r.i16())
             Proto.CMD_PHONE_POS -> Cmd.PhonePos(r.coordRaw(), r.coordRaw(), r.u16())
             Proto.CMD_RECORD -> Cmd.Record(r.u8() != 0)
@@ -311,13 +338,17 @@ object Codec {
             }
             Proto.CMD_CLAP -> Cmd.Clap
             Proto.CMD_FIND -> Cmd.Find
+            Proto.CMD_ACHIEVEMENT -> Cmd.AchievementChime
             Proto.CMD_SET_INTERVALS -> Cmd.SetIntervals(r.u16(), r.u16())
             Proto.CMD_CALIB_ALT -> Cmd.CalibAlt(r.i16() / 10.0)
+            Proto.CMD_TEMP_OFFSET -> Cmd.TemperatureOffset(r.i16())
+            Proto.CMD_SET_START -> Cmd.SetStart(r.u32(), r.coordRaw(), r.coordRaw())
+            Proto.CMD_PDR_SETTINGS -> Cmd.PdrSettings(r.u16(), r.i16(), r.u8() != 0)
             Proto.CMD_CALIB_COMPASS -> Cmd.CalibCompass(r.u8() != 0)
-            Proto.CMD_BLACKLIST -> {
+            Proto.CMD_BLACKLIST, Proto.CMD_BLACKLIST_V2 -> {
                 val n = r.u8()
                 if (n > Proto.MAX_BLACKLIST) throw ProtocolException("Слишком длинный чёрный список: $n")
-                Cmd.Blacklist(List(n) { Cmd.Blacklist.Entry(r.coordRaw(), r.coordRaw(), r.u16()) })
+                Cmd.Blacklist(List(n) { Cmd.Blacklist.Entry(r.coordRaw(), r.coordRaw(), r.u16()) }, code == Proto.CMD_BLACKLIST_V2)
             }
             Proto.CMD_GET_INFO -> Cmd.GetInfo
             Proto.CMD_SESSION -> Cmd.Session(r.u8() != 0)
@@ -351,7 +382,7 @@ object Codec {
             u32((m.pressureHpa * 100).roundToLong())
             i16(scaledOrNa(m.altBaro, 10.0)); i16(scaledOrNa(m.trend3h, 100.0))
             u16(m.battMv); i16(scaled(m.battMa, 10.0)); u8(m.battPct); u16(m.usedMah)
-            u32(m.steps); u16(scaled(m.headingDeg, 10.0)); u32(m.distanceM)
+            u32(m.steps); u16(if (m.headingDeg.isFinite()) scaled(m.headingDeg, 10.0) else 65535); u32(m.distanceM)
             u16(scaled(m.hoursLeft, 10.0)); u16(m.seq); u8(m.alerts)
         }
         is SatsMsg -> {
@@ -361,13 +392,14 @@ object Codec {
                 sats.forEach { u8(it.system); u8(it.prn); u8(it.snr); u8(if (it.used) 1 else 0) }
             }
         }
-        is InfoMsg -> packet(Proto.MSG_INFO, 27 + 4 * m.checks.size) {
+        is InfoMsg -> packet(Proto.MSG_INFO, 27 + 4 * m.checks.size + if (m.tempOffset100 != null && m.strideCm != null) 4 else 0) {
             u8(m.fwMajor); u8(m.fwMinor); u8(m.fwPatch); u8(m.chip)
             u32(m.uptimeSec); u32(m.sdTotalMb); u32(m.sdFreeMb); u8(m.gnssMask)
             u32(m.hikeStartUtc ?: 0)
             u8(m.gpsMode); u16(m.gpsPulseS); u16(m.beaconS)
             u8(m.checks.size)
             m.checks.forEach { u8(it.id); u8(it.level); u8(it.code); u8(it.addr) }
+            if (m.tempOffset100 != null && m.strideCm != null) { i16(m.tempOffset100); u16(m.strideCm) }
         }
         is MarkMsg -> {
             val t = utf8Limited(m.text)
@@ -377,15 +409,16 @@ object Codec {
         }
         is PointMsg -> packet(Proto.MSG_POINT, Proto.POINT_SIZE - 2) {
             u32(m.timeUtc); coord(m.lat); coord(m.lon)
-            u8((m.src and 0x03) or (if (m.spoof) 0x04 else 0)); u8(m.spoofMask)
+            u8((m.src and 0x03) or (if (m.spoof) 0x04 else 0) or (if (m.startAnchor) 0x08 else 0)); u8(m.spoofMask)
             coord(m.spoofLat); coord(m.spoofLon)
             i16(scaledOrNa(m.tempRaw, 100.0)); i16(scaledOrNa(m.tempCorr, 100.0))
             u16(scaled(m.humidity, 100.0)); u32((m.pressureHpa * 100).roundToLong())
             i16(scaledOrNa(m.altBaro, 10.0)); i16(scaledOrNa(m.altGps, 10.0))
             u16(m.battMv); u8(m.battPct); u8(m.sats); u8(hdop(m.hdop))
-            u32(m.steps); u16(scaled(m.headingDeg, 10.0)); u16(scaled(m.speedKmh, 10.0))
+            u32(m.steps); u16(if (m.headingDeg.isFinite()) scaled(m.headingDeg, 10.0) else 65535); u16(scaled(m.speedKmh, 10.0))
         }
         is SyncDoneMsg -> packet(Proto.MSG_SYNC_DONE, 5) { u8(m.what); u32(m.count) }
+        is HikeResultMsg -> packet(Proto.MSG_HIKE_RESULT, 6) { u8(m.cmd); u8(m.result); u32(m.hike) }
         is AckMsg -> packet(Proto.MSG_ACK, 2) { u8(m.cmd); u8(m.result) }
         is AlertMsg -> packet(Proto.MSG_ALERT, 8) { u32(m.timeUtc); u8(m.alerts); u8(m.fresh); u8(m.battPct); u8(m.spoofMask) }
         is LogMsg -> {
@@ -413,9 +446,9 @@ object Codec {
                     humidity = r.u16() / 100.0, pressureHpa = r.u32() / 100.0,
                     altBaro = r.i16OrNull(10.0), trend3h = r.i16OrNull(100.0),
                     battMv = r.u16(), battMa = r.i16() / 10.0, battPct = r.u8(), usedMah = r.u16(),
-                    steps = r.u32(), headingDeg = r.u16() / 10.0, distanceM = r.u32(),
+                    steps = r.u32(), headingDeg = r.u16().let { if (it == 65535) Double.NaN else it / 10.0 }, distanceM = r.u32(),
                     hoursLeft = r.u16() / 10.0, seq = r.u16(), alerts = r.u8(),
-                )
+                ).let { if(it.src==4) it.copy(lat=it.lat?:0.0,lon=it.lon?:0.0) else it }
             }
             Proto.MSG_SATS -> {
                 val n = r.u8()
@@ -428,7 +461,11 @@ object Codec {
                 val hike = r.u32().takeIf { it != 0L }
                 val gpsMode = r.u8(); val pulse = r.u16(); val beacon = r.u16()
                 val n = r.u8()
-                InfoMsg(ma, mi, pa, chip, up, tot, free, gnss, hike, List(n) { CheckMsg(r.u8(), r.u8(), r.u8(), r.u8()) }, gpsMode, pulse, beacon)
+                if (n > 12) throw ProtocolException("Слишком много проверок")
+                val checks = List(n) { CheckMsg(r.u8(), r.u8(), r.u8(), r.u8()) }
+                val offset = if (r.buf.remaining() == 4) r.i16() else null
+                val stride = if (offset != null) r.u16() else null
+                InfoMsg(ma, mi, pa, chip, up, tot, free, gnss, hike, checks, gpsMode, pulse, beacon, offset, stride)
             }
             Proto.MSG_MARK -> {
                 val id = r.u16(); val t = r.u32(); val mt = r.u8(); val la = r.coord(); val lo = r.coord()
@@ -440,16 +477,17 @@ object Codec {
                 val t = r.u32(); val la = r.coord(); val lo = r.coord()
                 val fl = r.u8()
                 PointMsg(
-                    timeUtc = t, lat = la, lon = lo, src = fl and 0x03, spoof = fl and 0x04 != 0,
+                    timeUtc = t, lat = la, lon = lo, src = fl and 0x03, spoof = fl and 0x04 != 0, startAnchor = fl and 0x08 != 0,
                     spoofMask = r.u8(), spoofLat = r.coord(), spoofLon = r.coord(),
                     tempRaw = r.i16OrNull(100.0), tempCorr = r.i16OrNull(100.0),
                     humidity = r.u16() / 100.0, pressureHpa = r.u32() / 100.0,
                     altBaro = r.i16OrNull(10.0), altGps = r.i16OrNull(10.0),
                     battMv = r.u16(), battPct = r.u8(), sats = r.u8(), hdop = r.hdop(),
-                    steps = r.u32(), headingDeg = r.u16() / 10.0, speedKmh = r.u16() / 10.0,
-                )
+                    steps = r.u32(), headingDeg = r.u16().let { if (it == 65535) Double.NaN else it / 10.0 }, speedKmh = r.u16() / 10.0,
+                ).let { if(it.startAnchor) it.copy(lat=it.lat?:0.0,lon=it.lon?:0.0) else it }
             }
             Proto.MSG_SYNC_DONE -> SyncDoneMsg(r.u8(), r.u32())
+            Proto.MSG_HIKE_RESULT -> HikeResultMsg(r.u8(), r.u8(), r.u32())
             Proto.MSG_ACK -> AckMsg(r.u8(), r.u8())
             Proto.MSG_ALERT -> AlertMsg(r.u32(), r.u8(), r.u8(), r.u8(), r.u8())
             Proto.MSG_LOG -> {

@@ -136,7 +136,7 @@ fun HomeScreen(
             StatTile(
                 Icons.Filled.Speed, "Скорость", Fmt.num(if (st.mode == PowerMode.MOVING) st.gps.speedKmh else 0.0, 1), "км/ч", Palette.Cold,
                 Modifier.weight(1f),
-                sub = "курс ${Fmt.compass(st.headingDeg)} ${st.headingDeg.toInt()}°",
+                sub = if (st.positionSource == com.vabugeode.app.model.PositionSource.GPS && st.gps.speedKmh >= 1) "курс GPS ${Fmt.compass(st.gps.courseDeg)} ${st.gps.courseDeg.toInt()}°" else "курс GPS неизвестен",
                 sub2 = if (st.mode == PowerMode.MOVING) "в движении" else "стоим",
             )
         }
@@ -224,6 +224,10 @@ private fun TempHero(st: DeviceStatus, track: List<TrackPoint>, sun: SunSchedule
 private fun GpsCard(st: DeviceStatus) {
     val g = st.gps
     val (color, icon, title, text) = when {
+        g.recovering && g.fix != GpsFix.OFF -> Quad(
+            Palette.Warn, Icons.Filled.GpsFixed, "Проверка восстановления GPS",
+            "Сигнал появился. Ждём устойчивые координаты; шаги продолжают считаться.",
+        )
         g.spoof -> Quad(
             Palette.Bad, Icons.Filled.Warning, "Подозрение на подмену GPS",
             "Приёмник уверенно показывает ${g.fix.title}, но координаты ложные. Эти точки не идут в трек — позиция считается по шагам.",
