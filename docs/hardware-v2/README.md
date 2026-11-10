@@ -19,6 +19,7 @@
 | [measurements.md](measurements.md) | Порядок замеров и статус геометрии |
 | [electrical-baseline.md](electrical-baseline.md) | Распиновка и вопросы электрической схемы |
 | [button-power-selection.md](button-power-selection.md) | Согласованный принцип, комплект для дозаказа EN и оставшиеся проверки |
+| [charging-indication.md](charging-indication.md) | Выбранная индикация зарядки на экране, реализуемость и предложения по питанию |
 | [power-review/README.md](power-review/README.md) | Проверка и симуляция запасного отдельного ключа, ограничения |
 | [journal.md](journal.md) | История решений и изменений |
 | [prototype-review.md](prototype-review.md) | Наблюдения по пяти фото альфа-прототипа |
