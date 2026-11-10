@@ -19,6 +19,14 @@
 
 Источники: [DS3231](https://www.analog.com/media/en/technical-documentation/data-sheets/DS3231.pdf), [MPU-6050 register map](https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Register-Map1.pdf).
 
+## Ограничение монтажа V2, 10.11.2026
+
+Владелец исключил нижние площадки GPIO45, 42, 41, 40, 39, 38, 18, 17, 16, 15, 14.
+Текущие назначения V2 их не используют; GPIO14/15 старых часов больше не нужны.
+HOLD остаётся GPIO7 на боковом контакте. Не выводить исключённые площадки ради
+расширения. Действующий программный интерфейс — [firmware-v2.md](../firmware-v2.md)
+и pins.h; историческую таблицу ниже не переносить в монтаж V2.
+
 ## GPIO (исторические назначения)
 
 Сверены `pins.h` веток `ccr-faf69fbe-vwugry` и `fix/gps-phone-false-positive`: совпадают.

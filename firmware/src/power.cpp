@@ -7,7 +7,7 @@
 #include "ui.h"
 #include "power_gesture.h"
 namespace powergate {
-bool available(){return (PIN_POWER_HOLD==7 || (PIN_POWER_HOLD>=14 && PIN_POWER_HOLD<=18)) &&
+bool available(){return PIN_POWER_HOLD==7 &&
  rtc_gpio_is_valid_gpio((gpio_num_t)PIN_POWER_HOLD) && PIN_POWER_HOLD!=PIN_BTN_A &&
  PIN_POWER_HOLD!=PIN_BTN_B && PIN_POWER_HOLD!=PIN_MPU_INT && PIN_POWER_HOLD!=PIN_SDA &&
  PIN_POWER_HOLD!=PIN_SCL && PIN_POWER_HOLD!=PIN_BUZZER && PIN_POWER_HOLD!=PIN_GPS_EN &&
