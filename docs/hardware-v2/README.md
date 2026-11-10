@@ -3,7 +3,8 @@
 Текущие требования продукта — [product.md](../product.md), состояние работы —
 [workboard.md](../workboard.md), правила чатов — [collaboration.md](../collaboration.md).
 Название ещё не утверждено. Детали ожидаются для замеров; к изготовлению не готово.
-Подбор электронного выключателя остановлен: проверенной схемы и BOM нет.
+По задаче владельца возобновлён [подбор кнопочного питания](button-power-selection.md):
+варианты исследованы, но доступный дозаказ, схема и BOM ещё не подтверждены.
 
 ## Начать отсюда
 
@@ -15,6 +16,7 @@
 | [components.md](components.md) | Состав устройства и состояние проверки модулей |
 | [measurements.md](measurements.md) | Порядок замеров и статус геометрии |
 | [electrical-baseline.md](electrical-baseline.md) | Распиновка и вопросы электрической схемы |
+| [button-power-selection.md](button-power-selection.md) | Две кнопки, готовые решения, проверка поставок и условия дозаказа |
 | [journal.md](journal.md) | История решений и изменений |
 | [prototype-review.md](prototype-review.md) | Наблюдения по пяти фото альфа-прототипа |
 | [procurement.md](procurement.md) | Предварительный крепёж, производства PCB и расчёт цен |
