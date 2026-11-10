@@ -1,7 +1,7 @@
 // Раскладка пинов (ТЗ, раздел 3). Сверить с шелкографией платы до пайки!
 #pragma once
 
-// I²C: BME280, MPU6050, QMC5883L, INA219, OLED
+// I²C: BME280, MPU6050, компас, INA219, LCD ST7567, DS3231
 constexpr int PIN_SDA = 8;
 constexpr int PIN_SCL = 9;
 
@@ -26,10 +26,12 @@ constexpr int PIN_MPU_INT = 4;
 // Пищалка
 constexpr int PIN_BUZZER = 5;
 
-// Часы DS1302 (3-проводной интерфейс, не I²C)
-constexpr int PIN_RTC_CLK = 14;
-constexpr int PIN_RTC_DAT = 15;
-constexpr int PIN_RTC_RST = 7;
+// DS3231 подключён к общей I2C; прежние GPIO DS1302 больше не используются.
+// GPIO HOLD и подсветка ещё не назначены. -1 запрещает аппаратное управление.
+#ifndef V2_POWER_HOLD_PIN
+#define V2_POWER_HOLD_PIN -1
+#endif
+constexpr int PIN_POWER_HOLD=V2_POWER_HOLD_PIN;
 
 // Встроенный RGB-светодиод WS2812 на S3-Zero (у Waveshare GPIO21 — проверить по плате)
 constexpr int PIN_RGB = 21;

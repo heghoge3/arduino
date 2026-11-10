@@ -5,6 +5,7 @@
 // запись, тревоги, маячок, живой сеанс → команды телефона → синхронизация → сон, если можно.
 
 #include <Arduino.h>
+#include <Wire.h>
 #include <Preferences.h>
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
@@ -19,6 +20,7 @@
 #include "gps_override.h"
 #include "nmea.h"
 #include "pins.h"
+#include "power.h"
 #include "proto.h"
 #include "radio.h"
 #include "sensors.h"
@@ -947,6 +949,29 @@ void handleButton(ui::Button e) {
   e=ui::hikeButton(e);
   if (e != ui::Button::NONE) LOGD(M_UI, "кнопка %u", (unsigned)e);
   switch (e) {
+    case ui::Button::POWER_FINISH:
+    case ui::Button::POWER_OPEN: {
+      if(!powergate::available())break;
+      if(e==ui::Button::POWER_FINISH && (H.phase==hike::ACTIVE||H.phase==hike::RECOVERY)){
+        if(changeHike(hike::FINISH,H.id,H.revision,esp_random()|1u)!=proto::ACK_OK){ui::hikeResult(false);break;}
+      }else{
+        bool syncing=g_sync.active;
+        for(const auto& job:g_syncWait)syncing|=job.active;
+        if(syncing){ui::hikeResult(false);break;}
+        if(H.phase==hike::ACTIVE && N.now>P.lastPointTime)logPoint();
+        flushCamp();
+        if(g_sdError||P.campN){ui::hikeResult(false);break;}
+      }
+      P.recording=false;flushLog();
+      ui::splash("Отпустите кнопки");
+      uint32_t releasedAt=millis();
+      while(millis()-releasedAt<100){
+        if(digitalRead(PIN_BTN_A)==LOW||digitalRead(PIN_BTN_B)==LOW)releasedAt=millis();
+        delay(5);
+      }
+      ui::splash("Отключение питания");radio::shutdown();gps::power(false);Serial.flush();
+      powergate::cut();break;
+    }
     case ui::Button::HIKE_START:
     case ui::Button::HIKE_FINISH:
     case ui::Button::HIKE_RESUME: {
@@ -1043,7 +1068,7 @@ void watchState() {
     // Поля датчиков и SD хранят «плохо» (true — не работает), как и сравниваются ниже
     g_w = Watch{true, (uint8_t)radio::state(), radio::secured(), N.gpsOn, N.fix, nmeaDead, N.spoof, !N.env.ok, !N.pwr.ok,
                 !storage::sdOk(), clockx::trusted(), P.power.low(), P.power.critical(), !pr.bme, !pr.ina, !pr.mpu,
-                !pr.oled, !pr.compass, up, 0, 0, up, N.recovering};
+                !pr.display, !pr.compass, up, 0, 0, up, N.recovering};
     return;
   }
   // Bluetooth
@@ -1106,7 +1131,7 @@ void watchState() {
   edge(!pr.bme, g_w.noBme, logbuf::WARN, logbuf::M_SENS, "BME280 пропал с шины I2C", "BME280 нашёлся на шине");
   edge(!pr.ina, g_w.noIna, logbuf::WARN, logbuf::M_SENS, "INA219 пропал с шины I2C", "INA219 нашёлся на шине");
   edge(!pr.mpu, g_w.noMpu, logbuf::WARN, logbuf::M_SENS, "MPU6050 пропал с шины I2C", "MPU6050 нашёлся на шине");
-  edge(!pr.oled, g_w.noOled, logbuf::WARN, logbuf::M_SENS, "экран пропал с шины I2C", "экран нашёлся на шине");
+  edge(!pr.display, g_w.noOled, logbuf::WARN, logbuf::M_SENS, "экран пропал с шины I2C", "экран нашёлся на шине");
   edge(!pr.compass, g_w.noCompass, logbuf::WARN, logbuf::M_SENS, "компас пропал с шины I2C", "компас нашёлся на шине");
   if (g_storageReady) edge(!storage::sdOk(), g_w.sdBad, logbuf::ERR, logbuf::M_SD, "SD недоступна", "SD снова доступна");
   // Время и батарея
@@ -1245,9 +1270,9 @@ void secondTick() {
     g_lastResyncMs = ms;
     int32_t delta = clockx::resync();
     int32_t rejected = clockx::rejectedResync();
-    if (rejected) LOGW(M_RTC, "DS1302: %+ld с отклонено; сверь с телефоном", (long)rejected);
+    if (rejected) LOGW(M_RTC, "DS3231: %+ld с отклонено; сверь с телефоном", (long)rejected);
     if (delta) {
-      LOGD(M_RTC, "DS1302: поправка %+ld с", (long)delta);
+      LOGD(M_RTC, "DS3231: поправка %+ld с", (long)delta);
       onClockJump(delta);
     }
   }
@@ -1278,6 +1303,9 @@ bool canSleep(uint32_t ms) {
 
 // forceS > 0 — уснуть ровно на столько (консольная команда sleep, проверка сна на голой плате)
 void goToSleep(int32_t forceS = 0) {
+  if(!powergate::retainForSleep()){
+    LOGE(M_PWR,"HOLD не удержан: сон отменён");return;
+  }
   N.now = clockx::now();
   if (P.campN && N.now - P.lastFlushAt >= SD_FLUSH_S) flushCamp();
   // Будим на ближайшее: запись (если идёт) или маячок (если не невидимка); иначе через час
@@ -1394,7 +1422,7 @@ void console() {
 #endif
                       ax, ay, az, sqrtf(ax * ax + ay * ay + az * az), (unsigned long)P.stepDet.count());
       } else {
-        Serial.println("MPU6050: ошибка чтения ускорений; проверь питание, SDA/SCL и наличие 0x68 в i2c");
+        Serial.println("MPU6050: ошибка чтения ускорений; проверь питание, SDA/SCL и наличие 0x69 в i2c (AD0 HIGH)");
       }
     } else if (!strcmp(line, "i2c")) {
       for (uint8_t a = 1; a < 127; a++) {
@@ -1455,9 +1483,9 @@ void console() {
 uint8_t buildChecks(proto::Check* c) {
   const sensors::Presence& pr = sensors::presence();
   uint8_t n = 0;
-  c[n++] = {1, (uint8_t)(pr.oled ? 0 : 2), (uint8_t)(pr.oled ? 0 : 1), 0x3C};
+  c[n++] = {1, (uint8_t)(pr.display ? 0 : 2), (uint8_t)(pr.display ? 0 : 1), sensors::displayAddress()};
   c[n++] = {2, (uint8_t)(pr.ina ? 0 : 2), (uint8_t)(pr.ina ? 0 : 1), 0x40};
-  c[n++] = {3, (uint8_t)(pr.mpu ? 0 : 2), (uint8_t)(pr.mpu ? 0 : 1), 0x68};
+  c[n++] = {3, (uint8_t)(pr.mpu ? 0 : 2), (uint8_t)(pr.mpu ? 0 : 1), 0x69};
   c[n++]={4,(uint8_t)(pr.compass?0:1),(uint8_t)(pr.compass?18:1),pr.compassAddr};
   if (!pr.bme) c[n++] = {5, 2, 1, 0x76};
   else if (!pr.bmeIdOk) c[n++] = {5, 2, 2, pr.bmeAddr};
@@ -1518,6 +1546,7 @@ void logBoot(Preferences& prefs) {
 }
 
 void setup() {
+  powergate::begin();
   setCpuFrequencyMhz(80);  // BLE и датчикам хватает, ток меньше
   Serial.begin(115200);
   g_bootMs = millis();
@@ -1533,19 +1562,21 @@ void setup() {
 
   loadSettings();
   applySettings();
+  Wire.begin(PIN_SDA,PIN_SCL,100000);
+  Wire.setTimeOut(50);
   bool rtcOk = clockx::begin(cold);
   N.now = clockx::now();
   if (cold) {
     initPersist(); P.bootCount=1; P.recording=false; applySettings();
     logBoot(g_prefs);
-    if (!rtcOk) LOGE(M_RTC, "DS1302: нет ответа RAM; CLK=%d DAT=%d RST=%d, проверь питание и общий GND", PIN_RTC_CLK, PIN_RTC_DAT, PIN_RTC_RST);
+    if (!rtcOk) LOGE(M_RTC, "DS3231: нет ответа I2C 0x68; проверь питание, SDA/SCL и общий GND");
     else if (!clockx::trusted()) LOGW(M_RTC, "часы не проверены: стояли или не ставились");
   } else {
     dlog::Counters& c = dlog::counters();
     if (wake == ESP_SLEEP_WAKEUP_TIMER) c.wakeTimer++;
     else if (wake == ESP_SLEEP_WAKEUP_EXT1) c.wakeButton++;
     else if (wake == ESP_SLEEP_WAKEUP_EXT0) c.wakeMotion++;
-    if (!rtcOk) LOGW(M_RTC, "DS1302 не ответил после сна — время по внутренним часам");
+    if (!rtcOk) LOGW(M_RTC, "DS3231 не ответил после сна — время по внутренним часам");
     if (wake != ESP_SLEEP_WAKEUP_TIMER) {
       LOGD(M_PWR, "проснулся: %s", wake == ESP_SLEEP_WAKEUP_EXT1 ? "кнопка" : (wake == ESP_SLEEP_WAKEUP_EXT0 ? "движение" : "?"));
     }
@@ -1581,7 +1612,7 @@ void setup() {
       else LOGE(M_SD, "SD не найдена — трек только в памяти");
       LOGI(M_SENS, "I2C: BME280 %s%s, INA219 %s, MPU6050 %s, компас %s, экран %s", pr.bme ? "да" : "НЕТ",
            pr.bme && !pr.bmeIdOk ? " (не BME!)" : "", pr.ina ? "да" : "НЕТ", pr.mpu ? "да" : "НЕТ",
-           pr.compass ? "да" : "НЕТ", pr.oled ? "да" : "НЕТ");
+           pr.compass ? "да" : "НЕТ", pr.display ? "да" : "НЕТ");
       LOGI(M_SYS, "настройки: GPS %s/%u с, маячок %u с, запись %u/%u с, отладка %s", S.gpsMode ? "импульсы" : "всегда",
            S.gpsPulseS, S.beaconS, S.logMovingS, S.logCampS, S.debug ? "вкл" : "выкл");
     }

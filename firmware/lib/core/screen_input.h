@@ -3,7 +3,7 @@
 
 namespace screeninput {
 
-enum class Button : uint8_t { NONE, A_SHORT, A_LONG, B_SHORT, B_LONG, HIKE_START, HIKE_FINISH, HIKE_RESUME, PAIR };
+enum class Button : uint8_t { NONE, A_SHORT, A_LONG, B_SHORT, B_LONG, HIKE_START, HIKE_FINISH, HIKE_RESUME, PAIR, POWER_FINISH, POWER_OPEN };
 
 // No hardware dependencies: debounce, wake-only presses and inactivity use millis().
 class Controls {

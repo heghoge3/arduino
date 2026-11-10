@@ -1,6 +1,9 @@
 #include "clock.h"
 
 #include <Arduino.h>
+#include <Wire.h>
+#include <Preferences.h>
+#include "ds3231_time.h"
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
@@ -12,100 +15,39 @@ namespace clockx {
 
 namespace {
 
-// Регистры DS1302 (адрес записи; чтение = +1)
-constexpr uint8_t REG_SEC = 0x80;
-constexpr uint8_t REG_WP = 0x8E;
-constexpr uint8_t REG_TRICKLE = 0x90;
-constexpr uint8_t REG_CLOCK_BURST = 0xBE;
-constexpr uint8_t REG_RAM0 = 0xC0;
-
-// Метка в RAM DS1302 (питается от батарейки): «время ставили с телефона/GPS».
-// Села батарейка — RAM обнулится, метка пропадёт, время станет непроверенным.
-constexpr uint8_t RAM_MAGIC = 0xA7;
+constexpr uint8_t ADDR_RTC=0x68;
+Preferences g_clockPrefs;
+bool g_prefsReady=false;
+bool g_savedTrust=false;
 
 bool g_present = false;
 int32_t g_rejectedResync = 0;
 // Ход времени ведут внутренние часы ESP32 (системное время): они идут и в глубоком сне.
-// Доверие и источник — в RTC-памяти, чтобы пережить сон, даже если DS1302 при пробуждении не ответил
+// Доверие и источник — в RTC-памяти, чтобы пережить сон, даже если DS3231 при пробуждении не ответил
 RTC_DATA_ATTR bool g_trusted = false;
 RTC_DATA_ATTR Source g_source = SRC_NONE;
 RTC_DATA_ATTR bool g_sysValid = false;  // системное время уже ставили (до сна)
 RTC_DATA_ATTR uint32_t g_bootUtc = 0;   // начало работы, сохраняется во сне и сдвигается вместе с часами
 
-void writeByte(uint8_t v, bool reading = false) {
-  pinMode(PIN_RTC_DAT, OUTPUT);
-  for (int i = 0; i < 8; i++) {
-    digitalWrite(PIN_RTC_DAT, v & 1);
-    delayMicroseconds(1);
-    digitalWrite(PIN_RTC_CLK, HIGH);
-    delayMicroseconds(1);
-    // DS1302 выдаёт первый бит уже на последнем спаде команды чтения.
-    // Освобождаем DAT ДО этого спада, иначе оба устройства ведут линию.
-    if (reading && i == 7) pinMode(PIN_RTC_DAT, INPUT_PULLUP);
-    digitalWrite(PIN_RTC_CLK, LOW);
-    v >>= 1;
-  }
-}
-
-uint8_t readByte() {
-  pinMode(PIN_RTC_DAT, INPUT_PULLUP);  // без модуля читаются 0xFF — дата невалидна
-  uint8_t v = 0;
-  for (int i = 0; i < 8; i++) {
-    delayMicroseconds(1);
-    v |= (digitalRead(PIN_RTC_DAT) ? 1 : 0) << i;
-    digitalWrite(PIN_RTC_CLK, HIGH);
-    delayMicroseconds(1);
-    digitalWrite(PIN_RTC_CLK, LOW);
-  }
-  return v;
-}
-
-void start() {
-  digitalWrite(PIN_RTC_CLK, LOW);
-  digitalWrite(PIN_RTC_RST, HIGH);
-  delayMicroseconds(4);
-}
-
-void stop() {
-  digitalWrite(PIN_RTC_RST, LOW);
-  delayMicroseconds(4);
-}
-
-uint8_t readReg(uint8_t reg) {
-  start();
-  writeByte(reg | 1, true);
-  uint8_t v = readByte();
-  stop();
-  return v;
-}
-
-void writeReg(uint8_t reg, uint8_t v) {
-  start();
-  writeByte(reg);
-  writeByte(v);
-  stop();
-}
-
-uint8_t bcd2bin(uint8_t v) { return (v >> 4) * 10 + (v & 0x0F); }
-uint8_t bin2bcd(uint8_t v) { return ((v / 10) << 4) | (v % 10); }
-
-// Прочитать дату-время пачкой. halted — часы стояли (бит CH)
-bool readClock(uint32_t& utc, bool& halted) {
-  uint8_t r[8];
-  start();
-  writeByte(REG_CLOCK_BURST | 1, true);
-  for (int i = 0; i < 8; i++) r[i] = readByte();
-  stop();
-  halted = r[0] & 0x80;
-  int sec = bcd2bin(r[0] & 0x7F), min = bcd2bin(r[1] & 0x7F), hour = bcd2bin(r[2] & 0x3F);
-  int day = bcd2bin(r[3] & 0x3F), mon = bcd2bin(r[4] & 0x1F), year = 2000 + bcd2bin(r[6]);
-  // Нет модуля — линия данных висит, читаются 0xFF/0x00: такие даты невалидны
-  if (sec > 59 || min > 59 || hour > 23 || day < 1 || day > 31 || mon < 1 || mon > 12) return false;
-  utc = nmea::toUnix(year, mon, day, hour, min, sec);
+bool readBytes(uint8_t reg,uint8_t* out,uint8_t n) {
+  Wire.beginTransmission(ADDR_RTC); Wire.write(reg);
+  if(Wire.endTransmission(false)!=0 || Wire.requestFrom(ADDR_RTC,n)!=n)return false;
+  for(uint8_t i=0;i<n;i++)out[i]=Wire.read();
   return true;
 }
+bool writeReg(uint8_t reg,uint8_t value) {
+  Wire.beginTransmission(ADDR_RTC);Wire.write(reg);Wire.write(value);
+  return Wire.endTransmission()==0;
+}
+bool readClock(uint32_t& utc,bool& halted) {
+  uint8_t r[7],status;
+  if(!readBytes(0,r,7)||!readBytes(0x0F,&status,1))return false;
+  halted=(status&0x80)!=0; // OSF: oscillator stopped, time cannot be trusted
+  return ds3231time::decode(r,utc);
+}
+uint8_t bin2bcd(uint8_t v) {return ds3231time::packed(v);}
 
-void writeClock(uint32_t utc) {
+bool writeClock(uint32_t utc) {
   // Unix → дата (обратный алгоритм Хиннанта)
   long z = utc / 86400 + 719468;
   long era = (z >= 0 ? z : z - 146096) / 146097;
@@ -119,21 +61,22 @@ void writeClock(uint32_t utc) {
   y += (m <= 2);
   uint32_t sod = utc % 86400;
 
-  writeReg(REG_WP, 0x00);  // снять защиту записи
-  start();
-  writeByte(REG_CLOCK_BURST);
-  writeByte(bin2bcd(sod % 60));  // секунды, CH = 0 — часы идут
-  writeByte(bin2bcd((sod / 60) % 60));
-  writeByte(bin2bcd(sod / 3600));  // 24-часовой формат
-  writeByte(bin2bcd(d));
-  writeByte(bin2bcd(m));
-  writeByte(1);  // день недели не используем
-  writeByte(bin2bcd(y - 2000));
-  writeByte(0x80);  // защита записи обратно
-  stop();
-  writeReg(REG_WP, 0x00);
-  writeReg(REG_RAM0, RAM_MAGIC);
-  writeReg(REG_WP, 0x80);
+  if(y<2000||y>2099)return false;
+  // Invalidate durable trust before changing registers: interruption must not validate a partial write.
+  g_savedTrust=false;
+  if(!g_prefsReady||g_clockPrefs.putBool("trusted",false)!=1)return false;
+  uint8_t control,status;
+  if(!readBytes(0x0E,&control,1)||!readBytes(0x0F,&status,1))return false;
+  Wire.beginTransmission(ADDR_RTC);Wire.write(0);
+  const uint8_t values[]={bin2bcd(sod%60),bin2bcd((sod/60)%60),bin2bcd(sod/3600),
+      1,bin2bcd(d),bin2bcd(m),bin2bcd(y-2000)};
+  Wire.write(values,7);
+  if(Wire.endTransmission()!=0 || !writeReg(0x0E,control&~0x80) ||
+      !writeReg(0x0F,status&~0x80))return false;
+  uint32_t check;bool halted;
+  if(!readClock(check,halted)||halted||check<utc||check-utc>1)return false;
+  g_savedTrust=g_clockPrefs.putBool("trusted",true)==1;
+  return g_savedTrust;
 }
 
 void setBase(uint32_t utc) {
@@ -158,29 +101,15 @@ uint32_t buildTime() {
 
 bool begin(bool cold) {
   if (cold) g_bootUtc = 0;
-  pinMode(PIN_RTC_CLK, OUTPUT);
-  pinMode(PIN_RTC_RST, OUTPUT);
-  digitalWrite(PIN_RTC_RST, LOW);
-  digitalWrite(PIN_RTC_CLK, LOW);
-
-  // Подзаряд батарейки выключить ВСЕГДА: CR2032 не заряжается (ТЗ, раздел 2)
-  writeReg(REG_WP, 0x00);
-  writeReg(REG_TRICKLE, 0x00);
-  writeReg(REG_WP, 0x80);
-
-  uint32_t utc = 0;
-  bool halted = true;
-  // Неправильная дата нового модуля не означает, что он отсутствует.
-  // Проверяем обмен через последний байт RAM, сохраняя его содержимое.
-  constexpr uint8_t probeReg = 0xFC;
-  uint8_t saved = readReg(probeReg);
-  writeReg(REG_WP, 0x00);
-  writeReg(probeReg, 0x5A);
-  bool first = readReg(probeReg) == 0x5A;
-  writeReg(probeReg, 0xA5);
-  g_present = first && readReg(probeReg) == 0xA5;
-  writeReg(probeReg, saved);
-  writeReg(REG_WP, 0x80);
+  if(!g_prefsReady)g_prefsReady=g_clockPrefs.begin("rtc-v2",false);
+  g_savedTrust=g_prefsReady&&g_clockPrefs.getBool("trusted",false);
+  uint8_t status;
+  g_present=readBytes(0x0F,&status,1);
+  // A misplaced MPU6050 at 0x68 must never receive RTC writes. Fail closed.
+  uint8_t who=0;
+  if(g_present && readBytes(0x75,&who,1) && (who&0x7E)==0x68)g_present=false;
+  uint32_t utc=0;
+  bool halted=true;
   if (!cold && g_sysValid) {
     // Внутренние часы идут во сне. Не заменяем их ни старым RTC, ни временем сборки:
     // __TIME__ может быть в местном часовом поясе компьютера, а здесь нужен UTC.
@@ -197,14 +126,8 @@ bool begin(bool cold) {
     halted = true;
     utc = buildTime();
   }
-  if (halted) {
-    // Часы стояли: запускаем с того, что есть, но время не доверенное
-    writeClock(utc);
-    writeReg(REG_WP, 0x00);
-    writeReg(REG_RAM0, 0x00);  // снять метку доверия
-    writeReg(REG_WP, 0x80);
-  }
-  g_trusted = !halted && readReg(REG_RAM0) == RAM_MAGIC;
+  // Do not clear OSF or overwrite a newly connected clock with build time.
+  g_trusted=!halted&&g_savedTrust;
   g_source = g_trusted ? SRC_RTC : SRC_NONE;
   setBase(utc);
   return true;
@@ -239,12 +162,12 @@ int32_t offerGps(uint32_t utc, bool spoofSuspected) {
 
 int32_t resync() {
   g_rejectedResync = 0;
-  if (!g_present || !g_trusted || readReg(REG_RAM0) != RAM_MAGIC) return 0;
+  if (!g_present || !g_trusted || !g_savedTrust) return 0;
   uint32_t utc;
   bool halted;
   if (!readClock(utc, halted) || halted || utc < 1700000000UL) return 0;
   int32_t delta = static_cast<int32_t>(utc - now());
-  // Раньше любая правдоподобная дата DS1302 сразу меняла системное время.
+  // Раньше любая правдоподобная дата DS3231 сразу меняла системное время.
   // Скачок на минуты портил метки времени и превращал корректный GPS в R_TIME.
   // Большое расхождение требует независимой синхронизации с телефоном.
   if (delta > 30 || delta < -30) {

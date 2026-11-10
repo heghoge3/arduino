@@ -1,4 +1,4 @@
-// Датчики на общей шине I²C: BME280, INA219, MPU6050, компас (только наличие), OLED (наличие).
+// Датчики на общей шине I²C: BME280, INA219, MPU6050, компас (только наличие), LCD ST7567 (наличие по I2C, тип не подтверждается ACK).
 // В сборке FAKE_SENSORS все значения эмулируются — для платы без датчиков.
 #pragma once
 #include <stdint.h>
@@ -27,7 +27,7 @@ struct Power {
 };
 
 struct Presence {
-  bool bme, bmeIdOk, ina, mpu, oled, compass;
+  bool bme, bmeIdOk, ina, mpu, display, compass;
   uint8_t bmeAddr, compassAddr, bmeChipId;
 };
 
@@ -69,6 +69,7 @@ void setTemperatureOffset(int16_t hundredths);
 float seaLevel();
 
 bool i2cProbe(uint8_t addr);
+uint8_t displayAddress(); // 0 when absent or ambiguous (both 0x3E and 0x3F respond)
 
 // Процент заряда по напряжению Li-ion (в покое)
 uint8_t batteryPercent(float volts);

@@ -5,14 +5,16 @@
 namespace hike {
 class Menu {
  public:
+  bool powerAvailable=false;
   uint8_t selected=0;
   bool confirming=false;
   void reset() { selected=0; confirming=false; }
-  uint8_t count(Phase phase) const { return phase==RECOVERY ? 4 : (phase==ERROR ? 2 : 3); }
+  uint8_t count(Phase phase) const { return (phase==RECOVERY ? 4 : (phase==ERROR ? 2 : 3))+(powerAvailable?1:0); }
   // 0=data, 4=pairing, otherwise lifecycle Action.
   uint8_t action(Phase phase) const {
     if (selected==count(phase)-1) return 4;
     if (selected==count(phase)-2) return 0;
+    if (powerAvailable && selected==count(phase)-3)return 5;
     if (phase==RECOVERY) return selected==0 ? RESUME : FINISH;
     return phase==ACTIVE ? FINISH : START;
   }

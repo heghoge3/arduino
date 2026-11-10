@@ -8,6 +8,7 @@
 #include "clock.h"
 #include "config.h"
 #include "pins.h"
+#include "power.h"
 #include "radio.h"
 #include "storage.h"
 #include "hike_menu.h"
@@ -16,8 +17,9 @@ namespace ui {
 
 namespace {
 
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE);
-bool g_oledOk = false;
+// Candidate ST7567 init profile; verify orientation/contrast/offset on GM12864-59N.
+U8G2_ST7567_JLX12864_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE);
+bool g_displayOk = false;
 bool g_screenOn = false;
 screeninput::Controls g_controls(SCREEN_ON_MS, BTN_DEBOUNCE_MS, BTN_LONG_MS);
 uint8_t g_page = 0;
@@ -25,6 +27,7 @@ constexpr uint8_t PAGES = 5;
 hike::Menu g_hikeMenu;
 uint32_t g_menuRevision=0;
 bool g_hikeError=false;
+bool g_shutdown=false,g_finishOnShutdown=true;
 
 // ---- Звук и свет: шаги «вкл мс, выкл мс, цвет» ----
 struct Step {
@@ -170,12 +173,19 @@ void drawPage4() {
 void drawHike() {
   const auto phase=static_cast<hike::Phase>(H.phase);
   drawHeader("поход");
+  if(g_shutdown){
+    const bool open=phase==hike::ACTIVE||phase==hike::RECOVERY;
+    oled.drawUTF8(0,27,open?"Завершить поход?":"Выключить прибор?");
+    oled.drawUTF8(0,41,open?(g_finishOnShutdown?"> Да":" > Нет, сохранить"):"B держать 1,5с");
+    oled.drawUTF8(0,53,open?"A: да/нет B: 1,5с":"");
+    oled.drawUTF8(0,64,"A долго: отмена");return;
+  }
   const char* state=phase==hike::ACTIVE ? "Идёт запись" :
       (phase==hike::ENDED ? "Поход завершён" :
       (phase==hike::RECOVERY ? "Поход прерван" : (phase==hike::IDLE ? "Готов к походу" : "Ошибка хранения")));
   oled.drawUTF8(0,27,g_hikeError ? "Не сохранено!" : state);
   const auto action=g_hikeMenu.action(phase);
-  const char* label=action==hike::START ? "Начать поход" : (action==hike::FINISH ? "Завершить поход" :
+  const char* label=action==5 ? "Выключить прибор" : action==hike::START ? "Начать поход" : (action==hike::FINISH ? "Завершить поход" :
       (action==hike::RESUME ? "Продолжить поход" : (action==4 ? "Подключить телефон" : "Показать данные")));
   oled.drawUTF8(0,41,label);
   oled.drawUTF8(0,53,g_hikeMenu.confirming ? "B держать 1,5с" : "A: выбор  B: OK");
@@ -195,14 +205,15 @@ void begin(bool coldBoot, int wakePin) {
   ledcAttachPin(PIN_BUZZER, 0);
 #endif
   led(0, 0, 0);  // встроенный WS2812 гасим сразу: он и выключенный ест ток — проверить замером
-  g_oledOk = sensors::presence().oled;
-  if (g_oledOk) {
-    oled.setBusClock(400000);
+  g_displayOk = sensors::presence().display;
+  if (g_displayOk) {
+    oled.setI2CAddress(sensors::displayAddress()<<1);
+    oled.setBusClock(100000);
     oled.begin();
     oled.enableUTF8Print();
     oled.setPowerSave(1);
   }
-  g_controls.begin(millis(), g_oledOk, wakePin == PIN_BTN_A ? Button::A_SHORT :
+  g_controls.begin(millis(), g_displayOk, wakePin == PIN_BTN_A ? Button::A_SHORT :
                    (wakePin == PIN_BTN_B ? Button::B_SHORT : Button::NONE));
   g_screenOn = g_controls.active();
   g_page=H.phase==hike::ACTIVE ? 0 : 4;
@@ -214,14 +225,14 @@ void begin(bool coldBoot, int wakePin) {
 Button poll() {
   tickPattern();
   if (g_menuRevision!=H.revision) {
-    g_hikeMenu.reset(); g_menuRevision=H.revision; g_hikeError=false;
+    g_hikeMenu.reset(); g_shutdown=false; g_menuRevision=H.revision; g_hikeError=false;
   }
   const Button event = g_controls.poll(digitalRead(PIN_BTN_A) == LOW,
                                        digitalRead(PIN_BTN_B) == LOW, millis());
   if (g_screenOn != g_controls.active()) {
     g_screenOn = g_controls.active();
-    if (g_oledOk) oled.setPowerSave(g_screenOn ? 0 : 1);
-    g_hikeMenu.reset(); g_hikeError=false;
+    if (g_displayOk) oled.setPowerSave(g_screenOn ? 0 : 1);
+    g_hikeMenu.reset(); g_shutdown=false; g_hikeError=false;
     if (g_screenOn) { g_page = H.phase==hike::ACTIVE ? 0 : 4; draw(); }
   }
   return event;
@@ -230,13 +241,21 @@ Button poll() {
 bool anyHeld() { return g_controls.held(); }
 
 Button hikeButton(Button e) {
-  if (g_oledOk && g_screenOn && g_page!=4 && e==Button::B_LONG) {
-    g_page=4; g_hikeMenu.reset(); g_hikeError=false; draw(); return Button::NONE;
+  if (g_displayOk && g_screenOn && g_page!=4 && e==Button::B_LONG) {
+    g_page=4; g_hikeMenu.reset(); g_shutdown=false; g_hikeError=false; draw(); return Button::NONE;
   }
-  if (g_page!=4 || !g_oledOk || !g_screenOn) return e;
+  if (g_page!=4 || !g_displayOk || !g_screenOn) return e;
   const auto phase=static_cast<hike::Phase>(H.phase);
+  g_hikeMenu.powerAvailable=powergate::available()&&phase!=hike::ERROR;
+  if(g_shutdown){
+    if(e==Button::A_LONG)g_shutdown=false;
+    if(e==Button::A_SHORT)g_finishOnShutdown=!g_finishOnShutdown;
+    if(e==Button::B_LONG){g_shutdown=false;return g_finishOnShutdown?Button::POWER_FINISH:Button::POWER_OPEN;}
+    if(e!=Button::NONE)draw();return Button::NONE;
+  }
   if (!g_hikeMenu.confirming && e==Button::B_SHORT) {
     auto action=g_hikeMenu.action(phase);
+    if (action==5){g_shutdown=true;g_finishOnShutdown=true;draw();return Button::NONE;}
     if (action==0) { g_page=0; draw(); return Button::NONE; }
     if (action==4) { draw(); return Button::PAIR; }
   }
@@ -269,7 +288,7 @@ void play(Sound s) {
 bool busy() { return g_pattern != nullptr; }
 
 void screenOn() {
-  if (!g_oledOk) return;
+  if (!g_displayOk) return;
   if (!g_screenOn) {
     g_page = H.phase==hike::ACTIVE ? 0 : 4;
     oled.setPowerSave(0);
@@ -292,7 +311,7 @@ void nextPage() {
 bool screenActive() { return g_screenOn; }
 
 void draw() {
-  if (!g_oledOk || !g_screenOn) return;
+  if (!g_displayOk || !g_screenOn) return;
   oled.clearBuffer();
   switch (g_page) {
     case 0: drawPage1(); break;
@@ -305,7 +324,7 @@ void draw() {
 }
 
 void splash(const char* line2) {
-  if (!g_oledOk) return;
+  if (!g_displayOk) return;
   oled.setPowerSave(0);
   oled.clearBuffer();
   oled.setFont(u8g2_font_10x20_t_cyrillic);
@@ -321,7 +340,7 @@ void sleep() {
   buzzer(false);
   led(0, 0, 0);
   g_pattern = nullptr;
-  if (g_oledOk) oled.setPowerSave(1);
+  if (g_displayOk) oled.setPowerSave(1);
   g_screenOn = false;
   g_controls.hide();
 }

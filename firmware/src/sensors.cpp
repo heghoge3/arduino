@@ -18,8 +18,13 @@ namespace sensors {
 namespace {
 
 constexpr uint8_t ADDR_INA = 0x40;
-constexpr uint8_t ADDR_MPU = 0x68;
-constexpr uint8_t ADDR_OLED = 0x3C;
+constexpr uint8_t ADDR_MPU = 0x69; // V2: AD0 must be HIGH; 0x68 belongs exclusively to DS3231.
+uint8_t g_displayAddress=0;
+bool detectDisplay() {
+  const bool a=i2cProbe(0x3E),b=i2cProbe(0x3F);
+  g_displayAddress=(a!=b)?(a?0x3E:0x3F):0;
+  return g_displayAddress!=0;
+}
 constexpr uint8_t ADDR_QMC = 0x0D;
 constexpr uint8_t ADDR_QMC_P = 0x2C;
 constexpr uint8_t ADDR_HMC = 0x1E;
@@ -73,9 +78,9 @@ float mpuTemp() {
 
 void detect() {
   g_pres = Presence{};
-  g_pres.oled = i2cProbe(ADDR_OLED);
+  g_pres.display = detectDisplay();
   g_pres.ina = i2cProbe(ADDR_INA);
-  g_pres.mpu = i2cProbe(ADDR_MPU);
+  g_pres.mpu = i2cProbe(ADDR_MPU) && (readReg(ADDR_MPU,0x75)&0x7E)==0x68;
   for (uint8_t a : {(uint8_t)0x76, (uint8_t)0x77}) {
     if (i2cProbe(a)) {
       g_pres.bme = true;
@@ -105,15 +110,17 @@ float fakeTemp() {
 
 }  // namespace
 
+uint8_t displayAddress() { return g_displayAddress; }
+
 bool i2cProbe(uint8_t addr) {
   Wire.beginTransmission(addr);
   return Wire.endTransmission() == 0;
 }
 
 void begin(bool coldBoot) {
-  Wire.begin(PIN_SDA, PIN_SCL, 400000);
+  // Shared I2C is initialized before clockx::begin; do not reset it here.
 #ifdef FAKE_SENSORS
-  g_pres = Presence{true, true, true, true, i2cProbe(ADDR_OLED), true, 0x76, ADDR_QMC, 0x60};
+  g_pres = Presence{true, true, true, true, detectDisplay(), true, 0x76, ADDR_QMC, 0x60};
   (void)coldBoot;
   return;
 #else

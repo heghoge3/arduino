@@ -5,12 +5,12 @@
 // Версия прошивки (уходит в INFO)
 constexpr uint8_t FW_MAJOR = 0;
 constexpr uint8_t FW_MINOR = 1;
-constexpr uint8_t FW_PATCH = 21;
+constexpr uint8_t FW_PATCH = 22;
 
 // Пищалка: тип выяснится при сборке (ТЗ, раздел 2).
 // 1 — активная (просто подать HIGH), 0 — пассивная (тон через ledc)
 #ifndef BUZZER_ACTIVE
-#define BUZZER_ACTIVE 1
+#define BUZZER_ACTIVE 0
 #endif
 constexpr uint16_t BUZZER_TONE_HZ = 2700;  // для пассивной
 
