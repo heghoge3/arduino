@@ -1,0 +1,9 @@
+{
+  "versionName": "0.10.5",
+  "versionCode": 28,
+  "applicationId": "com.vabugeode.app",
+  "bytes": 36024866,
+  "sha256": "34fb5ccf5a7013c160d9a4fb314dd61234275462b136d300781e84d3f3d72878",
+  "certificateSha256": "f18a2b68ee3edc07189996577aca1b46f76d852925ef34eee123be8ebfe56453",
+  "sourceCommit": "b3babe4242d43c39b7e62ea4013a6df5692afda1"
+}
