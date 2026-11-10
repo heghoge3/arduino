@@ -20,7 +20,12 @@ ST7567, пассивный зуммер; цикл START/END/RESUME сохран�
 | Android | 0.10.6, versionCode 29 | Release APK собран и подписан тем же постоянным ключом; политика GPS 2 и эмулятор V2; 151 тест |
 | V2 корпуса/платы | Проектирование | Детали заказаны, реальные замеры ожидаются; изготовление ещё не утверждено |
 
-- [Скачать APK 0.10.6](https://github.com/heghoge3/arduino/raw/refs/heads/artifacts/android-v0.10.6/vabugeode-0.10.6.apk).
+- APK 0.10.6: [страница файла на GitHub — Download raw / ⬇](https://github.com/heghoge3/arduino/blob/artifacts/android-v0.10.6/vabugeode-0.10.6.apk),
+  [прямая ссылка без перенаправления GitHub](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/android-v0.10.6/vabugeode-0.10.6.apk).
+  Если встроенный браузер чата не скачивает, открыть ссылку во внешнем браузере телефона.
+  Прямая загрузка проверена по SHA-256; файл тот же, повторной сборки/смены ключа нет.
+  Попытка добавить вложения в Releases получила HTTP 401 на uploads.github.com;
+  выпуск не создан. Наличие файла в artifacts подтверждено.
 - [Историческая прошивка 0.1.19 и материалы; это не целевая V2](https://github.com/heghoge3/arduino/raw/refs/heads/artifacts/firmware-v0.1.19/vabugeode-gps-fix-0.1.19.zip).
 - Ранее программные исходники 9465499 объединены в основную ветку вместе с
   аппаратной документацией. По уточнению владельца 09.11.2026 на телефоне установлен
