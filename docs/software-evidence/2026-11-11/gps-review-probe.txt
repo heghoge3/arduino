@@ -1,0 +1,7 @@
+zone_only: rejected=1 mask=0x01
+road_20mps_t30: rejected=1 mask=0x04
+road_20mps_t301: rejected=1 mask=0x80
+road_20mps_t360: rejected=1 mask=0x80
+road_rejected_after_anchor_expiry=60/60
+phone_plus_540s_clock_mismatch: rejected=0 mask=0x42
+flat_snr_plus_baro_offset: rejected=1 mask=0x18
