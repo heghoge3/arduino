@@ -27,9 +27,11 @@ constexpr int PIN_MPU_INT = 4;
 constexpr int PIN_BUZZER = 5;
 
 // DS3231 подключён к общей I2C; прежние GPIO DS1302 больше не используются.
-// GPIO HOLD и подсветка ещё не назначены. -1 запрещает аппаратное управление.
+// V2 HOLD: GPIO7 -> анод D2 -> общая точка EN (катод D2).
+// DS1302 удалён; GPIO7 свободен и поддерживает RTC hold.
+// -1 отключает узел питания для стенда от независимого питания.
 #ifndef V2_POWER_HOLD_PIN
-#define V2_POWER_HOLD_PIN -1
+#define V2_POWER_HOLD_PIN 7
 #endif
 constexpr int PIN_POWER_HOLD=V2_POWER_HOLD_PIN;
 
