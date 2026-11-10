@@ -25,6 +25,7 @@
 #include "radio.h"
 #include "sensors.h"
 #include "spoof.h"
+#include "gps_diagnostic.h"
 #include "storage.h"
 #include "sun.h"
 #include "ui.h"
@@ -413,6 +414,20 @@ void sendSats() {
 // GPS, подмена, запись
 // ---------------------------------------------------------------------------
 
+RTC_DATA_ATTR bool g_gpsDiagnostic=false;
+RTC_DATA_ATTR uint16_t g_gpsDiagnosticCount=0;
+void saveGpsDiagnostic(const spoof::Detector& before,const spoof::Input& input,
+                       const spoof::Diagnostic::Meta& meta,spoof::Result result) {
+  if(!g_gpsDiagnostic)return;
+  uint8_t record[spoof::Diagnostic::CAP];
+  size_t size=spoof::Diagnostic::encode(before,input,meta,result,record,sizeof(record));
+  ensureStorage();
+  if(!size || !storage::appendGpsDiagnostic(record,size)){
+    g_gpsDiagnostic=false;LOGW(M_GPS,"GPS trace остановлен: ошибка записи/лимит 1 МиБ");return;
+  }
+  if(++g_gpsDiagnosticCount>=512){g_gpsDiagnostic=false;LOGI(M_GPS,"GPS trace завершён: 512 записей");}
+}
+
 void onFix() {
   const nmea::Parser& p = gps::parser();
   const nmea::Fix& f = p.fix();
@@ -425,25 +440,13 @@ void onFix() {
   uint32_t ms = millis();
   if (ms - lastFixMs > 30000) settle = 0;  // сигнала не было 30+ с
   lastFixMs = ms;
-  bool rough = f.hdop > 5.0f || f.satsUsed < 4 || settle < 5;
+  const uint8_t settleBefore=settle;
+  bool rough = !p.qualityFresh(ms) || !isfinite(f.hdop) || f.hdop <= 0 || f.hdop > 5.0f || f.satsUsed < 4 || settle < 5;
   if (settle < 255) settle++;
-  if (rough) {
-    N.fix = true;
-    N.fixType = f.fixType;
-    N.satsUsed = f.satsUsed;
-    N.hdop = f.hdop;
-    N.spoof = false;
-    N.recovering = false;
-    N.spoofMask = 0;
-    N.src = 0;  // позиция — последняя достоверная
-    N.altValid = false;
-    N.speedKmh = 0;
-    return;
-  }
   uint8_t usedSnr[nmea::MAX_SATS];
   size_t used = 0;
   for (size_t i = 0; i < p.satCount(); i++) {
-    if (p.sat(i).used) usedSnr[used++] = p.sat(i).snr;
+    if (p.sat(i).used && p.snrFresh(p.sat(i).system,ms)) usedSnr[used++] = p.sat(i).snr;
   }
   spoof::Input in{};
   in.now = N.now;
@@ -459,7 +462,33 @@ void onFix() {
   in.usedSnr = usedSnr;
   in.usedCount = used;
   in.steps = P.stepDet.count();
-  spoof::Result r = P.spoof.check(in);
+  spoof::Diagnostic::Meta meta;
+  if(g_gpsDiagnostic){
+    meta.bootCount=P.bootCount;meta.hikeId=P.hikeStart;meta.receiveMs=ms;for(unsigned i=0;i<4;i++)meta.age[i]=p.messageAge(i,ms);
+    meta.qualityCurrent=p.qualityFresh(ms);
+    for(unsigned i=0;i<4;i++)if(p.snrFresh(i,ms))meta.freshSnrSystems|=1u<<i;
+    meta.hdop=f.hdop;meta.sats=f.satsUsed;meta.fixType=f.fixType;meta.quality=f.quality;
+    meta.settle=settleBefore;meta.clockSource=clockx::source();meta.firmwarePatch=FW_PATCH;
+  }
+  if (rough) {
+    saveGpsDiagnostic(P.spoof,in,meta,{false,0});
+    N.fix = true;
+    N.fixType = f.fixType;
+    N.satsUsed = f.satsUsed;
+    N.hdop = f.hdop;
+    N.spoof = false;
+    N.recovering = false;
+    N.spoofMask = 0;
+    N.src = 0;  // позиция — последняя достоверная
+    N.altValid = false;
+    N.speedKmh = 0;
+    return;
+  }
+  spoof::Result r;
+  if(g_gpsDiagnostic){
+    const spoof::Detector before=P.spoof;
+    r=P.spoof.check(in);meta.evaluated=true;saveGpsDiagnostic(before,in,meta,r);
+  }else r=P.spoof.check(in);
   static bool clockMismatch = false;
   bool mismatch = (r.mask & spoof::R_TIME) != 0;
   if (mismatch && !clockMismatch) {
@@ -1372,7 +1401,7 @@ void console() {
     // Кто-то сидит в мониторе порта — 10 мин не уходим в глубокий сон (иначе USB пропадёт)
     if ((int32_t)(millis() + 600000 - g_awakeUntil) > 0) g_awakeUntil = millis() + 600000;
     if (!strcmp(line, "help")) {
-      Serial.println("st — состояние; i2c — сканер шины; gps on|off|auto|echo — GPS; pcas <тело> — команда модулю;"
+      Serial.println("st — состояние; i2c — сканер шины; gps on|off|auto|echo — GPS; gpsdiag on|off — запись диагностического trace; pcas <тело> — команда модулю;"
                      " win — окно BLE; info — чип и SD; log — сбросить журнал на SD; debug on|off — подробный журнал");
       Serial.println("Проверки: sleep <с> — глубокий сон (USB пропадёт, монитор переоткрыть); jump <±с> — переставить"
                      " часы, как телефон; newhike — начать новый поход; accel — ускорения MPU6050 в g;"
@@ -1458,6 +1487,11 @@ void console() {
       clockx::setFromPhone(clockx::now() + d);
       onClockJump(d);
       Serial.printf("часы переставлены на %+ld с (как от телефона), t=%lu\n", (long)d, (unsigned long)N.now);
+    } else if (!strcmp(line,"gpsdiag on")) {
+      g_gpsDiagnostic=true;g_gpsDiagnosticCount=0;
+      Serial.println("GPS trace ON: /logs/gnss-trace.bin, максимум 512 записей/1 МиБ; содержит координаты");
+    } else if (!strcmp(line,"gpsdiag off")) {
+      g_gpsDiagnostic=false;Serial.println("GPS trace OFF; файл сохранён");
     } else if (!strcmp(line, "newhike")) {
       auto res=changeHike(hike::START,H.id,H.revision,esp_random()|1u);
       Serial.printf("START: %u\n",res); sendInfo();
@@ -1557,6 +1591,7 @@ void setup() {
 
   memcpy(&P, g_rtcBlob, sizeof(P));
   if (P.magic != PERSIST_MAGIC) { initPersist(); cold=true; }
+  if(cold){g_gpsDiagnostic=false;g_gpsDiagnosticCount=0;}
   P.stepDet.resume();
   P.bootCount++;
 

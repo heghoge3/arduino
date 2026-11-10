@@ -8,6 +8,13 @@ namespace nmea {
 
 namespace {
 
+uint32_t epoch(const char* t){
+  if(strlen(t)<6)return UINT32_MAX;
+  for(unsigned i=0;i<6;i++)if(t[i]<'0'||t[i]>'9')return UINT32_MAX;
+  unsigned h=(t[0]-'0')*10+t[1]-'0',m=(t[2]-'0')*10+t[3]-'0',s=(t[4]-'0')*10+t[5]-'0';
+  return h<24&&m<60&&s<60?h*3600+m*60+s:UINT32_MAX;
+}
+
 int hexVal(char c) {
   if (c >= '0' && c <= '9') return c - '0';
   if (c >= 'A' && c <= 'F') return c - 'A' + 10;
@@ -86,6 +93,8 @@ uint32_t toUnix(int y, int m, int d, int hh, int mm, int ss) {
 
 void Parser::reset() {
   fix_ = Fix();
+  rmcEpoch_=ggaEpoch_=UINT32_MAX;
+  for(unsigned i=0;i<4;i++){stamps_[i]=0;seen_[i]=false;}
   validFixes_ = 0;
   for (auto& s : sys_) s = SysSats();
   satCount_ = 0;
@@ -93,7 +102,8 @@ void Parser::reset() {
   inSentence_ = false;
 }
 
-bool Parser::feed(char c) {
+bool Parser::feed(char c,uint32_t receivedMs) {
+  receivedMs_=receivedMs;
   if (c == '$') {
     inSentence_ = true;
     len_ = 0;
@@ -113,7 +123,8 @@ bool Parser::feed(char c) {
   return false;
 }
 
-bool Parser::parseLine(const char* line) {
+bool Parser::parseLine(const char* line,uint32_t receivedMs) {
+  receivedMs_=receivedMs;
   if (line[0] == '$') line++;
   strncpy(buf_, line, sizeof(buf_) - 1);
   buf_[sizeof(buf_) - 1] = 0;
@@ -147,14 +158,18 @@ bool Parser::handle(char* body) {
   else if (!strcmp(type, "GSA")) onGsa(f, n, sys);
   else if (!strcmp(type, "GSV")) onGsv(f, n, sys);
   else return false;
+  const char* types[]={"RMC","GGA","GSA","GSV"};
+  for(unsigned i=0;i<4;i++)if(!strcmp(type,types[i])){stamps_[i]=receivedMs_;seen_[i]=true;}
   sentences_++;
   return true;
 }
 
 void Parser::onRmc(char** f, int n) {
   // $GNRMC,hhmmss.ss,A,llll.ll,N,yyyyy.yy,E,speed,course,ddmmyy,...
+  rmcEpoch_=UINT32_MAX;
   if (n < 10) return;
   const char* t = f[1];
+  rmcEpoch_=epoch(t);
   const char* d = f[9];
   if (strlen(t) >= 6 && strlen(d) == 6) {
     auto two = [](const char* p) { return (p[0] - '0') * 10 + (p[1] - '0'); };
@@ -181,7 +196,9 @@ void Parser::onRmc(char** f, int n) {
 
 void Parser::onGga(char** f, int n) {
   // $GNGGA,hhmmss.ss,lat,N,lon,E,quality,numSV,hdop,alt,M,...
+  ggaEpoch_=UINT32_MAX;
   if (n < 10) return;
+  ggaEpoch_=epoch(f[1]);
   fix_.quality = static_cast<uint8_t>(atoi(f[6]));
   fix_.satsUsed = static_cast<uint8_t>(atoi(f[7]));
   fix_.hdop = f[8][0] ? static_cast<float>(atof(f[8])) : 99.9f;
@@ -198,6 +215,7 @@ void Parser::onGsa(char** f, int n, uint8_t talkerSys) {
   if (n >= 19 && f[18][0]) sys = gsaSystemId(atoi(f[18]));
   if (sys == SYS_UNKNOWN) return;  // GN без id системы — не знаем, к какой относится
   SysSats& s = sys_[sys];
+  s.gsaAt=receivedMs_;s.haveGsa=true;
   s.nUsed = 0;
   for (int i = 3; i < 15 && s.nUsed < 16; i++) {
     if (f[i][0]) s.usedPrn[s.nUsed++] = static_cast<uint8_t>(atoi(f[i]));
@@ -210,6 +228,13 @@ void Parser::onGsv(char** f, int n, uint8_t talkerSys) {
   if (n < 4 || talkerSys == SYS_UNKNOWN) return;
   int num = atoi(f[2]);
   SysSats& s = sys_[talkerSys];
+  int total=atoi(f[1]);
+  if(num==1){s.completeGsv=false;s.nextGsv=1;s.totalGsv=total;s.groupAt=receivedMs_;}
+  const bool ordered=total>0&&total<=16&&num>0&&num<=total&&num==s.nextGsv&&total==s.totalGsv&&receivedMs_-s.groupAt<=3000;
+  if(!ordered){s.completeGsv=false;s.nextGsv=0;}else{
+    s.nextGsv++;
+    if(num==total){s.completeGsv=true;s.gsvAt=receivedMs_;}
+  }
   if (num == 1) s.n = 0;  // новая группа
   // Группа из 4 полей целиком; хвостовое поле signalId (NMEA 4.10) в группу не попадает
   for (int i = 4; i + 3 < n; i += 4) {
@@ -219,6 +244,18 @@ void Parser::onGsv(char** f, int n, uint8_t talkerSys) {
     s.n++;
   }
   if (num == atoi(f[1])) rebuildSats();  // последняя часть группы
+}
+
+bool Parser::qualityFresh(uint32_t nowMs) const {
+  if(messageAge(0,nowMs)>3000||messageAge(1,nowMs)>2500||
+     rmcEpoch_==UINT32_MAX||ggaEpoch_==UINT32_MAX||fix_.quality==0)return false;
+  uint32_t delta=rmcEpoch_>ggaEpoch_?rmcEpoch_-ggaEpoch_:ggaEpoch_-rmcEpoch_;
+  return delta<=1||delta==86399; // normal RMC/GGA order, including midnight
+}
+bool Parser::snrFresh(uint8_t system,uint32_t nowMs) const {
+  if(system>=4)return false;
+  const auto& s=sys_[system];
+  return s.haveGsa&&s.completeGsv&&nowMs-s.gsaAt<=3000&&nowMs-s.gsvAt<=10000;
 }
 
 void Parser::rebuildSats() {

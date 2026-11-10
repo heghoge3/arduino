@@ -53,3 +53,5 @@ bool loadBlacklist(proto::BlEntry* out, uint8_t& n);
 bool saveBlacklist(const proto::BlEntry* in, uint8_t n);
 
 }  // namespace storage
+
+namespace storage { bool appendGpsDiagnostic(const uint8_t* data,size_t length); }

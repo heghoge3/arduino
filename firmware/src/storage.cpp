@@ -382,3 +382,12 @@ bool saveBlacklist(const proto::BlEntry* in, uint8_t n) {
 }
 
 }  // namespace storage
+
+namespace storage {
+bool appendGpsDiagnostic(const uint8_t* data,size_t length) {
+  if(!g_sd||!length||length>1200)return false;
+  File f=SD.open("/logs/gnss-trace.bin",FILE_APPEND);
+  if(!f||f.size()+length>1024*1024){f.close();return false;}
+  bool ok=f.write(data,length)==length;f.flush();f.close();return ok;
+}
+}

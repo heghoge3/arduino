@@ -38,7 +38,7 @@ constexpr size_t MAX_SATS = 32;
 class Parser {
  public:
   // Подать очередной символ из UART. true — разобрано полное корректное предложение.
-  bool feed(char c);
+  bool feed(char c, uint32_t receivedMs=0);
 
   const Fix& fix() const { return fix_; }
   // Список спутников (из последних полных групп GSV по каждой системе)
@@ -53,7 +53,12 @@ class Parser {
   uint32_t validFixes() const { return validFixes_; }
 
   // Разобрать готовую строку целиком (без \r\n). Для тестов и повторного использования.
-  bool parseLine(const char* line);
+  bool parseLine(const char* line, uint32_t receivedMs=0);
+  bool qualityFresh(uint32_t nowMs) const;
+  bool snrFresh(uint8_t system,uint32_t nowMs) const;
+  uint32_t messageAge(uint8_t type,uint32_t nowMs) const {
+    return type<4 && seen_[type] ? nowMs-stamps_[type] : UINT32_MAX;
+  }
 
   // Сбросить спутники и фикс (например, после выключения GPS)
   void reset();
@@ -70,12 +75,18 @@ class Parser {
   size_t len_ = 0;
   bool inSentence_ = false;
 
+  uint32_t rmcEpoch_=UINT32_MAX,ggaEpoch_=UINT32_MAX;
+  uint32_t receivedMs_=0, stamps_[4]{};
+  bool seen_[4]{};
   Fix fix_;
   uint32_t sentences_ = 0, checksumErrors_ = 0, validFixes_ = 0;
   uint8_t systemsSeen_ = 0;
 
   // Сбор GSV по системам: новая группа (номер сообщения 1) заменяет старую
   struct SysSats {
+    uint32_t gsaAt=0,gsvAt=0,groupAt=0;
+    bool haveGsa=false,completeGsv=false;
+    uint8_t nextGsv=0,totalGsv=0;
     uint8_t n = 0;
     uint8_t prn[16];
     uint8_t snr[16];

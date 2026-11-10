@@ -103,10 +103,11 @@ class Detector {
   bool inEpisode() const { return episode_; }
 
  private:
+  friend class Diagnostic;
   Config cfg_;
   size_t blN_ = 0;
-  double blLat_[MAX_BLACKLIST], blLon_[MAX_BLACKLIST];
-  uint16_t blR_[MAX_BLACKLIST];
+  double blLat_[MAX_BLACKLIST]{}, blLon_[MAX_BLACKLIST]{};
+  uint16_t blR_[MAX_BLACKLIST]{};
 
   bool phoneValid_ = false;
   double phoneLat_ = 0, phoneLon_ = 0;

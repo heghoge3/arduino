@@ -55,24 +55,24 @@ void fakeTick() {
            sod / 3600, (sod / 60) % 60, sod % 60, dlat, mlat, dlon, mlon, g_fakeHeading < 0 ? g_fakeHeading + 360 : fmod(g_fakeHeading, 360),
            day, mon, year % 100);
   nmea::buildCommand(body, line, sizeof(line));
-  g_parser.parseLine(line);
+  g_parser.parseLine(line,ms);
   snprintf(body, sizeof(body), "GNGGA,%02lu%02lu%02lu.000,%02d%07.4f,N,%03d%07.4f,E,1,%02d,%.1f,%.1f,M,15.0,M,,",
            sod / 3600, (sod / 60) % 60, sod % 60, dlat, mlat, dlon, mlon, 6, spoof ? 0.7 : 1.1, spoof ? 12.0 : 70.0);
   nmea::buildCommand(body, line, sizeof(line));
-  g_parser.parseLine(line);
+  g_parser.parseLine(line,ms);
   // Спутники: при подмене — подозрительно одинаковый сигнал
   snprintf(body, sizeof(body), "GPGSA,A,3,03,06,09,12,15,18,,,,,,,1.6,%.1f,1.3,1", spoof ? 0.7 : 1.1);
   nmea::buildCommand(body, line, sizeof(line));
-  g_parser.parseLine(line);
+  g_parser.parseLine(line,ms);
   // Два сообщения GSV: 6 спутников, как в GGA/GSA (проверке SNR нужно ≥5)
   if (spoof) snprintf(body, sizeof(body), "GPGSV,2,1,06,03,40,100,41,06,40,100,42,09,40,100,41,12,40,100,42,0");
   else snprintf(body, sizeof(body), "GPGSV,2,1,06,03,40,100,23,06,40,100,38,09,40,100,31,12,40,100,44,0");
   nmea::buildCommand(body, line, sizeof(line));
-  g_parser.parseLine(line);
+  g_parser.parseLine(line,ms);
   if (spoof) snprintf(body, sizeof(body), "GPGSV,2,2,06,15,40,100,41,18,40,100,42,0");
   else snprintf(body, sizeof(body), "GPGSV,2,2,06,15,40,100,27,18,40,100,35,0");
   nmea::buildCommand(body, line, sizeof(line));
-  g_parser.parseLine(line);
+  g_parser.parseLine(line,ms);
   g_lastSentenceMs = ms;
 }
 #endif
@@ -129,7 +129,7 @@ void poll() {
   while (Serial1.available()) {
     char c = Serial1.read();
     if (g_echo) Serial.write(c);
-    if (g_parser.feed(c)) g_lastSentenceMs = millis();
+    if (g_parser.feed(c,millis())) g_lastSentenceMs = millis();
   }
 #endif
   // Новый фикс — по RMC с достоверной позицией (раз в секунду)
