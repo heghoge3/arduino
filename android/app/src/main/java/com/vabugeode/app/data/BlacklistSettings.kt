@@ -29,12 +29,6 @@ class BlacklistSettings(private val prefs: SharedPreferences) {
 
 fun isBlocked(lat: Double?,lon: Double?,points: List<BlacklistPoint>): Boolean =
     lat!=null && lon!=null && lat.isFinite() && lon.isFinite() && points.any { distanceM(lat,lon,it.lat,it.lon)<=it.radiusM }
-fun excludeBlacklisted(track: List<com.vabugeode.app.model.TrackPoint>,points: List<BlacklistPoint>) = track.map { p ->
-    if (p.src==com.vabugeode.app.model.PositionSource.GPS && isBlocked(p.lat,p.lon,points))
-        p.copy(src=com.vabugeode.app.model.PositionSource.NONE,spoof=true,spoofMask=p.spoofMask or 1,
-            spoofLat=p.spoofLat ?: p.lat,spoofLon=p.spoofLon ?: p.lon,lat=Double.NaN,lon=Double.NaN)
-    else p
-}
-fun excludeBlacklistedMarks(marks: List<com.vabugeode.app.model.Mark>,points: List<BlacklistPoint>) = marks.map {
-    if (isBlocked(it.lat,it.lon,points)) it.copy(lat=null,lon=null) else it
-}
+/** Geography is diagnostic context. Historical receiver rejection flags remain unchanged. */
+fun excludeBlacklisted(track: List<com.vabugeode.app.model.TrackPoint>,points: List<BlacklistPoint>) = track
+fun excludeBlacklistedMarks(marks: List<com.vabugeode.app.model.Mark>,points: List<BlacklistPoint>) = marks

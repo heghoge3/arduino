@@ -149,7 +149,7 @@ class ProtocolDeviceRepository(
         }
 
     /** Позиция телефона для проверки подмены (lat, lon, точность м). null — нет разрешения или данных. */
-    var phonePosition: (() -> Triple<Double, Double, Int>?)? = null
+    var phonePosition: (() -> PhoneLocation.Fix?)? = null
     override val status = MutableStateFlow<DeviceStatus?>(null)
     override val track = MutableStateFlow<List<TrackPoint>>(emptyList())
     override val marks = MutableStateFlow<List<Mark>>(emptyList())
@@ -181,7 +181,7 @@ class ProtocolDeviceRepository(
     fun calibrateCompass(start: Boolean) {
         if (link.value != LinkState.CONNECTED || !supportsPdr()) return
         send(Cmd.CalibCompass(start))
-        if (!start) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
+        if (!start) phonePosition?.invoke()?.let {sendPhoneEvidence(it)}
     }
 
     val temperatureOffset100 = MutableStateFlow<Int?>(null)
@@ -487,6 +487,13 @@ class ProtocolDeviceRepository(
         }
     }
 
+    private fun sendPhoneEvidence(fix:PhoneLocation.Fix){
+        val modern=lastInfo?.let{it.fwMajor>0||it.fwMinor>1||(it.fwMinor==1&&it.fwPatch>=25)}==true
+        if(modern && fix.ageMs in 0..30000)send(Cmd.PhoneEvidence(fix.lat,fix.lon,fix.accuracyM,fix.ageMs,fix.provider))
+        else if(!modern)send(Cmd.PhonePos(fix.lat,fix.lon,fix.accuracyM))
+    }
+    fun supportsGpsPolicy2()=lastInfo?.let{it.fwMajor>0||it.fwMinor>1||(it.fwMinor==1&&it.fwPatch>=25)}==true
+
     private fun recordControlsAllowed() = !supportsLifecycle() ||
         (lifecycleFresh.value && lifecycle.value?.phase==HikeStateMsg.ACTIVE)
 
@@ -548,9 +555,15 @@ class ProtocolDeviceRepository(
         }
         val target=transport
         val epoch=connectionEpoch
+        val queuedAt=elapsedMs()
         scope.launch {
-            val bytes = Codec.encode(cmd)
+            var bytes = Codec.encode(cmd)
             if (sendLock.withLock {
+                if(cmd is Cmd.PhoneEvidence){
+                    val age=cmd.ageMs+(elapsedMs()-queuedAt).coerceAtLeast(0)
+                    if(age>30000 || epoch!=connectionEpoch)return@withLock false
+                    bytes=Codec.encode(cmd.copy(ageMs=age))
+                }
                 target === transport && (!requireFreshStatus ||
                     (epoch == connectionEpoch && hasFreshStatus() && recordControlsAllowed())) && target.send(bytes)
             }) {
@@ -572,7 +585,7 @@ class ProtocolDeviceRepository(
             return
         }
         send(Cmd.Record(on), requireFreshStatus = true)
-        if (on) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
+        if (on) phonePosition?.invoke()?.let {sendPhoneEvidence(it)}
         send(Cmd.GetInfo) // мог начаться новый поход
     }
     override fun findDevice() = send(Cmd.Find)
@@ -609,7 +622,7 @@ class ProtocolDeviceRepository(
         val tz = java.util.TimeZone.getDefault().getOffset(now) / 60_000
         send(Cmd.SetTime(now / 1000, tz))
         send(blacklistCommand())
-        phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
+        phonePosition?.invoke()?.let {sendPhoneEvidence(it)}
         // Дальше — по ответу INFO: понять, тот же ли поход, и догрузить недостающее
         send(Cmd.GetInfo)
     }
@@ -722,6 +735,7 @@ class ProtocolDeviceRepository(
     private fun onInfo(m: InfoMsg) {
         val firstInfo = syncAfterInfo
         lastInfo = m
+        if(supportsGpsPolicy2())phonePosition?.invoke()?.let{sendPhoneEvidence(it)}
         m.tempOffset100?.let { temperatureOffset100.value=it }
         if (firstInfo && supportsEconomy()) send(blacklistCommand())
         compassState.value = m.checks.firstOrNull { it.id == 4 }?.code
@@ -736,7 +750,7 @@ class ProtocolDeviceRepository(
             if (supportsLifecycle()) hikeStartSec?.let { send(Cmd.HikeEnd(it)) }
             hikeStartSec = m.hikeStartUtc
             hikeStartMs.value = m.hikeStartUtc?.let { it * 1000 }
-            if (!firstInfo) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
+            if (!firstInfo) phonePosition?.invoke()?.let {sendPhoneEvidence(it)}
             points.clear()
             markMap.clear()
             dirty = true
@@ -792,9 +806,11 @@ class ProtocolDeviceRepository(
 
     private fun StatusMsg.toStatus(sats: SatsMsg?): DeviceStatus {
         val fixE = GpsFix.entries.getOrElse(fix) { GpsFix.OFF }
-        val blocked = src == 1 && isBlocked(lat, lon, blacklist.value)
-        val mask = spoofMask or if (blocked) 1 else 0
-        val recovering = GpsEvidence.recoveryOnly(mask)
+        val policy=if(src and 0x80!=0)2 else 1
+        val positionSrc=src and 0x0F
+        val uncertain=src and 0x40!=0
+        val mask = spoofMask
+        val recovering = uncertain || (policy<2 && GpsEvidence.recoveryOnly(mask))
         val satellites = if (has(Proto.F_GPS_ON)) sats?.sats.orEmpty().map {
             Satellite(sysName(it.system), it.prn, it.snr, it.used)
         } else emptyList()
@@ -803,9 +819,9 @@ class ProtocolDeviceRepository(
             mode = PowerMode.entries.getOrElse(mode) { PowerMode.CAMP },
             recording = has(Proto.F_RECORDING),
             gps = GpsState(
-                fix = fixE, satsUsed = satsUsed, satsInView = satsView, hdop = hdop ?: 99.9,
+                gpsPolicy=policy,uncertain=uncertain,fix = fixE, satsUsed = satsUsed, satsInView = satsView, hdop = hdop ?: 99.9,
                 speedKmh = speedKmh, courseDeg = courseDeg, altGps = altGps,
-                satellites = satellites, spoof = (has(Proto.F_SPOOF) && !recovering) || blocked, spoofMask = mask,
+                satellites = satellites, spoof = (has(Proto.F_SPOOF) && !recovering), spoofMask = mask,
             ),
             env = EnvState(
                 tempRaw = tempRaw ?: Double.NaN, tempCorr = tempCorr ?: Double.NaN,
@@ -817,9 +833,9 @@ class ProtocolDeviceRepository(
                 charging = has(Proto.F_CHARGING), usedMah = usedMah.toDouble(), hoursLeft = hoursLeft,
             ),
             steps = steps.toInt(), headingDeg = headingDeg, distanceKm = distanceM / 1000.0,
-            positionSource = if ((recovering && src != 4) || blocked) PositionSource.NONE else srcOf(src),
-            lat = lat?.takeUnless { src!=4 && (recovering || isBlocked(lat,lon,blacklist.value)) },
-            lon = lon?.takeUnless { src!=4 && (recovering || isBlocked(lat,lon,blacklist.value)) },
+            positionSource = if ((recovering && positionSrc != 4)) PositionSource.NONE else srcOf(positionSrc),
+            lat = lat?.takeUnless { positionSrc!=4 && recovering },
+            lon = lon?.takeUnless { positionSrc!=4 && recovering },
         )
     }
 
@@ -978,9 +994,10 @@ class ProtocolDeviceRepository(
 
 /** Пакеты из базы и по радио → модель экранов */
 internal fun PointMsg.toTrackPoint(): TrackPoint {
-    val recoveryOnly = GpsEvidence.recoveryOnly(spoofMask)
+    val recoveryOnly = gpsPolicy<2 && GpsEvidence.recoveryOnly(spoofMask)
     val recovering = recoveryOnly && !startAnchor
     return TrackPoint(
+        gpsPolicy=gpsPolicy,breakBefore=breakBefore,uncertain=uncertain,
         tsUtcMs = timeUtc * 1000, lat = if (recovering) Double.NaN else lat ?: Double.NaN,
         lon = if (recovering) Double.NaN else lon ?: Double.NaN,
         altGps = altGps.takeUnless { recovering }, sats = sats, hdop = hdop ?: 99.9,

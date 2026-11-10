@@ -144,7 +144,7 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String)
                         }
                     }
                 }
-                MapLegend(track.count { it.spoof })
+                MapLegend(track.count { it.spoof || it.uncertain })
                 if (canStart) TextButton(onClick={if(choosing) choosing=false else startDialog=true}) {
                     Text(if(choosing) "Нажмите стартовую точку на карте · отмена" else "Задать старт без GPS")
                 }
@@ -163,7 +163,7 @@ fun MapLegend(spoofCount: Int) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
         Text("━ GPS", color = Palette.Geo, fontSize = 11.sp)
         Text("┅ без GPS", color = Palette.Pdr, fontSize = 11.sp)
-        Text(if (spoofCount > 0) "● подмена $spoofCount" else "● подмена", color = Palette.Bad, fontSize = 11.sp)
+        Text(if (spoofCount > 0) "● непроверено $spoofCount" else "● непроверено", color = Palette.Bad, fontSize = 11.sp)
         Text("● метки", color = Palette.Text, fontSize = 11.sp)
     }
 }

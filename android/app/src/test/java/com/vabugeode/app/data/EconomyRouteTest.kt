@@ -41,13 +41,13 @@ class EconomyRouteTest {
         assertTrue(routeSegments(listOf(start,p(60,10,PositionSource.NONE),end.copy(steps=20))).isEmpty())
         assertTrue(routeSegments(listOf(start,p(60,180,PositionSource.NONE),end.copy(lat=61.0))).isEmpty())
     }
-    @Test fun cachedGpsInsideNewBanBecomesSuspiciousButManualAnchorRemainsManual() {
+    @Test fun geographyPreservesRecordedGpsAndManualAnchor() {
         val zone=listOf(BlacklistPoint(60.1161,31.3864,5000,"known"))
         val old=p(0,0,PositionSource.GPS,60.11741,31.36770)
         val result=excludeBlacklisted(listOf(old),zone).single()
-        assertTrue(result.spoof)
-        assertFalse(result.isRoutePoint())
-        assertEquals(old.lat,result.spoofLat!!,0.0)
+        assertFalse(result.spoof)
+        assertTrue(result.isRoutePoint())
+        assertEquals(old,result)
         assertEquals(old.copy(src=PositionSource.START),excludeBlacklisted(listOf(old.copy(src=PositionSource.START)),zone).single())
     }
     @Test fun newCommandsAndDeviceSettingsRoundTrip() {

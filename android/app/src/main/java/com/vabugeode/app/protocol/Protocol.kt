@@ -38,6 +38,7 @@ object Proto {
 
     // Команды телефона
     const val CMD_SET_TIME = 0x01
+    const val CMD_PHONE_POS_V2 = 0x1E
     const val CMD_PHONE_POS = 0x02
     const val CMD_RECORD = 0x03
     const val CMD_MARK = 0x04
@@ -209,6 +210,7 @@ data class PointMsg(
     val headingDeg: Double,
     val speedKmh: Double,
     val startAnchor: Boolean = false,
+    val gpsPolicy:Int=1, val breakBefore:Boolean=false,val uncertain:Boolean=false,
 ) : DeviceMsg
 
 data class SyncDoneMsg(val what: Int, val count: Long) : DeviceMsg
@@ -260,6 +262,7 @@ sealed interface Cmd {
     data class NewHike(val expectedHike: Long) : Cmd
     data class DeleteHike(val hike: Long) : Cmd
     data class SetTime(val timeUtc: Long, val tzOffsetMin: Int) : Cmd
+    data class PhoneEvidence(val lat:Double,val lon:Double,val accuracyM:Int,val ageMs:Long,val provider:Int):Cmd
     data class PhonePos(val lat: Double, val lon: Double, val accuracyM: Int) : Cmd
     data class Record(val on: Boolean) : Cmd
     data class Mark(val type: Int, val text: String) : Cmd
@@ -304,6 +307,7 @@ object Codec {
         is Cmd.NewHike -> packet(Proto.CMD_NEW_HIKE, 4) { u32(cmd.expectedHike) }
         is Cmd.DeleteHike -> packet(Proto.CMD_DELETE_HIKE, 4) { u32(cmd.hike) }
         is Cmd.SetTime -> packet(Proto.CMD_SET_TIME, 6) { u32(cmd.timeUtc); i16(cmd.tzOffsetMin) }
+        is Cmd.PhoneEvidence -> packet(Proto.CMD_PHONE_POS_V2,15) {coord(cmd.lat);coord(cmd.lon);u16(cmd.accuracyM);u32(cmd.ageMs);u8(cmd.provider)}
         is Cmd.PhonePos -> packet(Proto.CMD_PHONE_POS, 10) { coord(cmd.lat); coord(cmd.lon); u16(cmd.accuracyM) }
         is Cmd.Record -> packet(Proto.CMD_RECORD, 1) { u8(if (cmd.on) 1 else 0) }
         is Cmd.Mark -> {
@@ -350,6 +354,7 @@ object Codec {
             Proto.CMD_NEW_HIKE -> Cmd.NewHike(r.u32())
             Proto.CMD_DELETE_HIKE -> Cmd.DeleteHike(r.u32())
             Proto.CMD_SET_TIME -> Cmd.SetTime(r.u32(), r.i16())
+            Proto.CMD_PHONE_POS_V2 -> Cmd.PhoneEvidence(r.coordRaw(),r.coordRaw(),r.u16(),r.u32(),r.u8()).also {if(it.ageMs>30000 || it.provider !in 0..3 || it.accuracyM !in 1..1000)throw ProtocolException("Invalid phone evidence")}
             Proto.CMD_PHONE_POS -> Cmd.PhonePos(r.coordRaw(), r.coordRaw(), r.u16())
             Proto.CMD_RECORD -> Cmd.Record(r.u8() != 0)
             Proto.CMD_MARK -> {
@@ -431,7 +436,7 @@ object Codec {
         }
         is PointMsg -> packet(Proto.MSG_POINT, Proto.POINT_SIZE - 2) {
             u32(m.timeUtc); coord(m.lat); coord(m.lon)
-            u8((m.src and 0x03) or (if (m.spoof) 0x04 else 0) or (if (m.startAnchor) 0x08 else 0)); u8(m.spoofMask)
+            u8((m.src and 0x03) or (if (m.spoof) 0x04 else 0) or (if (m.startAnchor) 0x08 else 0) or (if(m.gpsPolicy>=2)0x10 else 0) or (if(m.breakBefore)0x20 else 0) or (if(m.uncertain)0x40 else 0)); u8(m.spoofMask)
             coord(m.spoofLat); coord(m.spoofLon)
             i16(scaledOrNa(m.tempRaw, 100.0)); i16(scaledOrNa(m.tempCorr, 100.0))
             u16(scaled(m.humidity, 100.0)); u32((m.pressureHpa * 100).roundToLong())
@@ -502,7 +507,7 @@ object Codec {
                 val t = r.u32(); val la = r.coord(); val lo = r.coord()
                 val fl = r.u8()
                 PointMsg(
-                    timeUtc = t, lat = la, lon = lo, src = fl and 0x03, spoof = fl and 0x04 != 0, startAnchor = fl and 0x08 != 0,
+                    timeUtc = t, lat = la, lon = lo,gpsPolicy=if(fl and 0x10!=0)2 else 1,breakBefore=fl and 0x20!=0,uncertain=fl and 0x40!=0, src = fl and 0x03, spoof = fl and 0x04 != 0, startAnchor = fl and 0x08 != 0,
                     spoofMask = r.u8(), spoofLat = r.coord(), spoofLon = r.coord(),
                     tempRaw = r.i16OrNull(100.0), tempCorr = r.i16OrNull(100.0),
                     humidity = r.u16() / 100.0, pressureHpa = r.u32() / 100.0,

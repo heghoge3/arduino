@@ -29,6 +29,7 @@
 // Эталонные векторы
 // ---------------------------------------------------------------------------
 
+static spoof::Config legacyConfig(){spoof::Config c; c.policyVersion=1;return c;}
 static std::string g_vectors;
 
 static void loadVectors() {
@@ -416,7 +417,7 @@ static spoof::Input inputAt(uint32_t t, double lat, double lon) {
 }
 
 void test_spoof_blacklist_and_jump() {
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   double bl[] = {60.0346}, bo[] = {30.5693};
   uint16_t br[] = {1000};
   d.setBlacklist(bl, bo, br, 1);
@@ -434,7 +435,7 @@ void test_spoof_blacklist_and_jump() {
   TEST_ASSERT_DOUBLE_WITHIN(1e-6, 60.1581, d.lastGoodLat());
 
   // Неизвестная ложная точка далеко — только скачок, этого достаточно
-  spoof::Detector d2;
+  spoof::Detector d2(legacyConfig());
   d2.check(inputAt(1000, 60.1580, 30.5150));
   r = d2.check(inputAt(1030, 59.0, 31.0));
   TEST_ASSERT_TRUE(r.spoof);
@@ -443,30 +444,30 @@ void test_spoof_blacklist_and_jump() {
 
 void test_spoof_jump_after_pause() {
   // Пауза записи / стоянка с выключенным GPS, потом переезд на машине на 10 км — не подмена
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   d.check(inputAt(1000, 60.1580, 30.5150));
   TEST_ASSERT_FALSE(d.check(inputAt(1000 + 900, 60.2480, 30.5150)).mask & spoof::R_JUMP);
   // А тот же скачок через минуту при включённом GPS — скачок
-  spoof::Detector d2;
+  spoof::Detector d2(legacyConfig());
   d2.check(inputAt(1000, 60.1580, 30.5150));
   TEST_ASSERT_TRUE(d2.check(inputAt(1060, 60.2480, 30.5150)).mask & spoof::R_JUMP);
 }
 
 void test_spoof_phone_and_time() {
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   d.setPhone(60.1580, 30.5150, 50, 1000);
   spoof::Result r = d.check(inputAt(1001, 60.2500, 30.5150));  // ~10 км от телефона
   TEST_ASSERT_TRUE(r.mask & spoof::R_PHONE);
   TEST_ASSERT_FALSE_MESSAGE(r.spoof, "ошибка телефона сама по себе не отвергает GPS");
   TEST_ASSERT_TRUE(d.hasLastGood());
   // Позиция телефона устарела — проверка не работает
-  spoof::Detector d2;
+  spoof::Detector d2(legacyConfig());
   d2.setPhone(60.1580, 30.5150, 50, 1000);
   TEST_ASSERT_TRUE(d2.check(inputAt(1030, 60.2500, 30.5150)).mask & spoof::R_PHONE);
   TEST_ASSERT_FALSE(d2.check(inputAt(1031, 60.2500, 30.5150)).mask & spoof::R_PHONE);
 
   // Время GPS уехало на час от часов
-  spoof::Detector d3;
+  spoof::Detector d3(legacyConfig());
   spoof::Input in = inputAt(5000, 60.1580, 30.5150);
   in.gpsTimeValid = true;
   in.gpsTime = 5000 + 3600;
@@ -475,7 +476,7 @@ void test_spoof_phone_and_time() {
   TEST_ASSERT_TRUE(r.mask & spoof::R_TIME);
   // Время не проверено — сравнивать не с чем
   in.timeTrusted = false;
-  spoof::Detector d4;
+  spoof::Detector d4(legacyConfig());
   TEST_ASSERT_FALSE(d4.check(in).mask & spoof::R_TIME);
 }
 
@@ -483,7 +484,7 @@ void test_spoof_hike_clock_regression() {
   // Вечерний журнал: R_TIME=0x40; при подключении телефон исправил часы на +540 с.
   // Точное сырое UTC GPS в старом журнале отсутствует; моделируем отставание RTC.
   const uint32_t correct = nmea::toUnix(2026, 10, 31, 17, 30, 5);
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   auto in = inputAt(correct - 540, 60.00100, 30.00200);
   in.gpsTimeValid = true; in.gpsTime = correct;
   auto r = d.check(in);
@@ -505,7 +506,7 @@ void test_spoof_phone_hike_regression() {
   // Координаты телефона в старом журнале не записаны: для воспроизведения
   // все координаты здесь условные; берём точку, отстоящую от условного GPS более чем на 3 км.
   const uint32_t received = nmea::toUnix(2026, 10, 31, 7, 44, 33); // UTC, Москва +3
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   d.setPhone(59.95, 30.10, 50, received);
   auto r = d.check(inputAt(received + 380, 60.00000, 30.00000));
   TEST_ASSERT_FALSE(r.mask & spoof::R_PHONE);
@@ -513,7 +514,7 @@ void test_spoof_phone_hike_regression() {
   TEST_ASSERT_DOUBLE_WITHIN(1e-7, 60.00000, d.lastGoodLat());
 
   // Даже ошибочная НОВАЯ позиция телефона + один слабый признак не блокируют трек.
-  spoof::Detector fresh;
+  spoof::Detector fresh(legacyConfig());
   fresh.setPhone(59.95, 30.10, 50, received);
   uint8_t flat[] = {41, 42, 41, 42, 41};
   auto in = inputAt(received + 1, 60.00000, 30.00000);
@@ -527,7 +528,7 @@ void test_spoof_phone_hike_regression() {
   TEST_ASSERT_TRUE(fresh.check(in).spoof);
 
   // Чёрный список не отключён при совпадении GPS с телефоном.
-  spoof::Detector blocked;
+  spoof::Detector blocked(legacyConfig());
   double lat[] = {60.00000}, lon[] = {30.00000}; uint16_t radius[] = {5000};
   blocked.setBlacklist(lat, lon, radius, 1);
   blocked.setPhone(lat[0], lon[0], 10, received);
@@ -538,11 +539,11 @@ void test_spoof_phone_hike_regression() {
 
 void test_spoof_phone_rejects_unusable_references() {
   for (float acc : {0.0f, -1.0f, 1001.0f, INFINITY, NAN}) {
-    spoof::Detector d;
+    spoof::Detector d(legacyConfig());
     d.setPhone(59.95, 30.10, acc, 1000);
     TEST_ASSERT_FALSE(d.check(inputAt(1001, 60.00000, 30.00000)).mask & spoof::R_PHONE);
   }
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   d.setPhone(59.95, 30.10, 50, 1000);
   TEST_ASSERT_FALSE(d.check(inputAt(999, 60.00000, 30.00000)).mask & spoof::R_PHONE);
   d.clearPhone();
@@ -552,7 +553,7 @@ void test_spoof_phone_rejects_unusable_references() {
 void test_spoof_weak_signs_need_two() {
   uint8_t flat[] = {41, 42, 41, 42, 41, 42};
   uint8_t normal[] = {22, 35, 41, 30, 18, 44};
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   spoof::Input in = inputAt(1000, 60.1580, 30.5150);
   in.usedSnr = flat;
   in.usedCount = 6;
@@ -574,7 +575,7 @@ void test_spoof_weak_signs_need_two() {
 }
 
 void test_spoof_steps_but_standing() {
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   uint8_t flat[] = {41, 42, 41, 42, 41};
   for (uint32_t t = 0; t <= 180; t += 10) {
     spoof::Input in = inputAt(1000 + t, 60.0346, 30.5693);  // точка на месте
@@ -590,7 +591,7 @@ void test_spoof_steps_but_standing() {
 }
 
 void test_spoof_recovery() {
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   double lat[] = {60.1161}, lon[] = {31.3864};
   uint16_t radius[] = {1000};
   d.setBlacklist(lat, lon, radius, 1);
@@ -612,7 +613,7 @@ void test_spoof_recovery() {
 }
 
 void test_recovery_is_rejected_without_reporting_new_spoof() {
-  spoof::Detector d;
+  spoof::Detector d(legacyConfig());
   double lat[] = {60.1161}, lon[] = {31.3864}; uint16_t radius[] = {5000};
   d.setBlacklist(lat, lon, radius, 1);
   auto detected = d.check(inputAt(1000, lat[0], lon[0]));
@@ -1085,7 +1086,7 @@ void test_blacklist_defaults_and_observed_false_position() {
   known.radiusM=2250; TEST_ASSERT_FALSE(blacklistdefaults::migrate(known));
   proto::BlEntry custom={601000000,300000000,1000};TEST_ASSERT_FALSE(blacklistdefaults::migrate(custom));
   double lat[]={60.1161},lon[]={31.3864};uint16_t radius[]={5000};
-  spoof::Detector detector;detector.setBlacklist(lat,lon,radius,1);
+  spoof::Detector detector(legacyConfig());detector.setBlacklist(lat,lon,radius,1);
   TEST_ASSERT_TRUE(detector.blacklisted(60.11741,31.36770));
   spoof::Input input{};input.now=100;input.lat=60.11741;input.lon=31.36770;
   for(unsigned t=100;t<140;t++) {input.now=t;auto r=detector.check(input);TEST_ASSERT_TRUE(r.spoof);TEST_ASSERT_BITS_HIGH(spoof::R_BLACKLIST,r.mask);}
@@ -1093,7 +1094,7 @@ void test_blacklist_defaults_and_observed_false_position() {
 }
 void test_recovery_requires_coherent_positions() {
   double la[]={60},lo[]={30};uint16_t radius[]={1000};
-  spoof::Detector detector;detector.setBlacklist(la,lo,radius,1);
+  spoof::Detector detector(legacyConfig());detector.setBlacklist(la,lo,radius,1);
   spoof::Input input{};input.now=100;input.lat=60;input.lon=30;
   TEST_ASSERT_TRUE(detector.check(input).spoof);
   input.lon=31;

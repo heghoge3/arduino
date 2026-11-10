@@ -34,12 +34,12 @@ class PhoneLocationTest {
         assertNull(pick(missing))
     }
 
-    @Test fun networkPriorityDoesNotBypassBlacklistOrAccuracy() {
+    @Test fun networkInsideRiskAreaIsAllowedButPoorAccuracyIsNot() {
         val banned = loc(LocationManager.NETWORK_PROVIDER, lat = 60.1161, lon = 31.3864)
         val gps = loc(LocationManager.GPS_PROVIDER)
         val blacklist = listOf(BlacklistPoint(60.1161, 31.3864, 5000, "blocked"))
-        assertEquals(gps, pick(banned, gps, blacklist = blacklist))
-        assertNull(pick(banned, blacklist = blacklist))
+        assertEquals(banned, pick(banned, gps, blacklist = blacklist))
+        assertEquals(banned,pick(banned, blacklist = blacklist))
         assertEquals(gps, pick(loc(LocationManager.NETWORK_PROVIDER, acc = 1001f), gps))
         val network = loc(LocationManager.NETWORK_PROVIDER, acc = 500f)
         assertEquals(network, pick(gps, network))

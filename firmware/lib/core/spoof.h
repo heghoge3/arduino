@@ -18,7 +18,8 @@ enum Reason : uint8_t {
   R_RECOVERY = 1 << 7,  // после подмены ждём подтверждения восстановления
 };
 
-// Сильные признаки — подмена по одному. Слабые — только если их два и больше.
+// Legacy policy 1 only: strong/weak classification is preserved for historical trace replay.
+// Policy 2 treats geography and weak evidence as context; spatial contradictions are uncertain segments.
 // Телефон и время — справочные расхождения: кэш, GNSS телефона и RTC могут ошибаться.
 // Они не отвергают координаты и не добавляются к числу независимых слабых признаков.
 constexpr uint8_t STRONG = R_BLACKLIST | R_JUMP;
@@ -31,6 +32,8 @@ bool recoveryOnly(uint8_t mask);
 constexpr size_t MAX_BLACKLIST = 24;
 
 struct Config {
+  uint8_t policyVersion=2;
+  float transportSpeedMs=55;
   float maxSpeedMs = 11.0f;        // ~40 км/ч: пешком и на велосипеде быстрее не бывает
   float jumpSlackM = 200.0f;       // запас на погрешность
   float phoneMinM = 3000.0f;       // расхождение с телефоном: max(3 км, 2×точность)
@@ -48,7 +51,8 @@ struct Config {
 };
 
 struct Input {
-  uint32_t now;            // доверенное время (DS1302/телефон)
+  uint32_t utcNow=0;
+  uint32_t now;            // policy 2: logical uptime; legacy policy 1: UTC
   bool timeTrusted;
   double lat, lon;         // позиция от GPS
   bool altValid;
@@ -63,10 +67,12 @@ struct Input {
 };
 
 struct Result {
-  bool spoof; // фикс отвергнут, в том числе пока идёт восстановление
+  constexpr Result(bool rejected=false,uint8_t reasons=0,bool pending=false,bool boundary=false):spoof(rejected),mask(reasons),uncertain(pending),segmentStart(boundary){}
+  bool spoof; // rejected geometry (legacy name), not proof of an attack
   uint8_t mask;
-  bool recovering() const { return spoof && recoveryOnly(mask); }
-  bool detected() const { return spoof && !recoveryOnly(mask); }
+  bool uncertain=false,segmentStart=false;
+  bool recovering() const { return uncertain || (spoof && recoveryOnly(mask)); }
+  bool detected() const { return spoof && !uncertain && !recoveryOnly(mask); }
 };
 
 // Расстояние по поверхности, м
@@ -78,17 +84,26 @@ class Detector {
 
   void setBlacklist(const double* lat, const double* lon, const uint16_t* radiusM, size_t n);
   void setPhone(double lat, double lon, float accuracyM, uint32_t time);
+  void setPhoneEvidence(uint32_t ageMs,uint8_t source){phoneAgeMs_=ageMs;phoneSource_=source;}
+  void setManualReference(double lat,double lon,uint32_t time){
+    if(!modern()||!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180))return;
+    lastGoodValid_=true;lastGoodLat_=lat;lastGoodLon_=lon;lastGoodTime_=time;
+    untrusted_=false;episode_=false;cleanCount_=0;stillValid_=false;
+  }
+  bool modern()const{return cfg_.policyVersion>=2;}
   void clearPhone() { phoneValid_ = false; }
   bool blacklisted(double lat, double lon) const;
   void restoreLastGood(double lat,double lon,uint32_t time) {
+    if(cfg_.policyVersion>=2)return; // no monotonic age survives a cold boot from a UTC SD point
     if (lat>=-90&&lat<=90&&lon>=-180&&lon<=180&&!blacklisted(lat,lon)) {
       lastGoodValid_=true;lastGoodLat_=lat;lastGoodLon_=lon;lastGoodTime_=time;
     }
   }
   // Забыть последнюю достоверную точку (эмуляция перенесла трек — иначе это «невозможный скачок»)
-  void forgetLastGood() { lastGoodValid_ = false; stillValid_ = false; }
+  void forgetLastGood() { if(modern()){untrusted_=false;episode_=false;cleanCount_=0;} lastGoodValid_ = false; stillValid_ = false; }
   // Часы переставили на d секунд: сдвинуть запомненные моменты (иначе «возраст» точек врёт)
   void shiftTime(int32_t d) {
+    if(cfg_.policyVersion>=2)return;
     if (phoneTime_) phoneTime_ += (uint32_t)d;
     if (lastGoodTime_) lastGoodTime_ += (uint32_t)d;
     if (stillTime_) stillTime_ += (uint32_t)d;
@@ -103,6 +118,7 @@ class Detector {
   bool inEpisode() const { return episode_; }
 
  private:
+  Result checkModern(const Input& in);
   friend class Diagnostic;
   Config cfg_;
   size_t blN_ = 0;
@@ -112,7 +128,9 @@ class Detector {
   bool phoneValid_ = false;
   double phoneLat_ = 0, phoneLon_ = 0;
   float phoneAcc_ = 0;
-  uint32_t phoneTime_ = 0;
+  uint32_t phoneTime_ = 0,phoneAgeMs_=0;
+  uint8_t phoneSource_=0;
+  bool untrusted_=false;
 
   bool lastGoodValid_ = false;
   double lastGoodLat_ = 0, lastGoodLon_ = 0;

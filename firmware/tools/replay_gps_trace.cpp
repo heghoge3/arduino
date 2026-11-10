@@ -18,7 +18,7 @@ int main(int argc,char** argv){
   count++;
   if(!record.meta.evaluated){skipped++;continue;}
   auto actual=record.before.check(record.input);
-  if(actual.spoof!=record.expected.spoof||actual.mask!=record.expected.mask)mismatch++;
+  if(actual.spoof!=record.expected.spoof||actual.mask!=record.expected.mask||actual.uncertain!=record.expected.uncertain||actual.segmentStart!=record.expected.segmentStart)mismatch++;
  }
  fclose(file);printf("records=%u quality_skipped=%u decision_mismatches=%u\n",count,skipped,mismatch);
  return mismatch?1:0;

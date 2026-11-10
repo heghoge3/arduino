@@ -22,13 +22,14 @@ void Detector::setBlacklist(const double* lat, const double* lon, const uint16_t
     blLon_[i] = lon[i];
     blR_[i] = radiusM[i];
   }
-  if (lastGoodValid_ && blacklisted(lastGoodLat_,lastGoodLon_)) {
+  if (cfg_.policyVersion<2 && lastGoodValid_ && blacklisted(lastGoodLat_,lastGoodLon_)) {
     lastGoodValid_=false;stillValid_=false;episode_=true;cleanCount_=0;
   }
 }
 
 void Detector::setPhone(double lat, double lon, float accuracyM, uint32_t time) {
-  if (!isfinite(lat)||!isfinite(lon)||lat < -90||lat>90||lon < -180||lon>180||!isfinite(accuracyM)||accuracyM<=0||accuracyM>cfg_.phoneMaxAccuracyM||blacklisted(lat,lon)) { phoneValid_=false; return; }
+  if (!isfinite(lat)||!isfinite(lon)||lat < -90||lat>90||lon < -180||lon>180||!isfinite(accuracyM)||accuracyM<=0||accuracyM>cfg_.phoneMaxAccuracyM||(cfg_.policyVersion<2&&blacklisted(lat,lon))) { phoneValid_=false; return; }
+  phoneAgeMs_=0;phoneSource_=0;
   phoneValid_ = true;
   phoneLat_ = lat;
   phoneLon_ = lon;
@@ -52,6 +53,7 @@ bool Detector::blacklisted(double lat, double lon) const {
 }
 
 Result Detector::check(const Input& in) {
+  if(cfg_.policyVersion>=2)return checkModern(in);
   uint8_t mask = 0;
   if (!isfinite(in.lat)||!isfinite(in.lon)||in.lat < -90||in.lat>90||in.lon < -180||in.lon>180) {
     episode_=true; cleanCount_=0; return {true,R_JUMP};
@@ -145,3 +147,49 @@ Result Detector::check(const Input& in) {
 }
 
 }  // namespace spoof
+
+namespace spoof {
+Result Detector::checkModern(const Input& in){
+ uint8_t mask=0;
+ if(!isfinite(in.lat)||!isfinite(in.lon)||in.lat< -90||in.lat>90||in.lon< -180||in.lon>180)
+   return {true,R_RECOVERY,true,false};
+ if(blacklisted(in.lat,in.lon))mask|=R_BLACKLIST; // context only
+ bool phoneFresh=phoneValid_&&in.now>=phoneTime_&&
+   uint64_t(in.now-phoneTime_)*1000+phoneAgeMs_<=uint64_t(cfg_.phoneFreshS)*1000;
+ double phoneDistance=phoneFresh?distanceM(in.lat,in.lon,phoneLat_,phoneLon_):0;
+ if(phoneFresh&&phoneDistance>fmax(cfg_.phoneMinM,phoneAcc_*2))mask|=R_PHONE;
+ uint32_t utc=in.utcNow?in.utcNow:in.now;
+ if(in.gpsTimeValid&&in.timeTrusted&&
+    (utc>in.gpsTime?utc-in.gpsTime:in.gpsTime-utc)>cfg_.timeDiffS)mask|=R_TIME;
+ if(in.usedSnr&&in.usedCount>=cfg_.snrMinSats){
+   unsigned lo=255,hi=0,count=0;
+   for(size_t i=0;i<in.usedCount;i++)if(in.usedSnr[i]){count++;lo=fmin(lo,in.usedSnr[i]);hi=fmax(hi,in.usedSnr[i]);}
+   if(count>=cfg_.snrMinSats&&hi-lo<=cfg_.snrSpreadDb)mask|=R_SNR_FLAT;
+ }
+ if(in.altValid&&in.baroValid&&fabs(in.altGps-in.altBaro)>cfg_.baroDiffM)mask|=R_BARO;
+ if(!stillValid_||in.now<stillTime_||in.steps<stillSteps_||distanceM(stillLat_,stillLon_,in.lat,in.lon)>cfg_.accelStillM){
+   stillValid_=true;stillLat_=in.lat;stillLon_=in.lon;stillTime_=in.now;stillSteps_=in.steps;
+ }else if(in.now-stillTime_>=cfg_.accelWindowS&&in.steps-stillSteps_>=cfg_.stepsWhileStill)mask|=R_ACCEL;
+ bool anchor=lastGoodValid_&&in.now>=lastGoodTime_&&in.now-lastGoodTime_<=cfg_.lastGoodMaxAgeS;
+ uint32_t dt=anchor?in.now-lastGoodTime_:0;
+ bool jump=anchor&&distanceM(in.lat,in.lon,lastGoodLat_,lastGoodLon_)>cfg_.jumpSlackM+cfg_.transportSpeedMs*dt;
+ if(jump){mask|=R_JUMP;untrusted_=true;}
+ bool segment=lastGoodValid_&&(!anchor||dt>3);
+ if(untrusted_){
+   bool coherent=cleanCount_&&in.now>cleanLast_&&in.now-cleanLast_<=3&&
+     distanceM(cleanLat_,cleanLon_,in.lat,in.lon)<=30+cfg_.transportSpeedMs*(in.now-cleanLast_);
+   if(!coherent){cleanCount_=1;cleanSince_=in.now;}
+   else if(cleanCount_<255)cleanCount_++;
+   cleanLat_=in.lat;cleanLon_=in.lon;cleanLast_=in.now;
+   bool series=in.now>=cleanSince_&&in.now-cleanSince_>=cfg_.recoveryS&&cleanCount_>=3;
+   bool corroborated=phoneFresh&&phoneSource_==1&&phoneAcc_<=100&&phoneDistance<=fmax(100,phoneAcc_*2);
+   // Age expiry or a stable forged location alone must never validate a jump.
+   if(!series||!((anchor&&!jump)||(lastGoodValid_&&distanceM(in.lat,in.lon,lastGoodLat_,lastGoodLon_)<=cfg_.jumpSlackM)||corroborated)){
+     episode_=true;return {true,uint8_t(mask|R_RECOVERY),true,false};
+   }
+   untrusted_=false;cleanCount_=0;segment=true;
+ }
+ lastGoodValid_=true;lastGoodLat_=in.lat;lastGoodLon_=in.lon;lastGoodTime_=in.now;
+ episode_=false;return {false,mask,false,segment};
+}
+}

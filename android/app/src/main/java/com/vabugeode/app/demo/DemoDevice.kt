@@ -448,7 +448,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true, p
             pressureHpa = env.pressureHpa, altBaro = env.altBaro,
             battV = pw.voltage, battMa = pw.currentMa, battPercent = pw.percent,
             steps = steps, headingDeg = norm360(heading),
-            src = src, markId = null,
+            src = src, markId = null,gpsPolicy=2,uncertain=gps.uncertain,
         )
     }
 
@@ -506,14 +506,11 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true, p
             val sats = (1..11).map {
                 Satellite(if (it <= 7) "GPS" else "BDS", it * 3, 41 + rnd.nextInt(2), it <= 10)
             }
-            val reasons = mutableSetOf(
-                SpoofReason.BLACKLIST, SpoofReason.PHONE_MISMATCH,
-                SpoofReason.SNR_FLAT, SpoofReason.ACCEL_MISMATCH,
-            )
+            val reasons = mutableSetOf(SpoofReason.BLACKLIST,SpoofReason.IMPOSSIBLE_JUMP)
             if (!prevSpoof) reasons += SpoofReason.IMPOSSIBLE_JUMP
             prevSpoof = true
             return GpsState(
-                GpsFix.FIX_3D, 10, 11, 0.7, 0.0, 0.0, 12.0, sats, true, SpoofReason.toMask(reasons),
+                GpsFix.FIX_3D, 10, 11, 0.7, 0.0, 0.0, 12.0, sats, false, SpoofReason.toMask(reasons) or 0x80, gpsPolicy=2,uncertain=true,
             )
         }
         prevSpoof = false
@@ -596,7 +593,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true, p
             timeUtc = st.timeUtcMs / 1000, mode = st.mode.ordinal, flags = flags, fix = g.fix.ordinal,
             satsUsed = g.satsUsed, satsView = g.satsInView,
             hdop = if (g.fix == GpsFix.FIX_2D || g.fix == GpsFix.FIX_3D) g.hdop else null,
-            lat = st.lat?.takeIf {it.isFinite()}, lon = st.lon?.takeIf {it.isFinite()}, src = srcCode(st.positionSource), spoofMask = g.spoofMask,
+            lat = st.lat?.takeIf {it.isFinite()}, lon = st.lon?.takeIf {it.isFinite()}, src = srcCode(st.positionSource) or 0x80 or (if(g.uncertain)0x40 else 0), spoofMask = g.spoofMask,
             altGps = g.altGps, speedKmh = if (st.mode == PowerMode.MOVING) g.speedKmh.coerceAtLeast(0.0) else 0.0,
             courseDeg = g.courseDeg,
             tempRaw = st.env.tempRaw, tempCorr = st.env.tempCorr, humidity = st.env.humidity,
@@ -645,7 +642,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true, p
             else -> CheckMsg(7, 0, 0, 0)
         }
         return InfoMsg(
-            fwMajor = 0, fwMinor = 1, fwPatch = 23, chip = 1,
+            fwMajor = 0, fwMinor = 1, fwPatch = 25, chip = 1,
             uptimeSec = (simMs - startMs) / 1000,
             sdTotalMb = 7580, sdFreeMb = 7480L - points.size / 40, gnssMask = 0b11,
             hikeStartUtc = lifecycle.value.hike.takeIf{it>0},
@@ -667,7 +664,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true, p
     fun pointMsg(i: Int): PointMsg {
         val p = points[i]
         return PointMsg(
-            timeUtc = p.tsUtcMs / 1000, lat = p.lat.takeIf {it.isFinite()}, lon = p.lon.takeIf {it.isFinite()}, src = srcCode(p.src),
+            timeUtc = p.tsUtcMs / 1000, lat = p.lat.takeIf {it.isFinite()}, lon = p.lon.takeIf {it.isFinite()}, src = srcCode(p.src),gpsPolicy=p.gpsPolicy,uncertain=p.uncertain,breakBefore=p.breakBefore,
             spoof = p.spoof, spoofMask = p.spoofMask, spoofLat = p.spoofLat, spoofLon = p.spoofLon,
             tempRaw = p.tempRaw, tempCorr = p.tempCorr, humidity = p.humidity, pressureHpa = p.pressureHpa,
             altBaro = p.altBaro, altGps = p.altGps, battMv = (p.battV * 1000).roundToInt(), battPct = p.battPercent,
@@ -718,7 +715,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true, p
                 if (!timeSynced) logLine(2, 6, "время с телефона, часы проверены")
                 timeSynced = true // время в демо ускорено — телефонное не применяем
             }
-            is Cmd.PhonePos -> {}
+            is Cmd.PhonePos, is Cmd.PhoneEvidence -> {}
             is Cmd.Record -> {if(lifecycle.value.phase!=1)return Proto.ACK_BUSY;recording = cmd.on}
             is Cmd.Mark -> {
                 if(lifecycle.value.phase!=1 || sdFailed.value)return Proto.ACK_BUSY
@@ -771,8 +768,8 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true, p
         }
         val sp = spoof != null
         if (sp != logSpoof) {
-            if (sp) logLine(1, 3, "подмена: маска 0x2B (чёрный список, телефон, SNR, шаги) %.4f,%.4f".format(java.util.Locale.US, spoof!!.first, spoof.second))
-            else logLine(2, 3, "подмена закончилась")
+            if (sp) logLine(1, 3, "координаты не подтверждены: скачок/ожидание опоры %.4f,%.4f".format(java.util.Locale.US, spoof!!.first, spoof.second))
+            else logLine(2, 3, "непроверенный эпизод эмулятора завершён")
             logSpoof = sp
         }
         if (indoor != logIndoor) {

@@ -209,7 +209,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         // Позиция телефона — гаджету для проверки подмены (сверка с телефоном)
-        repo.phonePosition = { PhoneLocation.last(app, repo.blacklist.value, maxAgeMs = 30_000, maxAccuracyM = 1000f)?.let { Triple(it.lat, it.lon, it.accuracyM) } }
+        repo.phonePosition = { PhoneLocation.last(app, repo.blacklist.value, maxAgeMs = 30_000, maxAccuracyM = 1000f) }
         // Маячки, услышанные с открытым приложением, тоже запоминаем для «где гаджет»
         viewModelScope.launch {
             var lastMs = 0L

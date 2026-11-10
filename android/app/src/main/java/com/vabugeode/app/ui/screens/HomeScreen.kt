@@ -83,6 +83,7 @@ fun HomeScreen(
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
     val fresh by vm.repo.statusFresh.collectAsStateWithLifecycle()
     val link by vm.repo.link.collectAsStateWithLifecycle()
+    val deviceInfo by vm.repo.info.collectAsStateWithLifecycle()
     val lifecycle by vm.repo.lifecycle.collectAsStateWithLifecycle()
     val lifeFresh by vm.repo.lifecycleFresh.collectAsStateWithLifecycle()
     val live = fresh && link == LinkState.CONNECTED
@@ -98,6 +99,7 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
+        if(live && deviceInfo!=null && !vm.repo.supportsGpsPolicy2())Text("На приборе действует прежняя фильтрация GPS. Для новой политики нужна прошивка 0.1.25 или новее.",color=Palette.Warn)
         HikeControls(vm.repo)
         if (lifecycle!=null && lifecycle?.phase!=com.vabugeode.app.protocol.HikeStateMsg.ACTIVE) {
             Text("Сохранённые записи доступны во вкладке «Походы».", color=Palette.TextDim)
@@ -257,8 +259,13 @@ private fun GpsCard(st: DeviceStatus) {
     val g = st.gps
     val (color, icon, title, text) = when {
         g.recovering && g.fix != GpsFix.OFF -> Quad(
-            Palette.Warn, Icons.Filled.GpsFixed, "Проверка восстановления GPS",
-            "Сигнал появился. Ждём устойчивые координаты; шаги продолжают считаться.",
+            Palette.Warn, Icons.Filled.GpsFixed, if(g.gpsPolicy>=2)"Координаты не подтверждены" else "Проверка восстановления GPS",
+            if(g.gpsPolicy>=2)"GPS противоречит прежнему маршруту. Непроверенные точки сохранены отдельно; шаги и датчики записываются." else "Сигнал появился. Ждём устойчивые координаты; шаги продолжают считаться.",
+        )
+        g.gpsPolicy>=2 && st.positionSource==com.vabugeode.app.model.PositionSource.NONE &&
+            (g.fix==GpsFix.FIX_2D || g.fix==GpsFix.FIX_3D) -> Quad(
+            Palette.Warn, Icons.Filled.GpsFixed, "GPS ещё не принят",
+            "Проверяем качество и свежесть координат. Это не признак подмены; шаги и датчики записываются.",
         )
         g.spoof -> Quad(
             Palette.Bad, Icons.Filled.Warning, "Подозрение на подмену GPS",

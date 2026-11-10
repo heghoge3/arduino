@@ -37,14 +37,14 @@ data class HikeSummary(
  * не считается новым измерением; через пропуски и подмену расстояние не соединяем.
  * Сдвиги меньше 3 м не считаем — это дрожание GPS на месте.
  */
-fun TrackPoint.isRoutePoint(): Boolean = lat.isFinite() && lon.isFinite() &&
+fun TrackPoint.isRoutePoint(): Boolean = !uncertain && lat.isFinite() && lon.isFinite() &&
     lat in -90.0..90.0 && lon in -180.0..180.0 &&
     (src == PositionSource.START || src == PositionSource.PDR || (src == PositionSource.GPS && !spoof))
 
 data class RouteSegment(val points: List<TrackPoint>, val source: PositionSource)
 
 private fun continuous(a: TrackPoint, b: TrackPoint): Boolean {
-    if (b.tsUtcMs - a.tsUtcMs !in 0..120_000) return false
+    if (b.breakBefore || b.tsUtcMs - a.tsUtcMs !in 0..120_000) return false
     if (a.src == PositionSource.PDR && b.src == PositionSource.PDR) {
         val steps = b.steps - a.steps
         if (steps < 0 || distanceM(a.lat, a.lon, b.lat, b.lon) > steps * 1.6 + 5) return false
@@ -96,6 +96,7 @@ fun routeSegments(track: List<TrackPoint>): List<RouteSegment> {
         cur = ArrayList()
     }
     for ((index, p) in correctedRoute(track).withIndex()) {
+        if(p.breakBefore)flush()
         if (!p.isRoutePoint()) { flush(); continue }
         val prev = cur.lastOrNull()
         if (prev != null && !continuous(track[index - 1], track[index])) flush()
@@ -125,7 +126,7 @@ fun gapSegments(track: List<TrackPoint>): List<RouteSegment> {
     var missing=false
     for (p in track) {
         val prev=previous
-        if (p.src==PositionSource.PAUSE || (prev!=null &&
+        if (p.breakBefore || p.src==PositionSource.PAUSE || (prev!=null &&
             (p.tsUtcMs-prev.tsUtcMs !in 0..180_000 || p.steps<prev.steps))) { anchor=null; missing=false }
         previous=p
         if (p.src==PositionSource.START && p.isRoutePoint()) { anchor=p; missing=true; continue }
@@ -154,8 +155,8 @@ fun trackKm(track: List<TrackPoint>, strideM: Double = .75): Double {
     val stride=strideM.takeIf { it.isFinite() && it in .3..1.5 } ?: .75
     for ((a,b) in track.zipWithNext()) {
         if (a.src==PositionSource.PAUSE || b.src==PositionSource.PAUSE || b.steps<a.steps || b.tsUtcMs-a.tsUtcMs !in 0..180_000) continue
-        if (a.src==PositionSource.NONE || b.src==PositionSource.NONE || a.src==PositionSource.START ||
-            (a.src==PositionSource.GPS&&a.spoof) || (b.src==PositionSource.GPS&&b.spoof)) meters+=(b.steps-a.steps)*stride
+        if (b.breakBefore || a.src==PositionSource.NONE || b.src==PositionSource.NONE || a.src==PositionSource.START ||
+            (a.src==PositionSource.GPS&&(a.spoof||a.uncertain)) || (b.src==PositionSource.GPS&&(b.spoof||b.uncertain))) meters+=(b.steps-a.steps)*stride
     }
     return meters/1000
 }

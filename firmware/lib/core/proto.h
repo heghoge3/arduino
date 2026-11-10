@@ -63,6 +63,7 @@ enum CmdCode : uint8_t {
   CMD_ACHIEVEMENT=0x1B,
   CMD_HIKE_ACTION=0x1C,
   CMD_GET_HIKE_END=0x1D,
+  CMD_PHONE_POS_V2=0x1E,
 };
 
 enum AckResult : uint8_t {
@@ -179,6 +180,7 @@ struct Point {
   uint8_t src;
   bool spoof;
   bool startAnchor = false;
+  bool policy2=false,breakBefore=false,uncertain=false;
   uint8_t spoofMask;
   int32_t spoofLat7, spoofLon7;
   int16_t tempRaw100, tempCorr100;

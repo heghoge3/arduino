@@ -196,6 +196,7 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
             if(!protected)Text("Последняя запись устройства защищена от удаления до следующего похода.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
         }
 
+        data?.first?.count {it.uncertain}?.takeIf{it>0}?.let { Text("Непроверенных GPS-точек: $it. Они сохранены отдельно и не входят в достоверную геометрию.",color=Palette.Warn) }
         val d = data
         if (d == null) {
             Text("Загрузка…", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)

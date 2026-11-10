@@ -1,6 +1,7 @@
 #include "nmea.h"
 
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -42,7 +43,13 @@ bool parseCoord(const char* v, const char* hemi, int degDigits, double& out) {
   if (l < (size_t)degDigits + 2) return false;
   char deg[4] = {0};
   memcpy(deg, v, degDigits);
-  double d = atof(deg) + atof(v + degDigits) / 60.0;
+  for(int i=0;i<degDigits;i++)if(deg[i]<'0'||deg[i]>'9')return false;
+  char* end=nullptr;double minutes=strtod(v+degDigits,&end);
+  if(!end||*end||!isfinite(minutes)||minutes<0||minutes>=60)return false;
+  bool latitude=degDigits==2;
+  if(latitude?(hemi[0]!='N'&&hemi[0]!='S'):(hemi[0]!='E'&&hemi[0]!='W'))return false;
+  double d=atof(deg)+minutes/60;
+  if(d>(latitude?90:180))return false;
   if (hemi[0] == 'S' || hemi[0] == 'W') d = -d;
   out = d;
   return true;
@@ -166,7 +173,7 @@ bool Parser::handle(char* body) {
 
 void Parser::onRmc(char** f, int n) {
   // $GNRMC,hhmmss.ss,A,llll.ll,N,yyyyy.yy,E,speed,course,ddmmyy,...
-  rmcEpoch_=UINT32_MAX;
+  rmcEpoch_=UINT32_MAX;fix_.timeValid=false;
   if (n < 10) return;
   const char* t = f[1];
   rmcEpoch_=epoch(t);
@@ -175,7 +182,11 @@ void Parser::onRmc(char** f, int n) {
     auto two = [](const char* p) { return (p[0] - '0') * 10 + (p[1] - '0'); };
     int year = 2000 + two(d + 4);
     // Год 2000+: защита от «недели GPS» и мусора — в разумных пределах
-    if (year >= 2024 && year <= 2099) {
+    int month=two(d+2),day=two(d);bool digits=true;
+    for(unsigned k=0;k<6;k++)digits&=d[k]>='0'&&d[k]<='9';
+    static const uint8_t days[]={31,28,31,30,31,30,31,31,30,31,30,31};
+    bool calendar=month>=1&&month<=12&&day>=1&&day<=days[month-1]+(month==2&&year%4==0);
+    if (digits&&calendar&&rmcEpoch_!=UINT32_MAX&&year >= 2024 && year <= 2099) {
       fix_.utc = toUnix(year, two(d + 2), two(d), two(t), two(t + 2), two(t + 4));
       fix_.timeValid = true;
     }
@@ -189,6 +200,8 @@ void Parser::onRmc(char** f, int n) {
     validFixes_++;
     fix_.speedKmh = f[7][0] ? static_cast<float>(atof(f[7]) * 1.852) : 0;
     fix_.courseDeg = f[8][0] ? static_cast<float>(atof(f[8])) : 0;
+    if(!isfinite(fix_.speedKmh)||fix_.speedKmh<0||fix_.speedKmh>6553)fix_.speedKmh=0;
+    if(!isfinite(fix_.courseDeg)||fix_.courseDeg<0||fix_.courseDeg>=360)fix_.courseDeg=0;
   } else {
     fix_.valid = false;
   }

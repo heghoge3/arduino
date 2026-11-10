@@ -57,7 +57,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             val radius = blockingRadiusFromDiameterKm(diameter)
             AlertDialog(
                 onDismissRequest = { editIndex = null },
-                title = { Text("Диаметр блокировки") },
+                title = { Text("Диаметр области наблюдения") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(point.note)
@@ -66,7 +66,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             isError = radius == null,
                             supportingText = { Text("От 0,2 до 100 км. Радиус — половина диаметра.") })
-                        Text("Большая область исключает из GPS-трека и настоящие координаты внутри неё.")
+                        Text("В прошивке 0.1.25 и новее это диагностическая область, а не запрет координат. Старые прошивки продолжают её блокировать.")
                     }
                 },
                 confirmButton = { TextButton(enabled = radius != null, onClick = {
@@ -122,7 +122,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         OfflineMapsPanel()
 
         Panel {
-            SectionLabel("Чёрный список подмены")
+            SectionLabel("Известные области аномалий GPS")
             Spacer(Modifier.height(4.dp))
             Text(
                 "Области вокруг ложных точек GPS. Позиции внутри круга помечаются как подозрительные. Диаметр — полная ширина круга.",

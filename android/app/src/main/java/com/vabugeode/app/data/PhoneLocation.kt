@@ -21,17 +21,17 @@ import kotlin.math.roundToInt
  * Последняя известная позиция телефона — без включения GPS, почти бесплатно.
  * Сначала позиция по вышкам и Wi-Fi: она меньше зависит от GNSS, но может быть грубой
  * или устаревшей. GPS телефона может ошибаться одновременно с GPS гаджета.
- * GPS/fused — только если сетевой позиции нет, и не из чёрного списка.
+ * GPS/fused — только если сетевой позиции нет; география не ограничивает выбор.
  * Телефон — справочная сверка, а не доказательство подмены GPS гаджета.
  */
 object PhoneLocation {
-    data class Fix(val lat: Double, val lon: Double, val accuracyM: Int)
+    data class Fix(val lat: Double, val lon: Double, val accuracyM: Int,val ageMs:Long=0,val provider:Int=0)
 
     /** Разовый запрос сетевой позиции для начала PDR, без постоянного GPS телефона. */
     @Suppress("DEPRECATION")
     suspend fun refresh(ctx: Context, blacklist: List<BlacklistPoint>): Fix? {
         last(ctx, blacklist, maxAgeMs = 30_000)?.takeIf { fix ->
-            fix.accuracyM <= 1000 && blacklist.none { distanceM(fix.lat, fix.lon, it.lat, it.lon) <= it.radiusM }
+            fix.accuracyM <= 1000
         }?.let { return it }
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null
@@ -44,7 +44,7 @@ object PhoneLocation {
                             blacklist, 30_000, 1000f) != null
                         if (acceptable && continuation.isActive) {
                             lm.removeUpdates(this)
-                            continuation.resume(Fix(l.latitude, l.longitude, l.accuracy.roundToInt().coerceAtLeast(1)))
+                            continuation.resume(Fix(l.latitude, l.longitude, l.accuracy.roundToInt().coerceAtLeast(1),(SystemClock.elapsedRealtimeNanos()-l.elapsedRealtimeNanos)/1_000_000,1))
                         }
                     }
                     override fun onProviderEnabled(provider: String) {}
@@ -74,8 +74,7 @@ object PhoneLocation {
                 (nowNanos - l.elapsedRealtimeNanos) / 1_000_000 < maxAgeMs &&
                 l.hasAccuracy() && l.accuracy.isFinite() && l.accuracy > 0 && l.accuracy <= maxAccuracyM &&
                 l.latitude.isFinite() && l.latitude in -90.0..90.0 &&
-                l.longitude.isFinite() && l.longitude in -180.0..180.0 &&
-                blacklist.none { distanceM(l.latitude, l.longitude, it.lat, it.lon) <= it.radiusM }
+                l.longitude.isFinite() && l.longitude in -180.0..180.0
         }
         return fresh.firstOrNull { it.first == LocationManager.NETWORK_PROVIDER }
             ?: fresh.minByOrNull { it.second.accuracy }
@@ -99,6 +98,6 @@ object PhoneLocation {
         }
         val ageS = (SystemClock.elapsedRealtimeNanos() - loc.elapsedRealtimeNanos) / 1_000_000_000
         AppLog.d("LOC", "позиция $provider: возраст ${ageS} с, точность +/- ${loc.accuracy.roundToInt()} м")
-        return Fix(loc.latitude, loc.longitude, loc.accuracy.roundToInt().coerceIn(1, 65535))
+        return Fix(loc.latitude, loc.longitude, loc.accuracy.roundToInt().coerceIn(1, 65535),(SystemClock.elapsedRealtimeNanos()-loc.elapsedRealtimeNanos)/1_000_000,if(provider==LocationManager.NETWORK_PROVIDER)1 else if(provider==LocationManager.GPS_PROVIDER)2 else 3)
     }
 }

@@ -6,6 +6,8 @@ class Distance {
  public:
   void reset(uint32_t steps=0, double meters=0);
   void update(uint32_t now, uint32_t steps, bool recording, bool gps, double lat, double lon, float hdop, float stride);
+  // Start a new GPS segment without losing uncounted steps.
+  void breakGeometry() { haveGps_=false; gap_=true; }
   double meters() const { return meters_; }
   uint32_t steps() const { return steps_; }
  private:

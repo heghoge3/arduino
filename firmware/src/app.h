@@ -11,7 +11,7 @@
 #include "walk_distance.h"
 #include "hike_state.h"
 
-constexpr uint32_t PERSIST_MAGIC = 0x56424737;  // «VBG6»: экономный режим и ручной старт
+constexpr uint32_t PERSIST_MAGIC = 0x56424738;  // «VBG6»: экономный режим и ручной старт
 constexpr uint8_t CAMP_BUF = 15;                // записей на стоянке до сброса на SD
 
 // Настройки (NVS): меняются командами с телефона
@@ -47,6 +47,7 @@ struct Persist {
   double startLat=0,startLon=0;
 
   // Последняя достоверная позиция (для записи на стоянке и меток)
+  bool gpsBreakPending=true;
   bool haveGood;
   double goodLat, goodLon;
   float goodAlt;

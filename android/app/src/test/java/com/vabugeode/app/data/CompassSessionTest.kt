@@ -42,7 +42,7 @@ class CompassSessionTest {
         val g = Gadget(14)
         val r = ProtocolDeviceRepository(backgroundScope, g, emptyList())
         r.setPdrSettings(82, -900, true)
-        r.phonePosition = { Triple(60.0, 30.0, 100) }
+        r.phonePosition = { PhoneLocation.Fix(60.0,30.0,100) }
         r.connect(); advanceTimeBy(1000)
         assertTrue(g.sent.contains(Cmd.PdrSettings(82, -900, true)))
         assertEquals(3, r.compassState.value)

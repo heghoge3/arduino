@@ -33,7 +33,7 @@ enum class GpsFix(val title: String) {
 /** Причины подозрения на подмену. Биты маски spoof_reason (ТЗ, раздел 7). */
 enum class SpoofReason(val bit: Int, val title: String) {
     RECOVERY(7, "Проверка восстановления"),
-    BLACKLIST(0, "Точка из чёрного списка"),
+    BLACKLIST(0, "Известная область аномалий"),
     PHONE_MISMATCH(1, "Расходится с телефоном"),
     IMPOSSIBLE_JUMP(2, "Невозможный скачок"),
     SNR_FLAT(3, "Одинаковый SNR спутников"),
@@ -67,8 +67,9 @@ data class GpsState(
     val satellites: List<Satellite>,
     val spoof: Boolean,
     val spoofMask: Int,
+    val gpsPolicy:Int=1,val uncertain:Boolean=false,
 ) {
-    val recovering: Boolean get() = GpsEvidence.recoveryOnly(spoofMask)
+    val recovering: Boolean get() = uncertain || (gpsPolicy<2 && GpsEvidence.recoveryOnly(spoofMask))
 }
 
 /** Питание по INA219. */
@@ -144,6 +145,7 @@ data class TrackPoint(
     val headingDeg: Double,
     val src: PositionSource,
     val markId: Int?,
+    val gpsPolicy:Int=1,val breakBefore:Boolean=false,val uncertain:Boolean=false,
 )
 
 /** Типы меток для монтажа (ТЗ, раздел 9). */
@@ -178,7 +180,7 @@ data class DeviceInfo(
     val checks: List<SelfCheck>,
 )
 
-/** Точка из чёрного списка подмены. */
+/** Известная область аномалий подмены. */
 data class BlacklistPoint(val lat: Double, val lon: Double, val radiusM: Int, val note: String)
 
 /** Подключение к устройству. */

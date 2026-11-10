@@ -321,7 +321,7 @@ proto::Status makeStatus() {
   m.hdop10 = N.fix ? hdop10(N.hdop) : proto::HDOP_NA;
   m.lat7 = N.haveLat ? c7(N.lat) : 0;
   m.lon7 = N.haveLat ? c7(N.lon) : 0;
-  m.src = N.src;
+  m.src = N.src | 0x80 | (N.recovering?0x40:0);
   m.spoofMask = N.spoofMask;
   m.altGps10 = N.altValid ? s16(N.altGps, 10) : proto::NA16;
   m.speed10 = (uint16_t)lroundf(N.speedKmh * 10);
@@ -449,7 +449,8 @@ void onFix() {
     if (p.sat(i).used && p.snrFresh(p.sat(i).system,ms)) usedSnr[used++] = p.sat(i).snr;
   }
   spoof::Input in{};
-  in.now = N.now;
+  in.now = clockx::uptimeS();
+  in.utcNow=N.now;
   in.timeTrusted = clockx::trusted();
   in.lat = f.lat;
   in.lon = f.lon;
@@ -493,7 +494,7 @@ void onFix() {
   bool mismatch = (r.mask & spoof::R_TIME) != 0;
   if (mismatch && !clockMismatch) {
     LOGW(M_RTC, "UTC GPS=%lu ESP=%lu; сбой времени",
-         (unsigned long)f.utc, (unsigned long)in.now);
+         (unsigned long)f.utc, (unsigned long)in.utcNow);
   } else if (!mismatch && clockMismatch && f.timeValid) {
     LOGI(M_RTC, "время GPS снова совпадает с часами");
   }
@@ -512,6 +513,10 @@ void onFix() {
   N.fixType = f.fixType;
   N.satsUsed = f.satsUsed;
   N.hdop = f.hdop;
+  if(r.segmentStart||r.uncertain){
+    P.gpsBreakPending=true;
+    P.distance.breakGeometry();
+  }
   N.spoof = r.detected();
   N.recovering = r.recovering();
   N.spoofMask = r.mask;
@@ -581,9 +586,11 @@ void logPoint(bool startAnchor=false, bool gap=false) {
   p.lon7 = (lat || lon) ? c7(lon) : 0;
   p.src = paused ? proto::SRC_PAUSE : (haveGps ? 1 : (havePdr ? 2 : 0));
   p.startAnchor=startAnchor;
+  p.policy2=true;p.uncertain=!paused&&!startAnchor&&N.recovering;
+  p.breakBefore=haveGps&&P.gpsBreakPending;
   p.spoof = !paused && N.spoof;
-  p.spoofMask = p.spoof || (!paused && !startAnchor && N.recovering) ? N.spoofMask : 0;
-  if (p.spoof) {
+  p.spoofMask = !paused?N.spoofMask:0;
+  if (p.spoof || p.uncertain) {
     const nmea::Fix& f = gps::parser().fix();
     p.spoofLat7 = c7(f.lat);
     p.spoofLon7 = c7(f.lon);
@@ -626,6 +633,7 @@ void logPoint(bool startAnchor=false, bool gap=false) {
       saveRecordCheckpoint();
     }
   }
+  if(haveGps&&!g_sdError)P.gpsBreakPending=false;
   if (radio::live() || startAnchor) {
     uint8_t b[proto::POINT_SIZE];
     sendPacketEvent(b, proto::encodePoint(p, b, sizeof(b)));
@@ -654,7 +662,8 @@ void addMark(uint8_t type, const char* text, uint8_t textLen) {
 }
 
 void restoreSavedPoint(const proto::Point& p) {
-  bool gps=p.src==1&&!p.spoof&&!P.spoof.blacklisted(p.lat7/1e7,p.lon7/1e7);
+  bool gps=p.src==1&&!p.spoof&&!p.uncertain;
+  if(p.breakBefore)P.distance.breakGeometry();
   P.distance.update(p.time,p.steps,p.src!=proto::SRC_PAUSE,gps,p.lat7/1e7,p.lon7/1e7,p.hdop10/10.0f,S.strideM);
   P.stepDet.setCount(p.steps);
   if (p.startAnchor) { P.startAnchor=true; P.startLat=p.lat7/1e7; P.startLon=p.lon7/1e7; }
@@ -810,9 +819,12 @@ void handleCommand(const uint8_t* data, size_t len) {
       }
       break;
     }
+    case proto::CMD_PHONE_POS_V2:
     case proto::CMD_PHONE_POS:
-      P.spoof.setPhone(c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM, N.now);
-      LOGI(M_SPOOF, "телефон %.5f,%.5f +/- %u м (30 с)",
+      P.spoof.setPhone(c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM, clockx::uptimeS());
+      P.spoof.setPhoneEvidence(c.code==proto::CMD_PHONE_POS_V2?c.time:30000,c.code==proto::CMD_PHONE_POS_V2?c.flag:0);
+      LOGI(M_SPOOF,"PHONE ageMs=%lu source=%u accuracy=%u",(unsigned long)(c.code==proto::CMD_PHONE_POS_V2?c.time:UINT32_MAX),c.code==proto::CMD_PHONE_POS_V2?c.flag:0,c.accuracyM);
+      LOGI(M_SPOOF, "телефон %.5f,%.5f +/- %u м (30 с суммарно)",
            c.lat7 / 1e7, c.lon7 / 1e7, c.accuracyM);
 #ifdef FAKE_SENSORS
       if (gps::fakeAnchor(c.lat7 / 1e7, c.lon7 / 1e7)) {
@@ -897,6 +909,10 @@ void handleCommand(const uint8_t* data, size_t len) {
       P.startAnchor=true; P.startLat=c.lat7/1e7; P.startLon=c.lon7/1e7;
       N.lat=P.startLat; N.lon=P.startLon; N.haveLat=true; N.src=4;
       logPoint(true); flushCamp();
+      if(g_sdError||P.campN||!storage::sdOk()){P.startAnchor=false;N.src=0;res=proto::ACK_BUSY;break;}
+      P.spoof.setManualReference(P.startLat,P.startLon,clockx::uptimeS());
+      P.gpsBreakPending=true;N.recovering=false;N.spoof=false;N.spoofMask=0;
+      P.distance.breakGeometry();
       P.nextLogAt=N.now+P.power.logIntervalS();
       saveRecordCheckpoint();
       LOGI(M_SYS,"старт задан пользователем %.5f,%.5f",N.lat,N.lon);
@@ -919,14 +935,14 @@ void handleCommand(const uint8_t* data, size_t len) {
       ensureStorage();
       if (storage::saveBlacklist(c.bl, c.blCount)) g_prefs.putBool("blV2",c.code==proto::CMD_BLACKLIST_V2);
       else { g_sdError=true; res=proto::ACK_BUSY; }
-      if (P.haveGood && P.spoof.blacklisted(P.goodLat,P.goodLon)) {
+      if (!P.spoof.modern() && P.haveGood && P.spoof.blacklisted(P.goodLat,P.goodLon)) {
         P.haveGood=false; P.goodTime=0; P.spoof.forgetLastGood();
         if (!P.startAnchor) { N.haveLat=false; N.src=0; }
       }
-      if(N.src==1 && N.haveLat && P.spoof.blacklisted(N.lat,N.lon)) {
+      if(!P.spoof.modern() && N.src==1 && N.haveLat && P.spoof.blacklisted(N.lat,N.lon)) {
         N.src=0; N.fix=false; N.spoof=true; N.recovering=false; N.spoofMask|=spoof::R_BLACKLIST; N.haveLat=false;
       }
-      LOGI(M_SPOOF,"зон блокировки %u; первый радиус %u м",c.blCount,c.blCount?c.bl[0].radiusM:0);
+      LOGI(M_SPOOF,"диагностических зон %u; первый радиус %u м",c.blCount,c.blCount?c.bl[0].radiusM:0);
       break;
     }
     case proto::CMD_GET_INFO:
@@ -1151,7 +1167,7 @@ void watchState() {
   // Датчики и SD
   if (N.recovering != g_w.recovering) {
     g_w.recovering = N.recovering;
-    if (N.recovering) LOGI(M_GPS, "GPS: проверка восстановления 10 с");
+    if (N.recovering) LOGI(M_GPS, "GPS: координаты не подтверждены; ожидаем согласования с опорой");
     else if (N.src == 1) LOGI(M_GPS, "GPS: восстановление подтверждено");
     else LOGI(M_GPS, "GPS: проверка восстановления прервана");
   }

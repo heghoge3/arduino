@@ -122,7 +122,7 @@ size_t encodePoint(const Point& m, uint8_t* out, size_t cap) {
   Writer w(out, cap);
   w.header(MSG_POINT);
   w.u32(m.time); w.i32(m.lat7); w.i32(m.lon7);
-  w.u8((m.src & 0x03) | (m.spoof ? 0x04 : 0) | (m.startAnchor ? 0x08 : 0)); w.u8(m.spoofMask);
+  w.u8((m.src & 0x03) | (m.spoof ? 0x04 : 0) | (m.startAnchor ? 0x08 : 0) | (m.policy2?0x10:0) | (m.breakBefore?0x20:0) | (m.uncertain?0x40:0)); w.u8(m.spoofMask);
   w.i32(m.spoofLat7); w.i32(m.spoofLon7);
   w.i16(m.tempRaw100); w.i16(m.tempCorr100);
   w.u16(m.hum100); w.u32(m.pressPa);
@@ -192,6 +192,7 @@ bool decodePoint(const uint8_t* in, size_t len, Point& m) {
   m.time = r.u32(); m.lat7 = r.i32(); m.lon7 = r.i32();
   uint8_t fl = r.u8();
   m.src = fl & 0x03; m.spoof = (fl & 0x04) != 0; m.startAnchor = (fl & 0x08) != 0;
+  m.policy2=(fl&0x10)!=0;m.breakBefore=(fl&0x20)!=0;m.uncertain=(fl&0x40)!=0;
   m.spoofMask = r.u8(); m.spoofLat7 = r.i32(); m.spoofLon7 = r.i32();
   m.tempRaw100 = r.i16(); m.tempCorr100 = r.i16();
   m.hum100 = r.u16(); m.pressPa = r.u32();
@@ -288,6 +289,10 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
     case CMD_PDR_SETTINGS:
       c.a = r.u16(); c.altDm = r.i16(); c.flag = r.u8();
       if (r.atEnd() && (c.a < 30 || c.a > 150 || c.altDm < -1800 || c.altDm > 1800 || c.flag > 1)) return ACK_BAD_ARGS;
+      break;
+    case CMD_PHONE_POS_V2:
+      c.lat7=r.i32();c.lon7=r.i32();c.accuracyM=r.u16();c.time=r.u32();c.flag=r.u8();
+      if(c.lat7< -900000000||c.lat7>900000000||c.lon7< -1800000000||c.lon7>1800000000||!c.accuracyM||c.accuracyM>1000||c.time>30000||c.flag>3)return ACK_BAD_ARGS;
       break;
     case CMD_HIKE_ACTION:
       c.flag=r.u8(); c.time=r.u32(); c.revision=r.u32(); c.operation=r.u32();
