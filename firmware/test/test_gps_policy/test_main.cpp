@@ -72,4 +72,11 @@ void segment_boundary_preserves_step_distance_without_chord(){
  d.breakGeometry();d.update(3,20,true,true,60,30,1,.75);
  TEST_ASSERT_DOUBLE_WITHIN(.001,15,d.meters());
 }
-int main(){UNITY_BEGIN();RUN_TEST(segment_boundary_preserves_step_distance_without_chord);RUN_TEST(old_diagnostics_replay_under_original_policy);RUN_TEST(malformed_nmea_does_not_reuse_old_time_or_coordinates);RUN_TEST(explicit_manual_reference_resolves_pending_without_geometry_jump);RUN_TEST(real_zone_is_not_rejected);RUN_TEST(transit_gap_is_segment_not_spoof);RUN_TEST(stable_jump_never_becomes_verified_by_timeout);RUN_TEST(return_to_known_position_recovers);RUN_TEST(weak_pairs_and_clock_shift_are_context);RUN_TEST(fresh_network_corroborates_but_old_or_gps_does_not);RUN_TEST(new_wire_flags_preserve_policy_and_boundaries);return UNITY_END();}
+void repeated_fixes_in_one_second_do_not_restart_recovery_or_inflate_evidence(){
+ spoof::Detector d;d.check(fix(1));d.check(fix(2,60,30));
+ d.setPhone(60,30,20,3);d.setPhoneEvidence(0,1);
+ for(unsigned n=0;n<100;n++)TEST_ASSERT_TRUE(d.check(fix(3,60,30)).uncertain);
+ spoof::Result r;for(unsigned t=4;t<=15;t++)for(unsigned n=0;n<5;n++)r=d.check(fix(t,60,30));
+ TEST_ASSERT_FALSE(r.uncertain);TEST_ASSERT_FALSE(r.spoof);
+}
+int main(){UNITY_BEGIN();RUN_TEST(repeated_fixes_in_one_second_do_not_restart_recovery_or_inflate_evidence);RUN_TEST(segment_boundary_preserves_step_distance_without_chord);RUN_TEST(old_diagnostics_replay_under_original_policy);RUN_TEST(malformed_nmea_does_not_reuse_old_time_or_coordinates);RUN_TEST(explicit_manual_reference_resolves_pending_without_geometry_jump);RUN_TEST(real_zone_is_not_rejected);RUN_TEST(transit_gap_is_segment_not_spoof);RUN_TEST(stable_jump_never_becomes_verified_by_timeout);RUN_TEST(return_to_known_position_recovers);RUN_TEST(weak_pairs_and_clock_shift_are_context);RUN_TEST(fresh_network_corroborates_but_old_or_gps_does_not);RUN_TEST(new_wire_flags_preserve_policy_and_boundaries);return UNITY_END();}

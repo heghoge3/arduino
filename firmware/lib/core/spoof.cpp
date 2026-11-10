@@ -176,10 +176,10 @@ Result Detector::checkModern(const Input& in){
  if(jump){mask|=R_JUMP;untrusted_=true;}
  bool segment=lastGoodValid_&&(!anchor||dt>3);
  if(untrusted_){
-   bool coherent=cleanCount_&&in.now>cleanLast_&&in.now-cleanLast_<=3&&
+   bool coherent=cleanCount_&&in.now>=cleanLast_&&in.now-cleanLast_<=3&&
      distanceM(cleanLat_,cleanLon_,in.lat,in.lon)<=30+cfg_.transportSpeedMs*(in.now-cleanLast_);
    if(!coherent){cleanCount_=1;cleanSince_=in.now;}
-   else if(cleanCount_<255)cleanCount_++;
+   else if(in.now>cleanLast_&&cleanCount_<255)cleanCount_++;
    cleanLat_=in.lat;cleanLon_=in.lon;cleanLast_=in.now;
    bool series=in.now>=cleanSince_&&in.now-cleanSince_>=cfg_.recoveryS&&cleanCount_>=3;
    bool corroborated=phoneFresh&&phoneSource_==1&&phoneAcc_<=100&&phoneDistance<=fmax(100,phoneAcc_*2);
