@@ -1,0 +1,11 @@
+* Engineering approximation, NOT manufacturer-qualified models of supplied parts.
+* NPN: representative 2N3904 behaviour; conservative BF and Is swept by run_review.py.
+* Sources/ranges/limitations: README.md. All temperatures are junction temperatures.
+.model N_REVIEW NPN(IS={BIS} BF={BETA} BR=1 VAF=75 IKF=0.1
++ RB=10 RC=1 RE=0.1 CJE=8p CJC=4p TF=0.4n TR=0.25u XTB=1.5)
+.model D_REVIEW D(IS={DIS} N={DN} RS=0.6 CJO=4p TT=4n BV=75 IBV=5u)
+* PMOS approximation with intrinsic reverse diode. Not an AO3401A vendor model.
+* No SOA/self-heating/reverse-regulator model. Rds=1G is numerical off-state path.
+.model P_REVIEW VDMOS(PCHAN VTO={VTH} KP=12 RD=0.015 RS=0.015
++ RG=2 RDS=1G RB=0.1 IS=1p N=1 CJO=80p Cgs=590p Cgdmin=55p Cgdmax=300p)
+.model BUTTON SW(RON=0.05 ROFF=1e12 VT=0.5 VH=0.1)

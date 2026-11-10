@@ -1,0 +1,19 @@
+* Reviewed power latch subcircuit: VPROT, switched battery, START, HOLD, A-read, GND.
+* BASE resistance and leakage models are in the test harness, not extra BOM parts.
+.subckt LATCH vp out start hold aread gnd params: RIN=10k RBE=100k RGATE=100k CGATE=100n RSTOP=10k RBLEED=100k
+MP drain gate vp P_REVIEW
+Vpath drain out 0
+RB out gnd {RBLEED}
+RG gate vp {RGATE}
+CG gate vp {CGATE}
+CB vp gnd 100n
+RS gate drive {RSTOP}
+Q1 drive base1 gnd N_REVIEW
+D1 start or_in D_REVIEW
+D2 hold or_in D_REVIEW
+R1 or_in base1 {RIN}
+R2 base1 gnd {RBE}
+Q2 aread base2 gnd N_REVIEW
+R3 start base2 {RIN}
+R4 base2 gnd {RBE}
+.ends LATCH

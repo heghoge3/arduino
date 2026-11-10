@@ -3,8 +3,9 @@
 Текущие требования продукта — [product.md](../product.md), состояние работы —
 [workboard.md](../workboard.md), правила чатов — [collaboration.md](../collaboration.md).
 Название ещё не утверждено. Детали ожидаются для замеров; к изготовлению не готово.
-По задаче владельца возобновлён [подбор кнопочного питания](button-power-selection.md):
-варианты исследованы, но доступный дозаказ, схема и BOM ещё не подтверждены.
+По задаче владельца выполнена [проверка кнопочного питания](power-review/README.md):
+принцип согласован, [состав макета](button-power-selection.md) уточнён после расчёта
+и симуляции. Номиналы предложены; аппаратных испытаний и утверждённой серийной схемы нет.
 
 ## Начать отсюда
 
@@ -16,7 +17,8 @@
 | [components.md](components.md) | Состав устройства и состояние проверки модулей |
 | [measurements.md](measurements.md) | Порядок замеров и статус геометрии |
 | [electrical-baseline.md](electrical-baseline.md) | Распиновка и вопросы электрической схемы |
-| [button-power-selection.md](button-power-selection.md) | Две кнопки, готовые решения, проверка поставок и условия дозаказа |
+| [button-power-selection.md](button-power-selection.md) | Согласованный принцип, актуальный состав макета и условия дозаказа |
+| [power-review/README.md](power-review/README.md) | Проверка схемы, симуляция, ограничения и условная альтернатива через EN |
 | [journal.md](journal.md) | История решений и изменений |
 | [prototype-review.md](prototype-review.md) | Наблюдения по пяти фото альфа-прототипа |
 | [procurement.md](procurement.md) | Предварительный крепёж, производства PCB и расчёт цен |

@@ -1,0 +1,228 @@
+{
+  "engine": "** ngspice-44.2 : Circuit level simulation program",
+  "limitations": "Engineering component models; no physical board, real regulator, firmware, SOA or thermal validation.",
+  "dc": {
+    "passing_cases": 432,
+    "selected_margins": {
+      "gate_on_min_abs_v": 2.6823067,
+      "gate_off_max_abs_v": 1.000000000139778e-06,
+      "a_high_min_fraction": 0.999999696969697,
+      "a_low_max_fraction": 0.007445866666666667,
+      "unpowered_a_max_abs_v": 0.01830881,
+      "hold_backfeed_max_a": 3.393103e-08
+    },
+    "pullup_sweep_note": "30k..100k is a chosen sensitivity interval, not Espressif guaranteed min/max.",
+    "unpowered_gpio_pullup_disabled": {
+      "v(out)": 3.592911,
+      "v(xl.gate)": 0.3453926,
+      "v(ain)": 0.01814824,
+      "v(start)": 3.599973,
+      "v(hold)": 2.099691e-07,
+      "i(vbat)": -0.109483,
+      "i(vhold)": 2.099691e-09,
+      "i(vrail)": 1.814824e-14
+    }
+  },
+  "transients": {
+    "baseline_cycle": {
+      "peak_path_a": 11.4969693,
+      "lowest_vp_start_v": 2.47480085,
+      "out_40ms_v": 4.17402223,
+      "out_80ms_v": 2.96289033e-05,
+      "out_140ms_v": 1.69218875e-07,
+      "out_before_button_max_v": 1.39501813e-05,
+      "turnoff_path_energy_j_approx": 5.921891096837579e-06
+    },
+    "review_cycle": {
+      "peak_path_a": 1.90755493,
+      "lowest_vp_start_v": 3.91374987,
+      "out_40ms_v": 4.1735958,
+      "out_80ms_v": 0.111070431,
+      "out_140ms_v": 1.70557295e-07,
+      "out_before_button_max_v": 1.40036756e-05,
+      "turnoff_path_energy_j_approx": 0.00011806654632667108
+    },
+    "cancel": {
+      "peak_path_a": 1.90755493,
+      "lowest_vp_start_v": 3.91374987,
+      "out_40ms_v": 4.15630769,
+      "out_80ms_v": 2.04743513e-07,
+      "out_140ms_v": 1.69233108e-07,
+      "out_before_button_max_v": 1.40036756e-05,
+      "turnoff_path_energy_j_approx": 2.41719686024829e-09
+    },
+    "stuck_a": {
+      "peak_path_a": 1.90755493,
+      "lowest_vp_start_v": 3.91374987,
+      "out_40ms_v": 4.17349915,
+      "out_80ms_v": 4.17349915,
+      "out_140ms_v": 2.04746408e-07,
+      "out_before_button_max_v": 1.40036756e-05,
+      "turnoff_path_energy_j_approx": 0.00014623111499002732
+    },
+    "reset_hiz": {
+      "peak_path_a": 1.90755493,
+      "lowest_vp_start_v": 3.91374987,
+      "out_40ms_v": 4.1735958,
+      "out_80ms_v": 0.111143096,
+      "out_140ms_v": 1.70557344e-07,
+      "out_before_button_max_v": 1.40036756e-05,
+      "turnoff_path_energy_j_approx": 0.00011806687467755045
+    },
+    "bounce_a": {
+      "peak_path_a": 1.90755493,
+      "lowest_vp_start_v": 3.91374987,
+      "out_40ms_v": 4.1735958,
+      "out_80ms_v": 0.111070421,
+      "out_140ms_v": 1.70557295e-07,
+      "out_before_button_max_v": 1.40036756e-05,
+      "turnoff_path_energy_j_approx": 0.00011806654834884772
+    },
+    "same_time_handoff": {
+      "peak_path_a": 1.90755493,
+      "lowest_vp_start_v": 3.91374987,
+      "out_40ms_v": 4.1735958,
+      "out_80ms_v": 0.111124048,
+      "out_140ms_v": 1.70557297e-07,
+      "out_before_button_max_v": 1.40036756e-05,
+      "turnoff_path_energy_j_approx": 0.00011806809255106528
+    },
+    "late_hold": {
+      "peak_path_a": 1.90755493,
+      "lowest_vp_start_v": 3.91374987,
+      "out_40ms_v": 4.15630769,
+      "out_80ms_v": 2.04748897e-07,
+      "out_140ms_v": 1.69233108e-07,
+      "out_before_button_max_v": 1.40036756e-05,
+      "turnoff_path_energy_j_approx": 2.4171968604123346e-09
+    },
+    "low_battery": {
+      "peak_path_a": 1.08996312,
+      "lowest_vp_start_v": 2.83643854,
+      "out_40ms_v": 2.97958356,
+      "out_80ms_v": 0.0105417427,
+      "out_140ms_v": 1.30557261e-07,
+      "out_before_button_max_v": 1.10440012e-05,
+      "turnoff_path_energy_j_approx": 5.879771572029435e-05
+    },
+    "larger_input_cap": {
+      "peak_path_a": 3.99639693,
+      "lowest_vp_start_v": 3.60042717,
+      "out_40ms_v": 4.1735958,
+      "out_80ms_v": 1.82239381,
+      "out_140ms_v": 0.000468253529,
+      "out_before_button_max_v": 2.99273998e-06,
+      "turnoff_path_energy_j_approx": 6.459181485005929e-05
+    },
+    "high_load": {
+      "peak_path_a": 2.20416255,
+      "lowest_vp_start_v": 3.8692434,
+      "out_40ms_v": 3.99989814,
+      "out_80ms_v": 0.000121640917,
+      "out_140ms_v": 2.16839686e-08,
+      "out_before_button_max_v": 1.39613167e-05,
+      "turnoff_path_energy_j_approx": 0.003175880264285067
+    },
+    "cold_low_gain": {
+      "peak_path_a": 2.05695187,
+      "lowest_vp_start_v": 3.89134919,
+      "out_40ms_v": 4.17438019,
+      "out_80ms_v": 0.126081946,
+      "out_140ms_v": 1.792772e-07,
+      "out_before_button_max_v": 1.38852691e-05,
+      "turnoff_path_energy_j_approx": 0.00011091389968525331
+    },
+    "stiff_battery": {
+      "peak_path_a": 2.0207471,
+      "lowest_vp_start_v": 4.09891687,
+      "out_40ms_v": 4.18622385,
+      "out_80ms_v": 0.113479745,
+      "out_140ms_v": 1.70561588e-07,
+      "out_before_button_max_v": 1.39894441e-05,
+      "turnoff_path_energy_j_approx": 0.00011819211665337108
+    },
+    "high_source_resistance": {
+      "peak_path_a": 1.28598598,
+      "lowest_vp_start_v": 2.91319056,
+      "out_40ms_v": 4.06925539,
+      "out_80ms_v": 0.0932955219,
+      "out_140ms_v": 1.70521835e-07,
+      "out_before_button_max_v": 1.40062408e-05,
+      "turnoff_path_energy_j_approx": 0.0001170008767912086
+    },
+    "battery_insert": {
+      "peak_path_a": 0.0629520719,
+      "lowest_vp_start_v": 4.19999957,
+      "out_40ms_v": 9.04929532e-05,
+      "out_80ms_v": 9.03038454e-05,
+      "out_140ms_v": 9.03002353e-05,
+      "out_before_button_max_v": 9.46140806e-05,
+      "turnoff_path_energy_j_approx": 9.197527684712191e-07
+    },
+    "battery_insert_without_gate_cap": {
+      "peak_path_a": 0.27889022,
+      "lowest_vp_start_v": 4.19999958,
+      "out_40ms_v": 9.03002462e-05,
+      "out_80ms_v": 9.03002449e-05,
+      "out_140ms_v": 9.03002437e-05,
+      "out_before_button_max_v": 0.0612945873,
+      "turnoff_path_energy_j_approx": 9.197254544673854e-07
+    }
+  },
+  "negative_controls": {
+    "wrong_gpio_weak_pullup": {
+      "v(out)": 3.592899,
+      "v(xl.gate)": 0.352907,
+      "v(ain)": 3.3,
+      "v(start)": 0.0002314391,
+      "v(hold)": 1.454451,
+      "i(vbat)": -0.108944,
+      "i(vhold)": -4.10122e-05,
+      "i(vrail)": -6.61488e-12
+    },
+    "no_bleed": {
+      "v(out)": 4.2,
+      "v(xl.gate)": 4.199999,
+      "v(ain)": 2.434945e-14,
+      "v(start)": 4.617795e-07,
+      "v(hold)": 1.952998e-12,
+      "i(vbat)": -2.10321e-11,
+      "i(vhold)": 1.952998e-14,
+      "i(vrail)": 5.41099e-19
+    },
+    "with_bleed": {
+      "v(out)": 0.499852,
+      "v(xl.gate)": 4.199999,
+      "v(ain)": 2.434945e-14,
+      "v(start)": 4.617795e-07,
+      "v(hold)": 1.952998e-12,
+      "i(vbat)": -4.99853e-06,
+      "i(vhold)": 1.952998e-14,
+      "i(vrail)": 5.41099e-19
+    },
+    "D1_short": {
+      "v(out)": 3.59291,
+      "v(xl.gate)": 0.3456566,
+      "v(ain)": 0.02263368,
+      "v(start)": 2.710109,
+      "v(hold)": 3.258596,
+      "i(vbat)": -0.108945,
+      "i(vhold)": -0.000414035,
+      "i(vrail)": -7.28304e-05
+    },
+    "D2_short": {
+      "v(out)": 3.592911,
+      "v(xl.gate)": 0.3455508,
+      "v(ain)": 0.0213964,
+      "v(start)": 3.598553,
+      "v(hold)": 2.842602,
+      "i(vbat)": -0.137886,
+      "i(vhold)": 0.02842602,
+      "i(vrail)": -7.28579e-05
+    },
+    "forced_reverse_supply": {
+      "battery_charge_current_a_proxy": 0.2030111,
+      "note": "4.2 V forced on drain through 1 ohm; NOT a model of actual ESP USB/regulator path."
+    }
+  }
+}
