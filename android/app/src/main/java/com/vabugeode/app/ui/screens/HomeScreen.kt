@@ -83,6 +83,8 @@ fun HomeScreen(
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
     val fresh by vm.repo.statusFresh.collectAsStateWithLifecycle()
     val link by vm.repo.link.collectAsStateWithLifecycle()
+    val lifecycle by vm.repo.lifecycle.collectAsStateWithLifecycle()
+    val lifeFresh by vm.repo.lifecycleFresh.collectAsStateWithLifecycle()
     val live = fresh && link == LinkState.CONNECTED
     var showSaved by remember(live, vm.repo.currentTransport.key) { mutableStateOf(false) }
     val st = status ?: return NotConnected(vm, contentPadding)
@@ -96,6 +98,11 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
+        HikeControls(vm.repo)
+        if (lifecycle!=null && lifecycle?.phase!=com.vabugeode.app.protocol.HikeStateMsg.ACTIVE) {
+            Text("Сохранённые записи доступны во вкладке «Походы».", color=Palette.TextDim)
+            return@Column
+        }
         if (!live) {
             ReadingsNotice(link, st.timeUtcMs) {
                 if (link == LinkState.DISCONNECTED) vm.link.connectNow()
@@ -162,7 +169,7 @@ fun HomeScreen(
             )
         }
 
-        Actions(st, onMark, onClap, enabled = live, onToggle = { vm.repo.setRecording(!st.recording) })
+        Actions(st, onMark, onClap, enabled = live && (lifecycle==null || lifeFresh), onToggle = { vm.repo.setRecording(!st.recording) })
         Text("Пауза маршрута не завершает поход: шаги и датчики продолжают записываться.",
             style = MaterialTheme.typography.bodySmall, color = Palette.TextDim)
         Spacer(Modifier.height(8.dp))
@@ -367,7 +374,7 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
             } else {
                 Text(
                     if (name == null) "Выберите гаджет на вкладке «Гаджет»."
-                    else "Устройство пока не слышно. Включите его и поднесите телефон ближе. Для подключения кнопкой: разбудите экран, отпустите кнопку, затем удерживайте B 1,5 с (прошивка V1).",
+                    else "Устройство пока не слышно. Включите его и поднесите телефон ближе. Разбудите экран, откройте меню удержанием B и выберите «Подключить телефон». На предыдущих прошивках удержание B открывает подключение сразу.",
                     style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
                 )
             }

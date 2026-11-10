@@ -65,16 +65,8 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues, onAchievements:
     val busy by vm.repo.hikeBusy.collectAsStateWithLifecycle()
     val currentStart by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
     val achievements by vm.achievements.progress.collectAsStateWithLifecycle()
-    var newHike by rememberSaveable { mutableStateOf(false) }
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     val list = hikes ?: return Waiting(contentPadding, "Читаем базу походов")
-    if (newHike) AlertDialog(
-        onDismissRequest = { newHike = false }, title = { Text("Завершить и начать новый поход?") },
-        text = { Text("Текущий поход сохранится в архиве. Начнётся новая запись.") },
-        confirmButton = { TextButton(enabled = !busy, onClick = { vm.newHike(); newHike = false }) { Text("Начать новый") } },
-        dismissButton = { TextButton(onClick = { newHike = false }) { Text("Отмена") } },
-    )
-
     val open = openId?.let { id -> list.firstOrNull { it.id() == id } }
     if (open != null) {
         BackHandler { openId = null }
@@ -98,9 +90,7 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues, onAchievements:
             }
         }
         item { SectionLabel("Сохранено в телефоне | ${list.size}") }
-        if (currentStart != null) item {
-            TextButton(enabled = !busy, onClick = { newHike = true }) { Text("Завершить и начать новый поход", color = Palette.Geo) }
-        }
+        item { HikeControls(vm.repo) }
         if (list.isEmpty()) item {
             Text(
                 "Походов пока нет. Они появятся после первой связи с гаджетом.",
@@ -119,7 +109,8 @@ private fun HikeCard(h: HikeSummary, current: Boolean, onClick: () -> Unit) {
         accent = if (current) Palette.Good else null,
         title = dateOf(h.startMs),
         titleRight = when {
-            current -> "идёт"
+            h.phase==com.vabugeode.app.protocol.HikeStateMsg.ENDED -> "завершён"
+            current -> "последняя запись"
             h.demo -> "эмулятор"
             else -> null
         },
@@ -158,7 +149,6 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
     var rename by remember { mutableStateOf(false) }
     var delete by remember { mutableStateOf(false) }
     var fromSd by remember(h.device, h.hike) { mutableStateOf(!h.demo) }
-    var newHike by remember { mutableStateOf(false) }
     val currentStart by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
     val busy by vm.repo.hikeBusy.collectAsStateWithLifecycle()
     val link by vm.repo.link.collectAsStateWithLifecycle()
@@ -199,10 +189,11 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
             TermButton("↗ CapCut", Palette.Sunset) { data?.let { shareMarks(context, it.second, h.startMs) } }
             if (!current && !protected) TermButton("✕ Удалить", Palette.Bad) { delete = true }
         }
+        h.completedAtMs?.let { Text("Завершён: ${Fmt.dateTime(it)}",color=Palette.TextDim) }
         HikeStatisticsControl(vm,h)
         if (current) {
-            TextButton(enabled = !busy, onClick = { newHike = true }) { Text("Завершить и начать новый поход", color = Palette.Geo) }
-            if(!protected)Text("Для удаления текущего похода сначала начните новый.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
+            HikeControls(vm.repo)
+            if(!protected)Text("Последняя запись устройства защищена от удаления до следующего похода.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
         }
 
         val d = data
@@ -262,10 +253,5 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
             dismissButton = { TextButton(onClick = { delete = false }) { Text("Отмена") } },
         )
     }
-    if (newHike) AlertDialog(
-        onDismissRequest = { newHike = false }, title = { Text("Начать новый поход?") },
-        text = { Text("Этот поход сохранится в архиве. Начнётся новый поход.") },
-        confirmButton = { TextButton(enabled = !busy, onClick = { vm.newHike(); newHike = false }) { Text("Начать новый") } },
-        dismissButton = { TextButton(onClick = { newHike = false }) { Text("Отмена") } },
-    )
+
 }

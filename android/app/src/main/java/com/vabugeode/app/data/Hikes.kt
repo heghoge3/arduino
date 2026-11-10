@@ -26,6 +26,8 @@ data class HikeSummary(
     val marks: Int,
     val spoofPoints: Int,
     val points: Int,
+    val phase: Int? = null,
+    val completedAtMs: Long? = null,
 ) {
     val demo get() = device == VIRTUAL_ID
 }

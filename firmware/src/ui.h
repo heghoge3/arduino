@@ -22,6 +22,8 @@ enum class Sound : uint8_t {
 void begin(bool coldBoot, int wakePin = -1);
 // Опрос кнопок (с антидребезгом). Вызывать каждую итерацию
 Button poll();
+Button hikeButton(Button event);
+void hikeResult(bool ok);
 bool anyHeld();
 
 void play(Sound s);

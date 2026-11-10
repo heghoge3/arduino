@@ -24,6 +24,9 @@ uint32_t freeMb();
 // Открыть (или продолжить) поход с этим временем старта
 void openHike(uint32_t hikeStart);
 uint32_t hikeStart();
+bool prepareHike(uint32_t id);
+bool readCompletion(uint32_t id, void* data, size_t size);
+bool saveCompletion(uint32_t id, const void* data, size_t size);
 // Удаление только неоткрытого похода; отсутствие файлов считается успешным повтором удаления.
 bool deleteHike(uint32_t hike);
 // Часы переставили на d секунд: сдвинуть время у точек и меток с номеров fromPoint/fromMark

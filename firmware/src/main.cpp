@@ -28,6 +28,7 @@
 #include "ui.h"
 
 Persist P;
+hike::State H;
 Settings S;
 Snapshot N;
 
@@ -119,7 +120,7 @@ void initPersist() {
   memset(g_rtcBlob, 0, sizeof(g_rtcBlob));
   P = Persist();
   P.magic = PERSIST_MAGIC;
-  P.recording = true;
+  P.recording = false;
   P.avgMa = 30;
 }
 
@@ -130,10 +131,38 @@ void saveRecordCheckpoint() {
   g_prefs.putBytes("energy",&state,sizeof(state));
 }
 
+// One NVS blob is the authoritative commit record; never publish an unverified write.
+bool saveLifecycle(const hike::State& candidate) {
+  const bool ok=hike::commit(H,candidate,
+      [](const hike::State& value) { return g_prefs.putBytes("life",&value,sizeof(value))==sizeof(value); },
+      [](hike::State& value) { return g_prefs.getBytes("life",&value,sizeof(value))==sizeof(value); });
+  if (!ok) { H.phase=hike::ERROR; P.recording=false; }
+  return ok;
+}
+
+void loadLifecycle(bool cold) {
+  if (g_prefs.isKey("life")) {
+    if (g_prefs.getBytesLength("life")!=sizeof(H) ||
+        g_prefs.getBytes("life",&H,sizeof(H))!=sizeof(H) || !hike::valid(H)) {
+      H=hike::State{}; H.phase=hike::ERROR; P.recording=false; return;
+    }
+  } else {
+    H=hike::State{};
+    H.id=g_prefs.getULong("hike",0);
+    H.phase=H.id ? hike::RECOVERY : hike::IDLE;
+    hike::seal(H);
+    if (!saveLifecycle(H)) return;
+  }
+  const auto restored=hike::afterBoot(H,cold);
+  if (restored.phase==hike::ERROR) H=restored;
+  else if (restored.revision!=H.revision) saveLifecycle(restored);
+  if (H.phase!=hike::ACTIVE) P.recording=false;
+}
+
 void ensureStorage() {
   if (g_storageReady) return;
   storage::begin();
-  storage::openHike(P.hikeStart);
+  if (P.hikeStart) storage::openHike(P.hikeStart);
   g_storageReady = true;
   dlog::attachStorage();
 }
@@ -173,11 +202,7 @@ void onClockJump(int32_t d) {
         proto::encodePoint(p, P.campBuf[i], proto::POINT_SIZE);
       }
     }
-    if (g_hikeUntrusted) {
-      P.hikeStart += (uint32_t)d;
-      storage::renameHike(P.hikeStart);
-      g_prefs.putULong("hike", P.hikeStart);
-    }
+    // IDs are immutable, including when the RTC is corrected.
     LOGI(M_SYS, "время записей с включения сдвинуто на %+ld с", (long)d);
   }
   g_shiftFromPoint = g_shiftFromMark = NO_SHIFT;
@@ -194,7 +219,7 @@ void newHike(uint32_t start) {
   P.hikeStart = start;
   P.recording=true; P.usedMah=0;
   g_prefs.putBool("rec",true);
-  g_hikeUntrusted = !clockx::trusted();
+  g_hikeUntrusted = false;
   P.distM = 0;
   P.stepDet.setCount(0);
   P.stepDet.resume();
@@ -285,7 +310,7 @@ proto::Status makeStatus() {
   m.time = N.now;
   m.mode = P.power.state();
   m.flags = (P.recording ? proto::F_RECORDING : 0) | (N.gpsOn ? proto::F_GPS_ON : 0) | (N.spoof ? proto::F_SPOOF : 0) |
-            (clockx::trusted() ? proto::F_TIME_OK : 0) | (storage::sdOk() ? proto::F_SD_OK : 0) |
+            (clockx::trusted() ? proto::F_TIME_OK : 0) | (storage::sdOk() && !g_sdError ? proto::F_SD_OK : 0) |
             (P.power.low() ? proto::F_LOW_BATT : 0) | (P.alerts.unacked() ? proto::F_ALERT : 0);
   m.fix = !N.gpsOn ? 0 : (!N.fix ? 1 : (N.fixType >= 3 ? 3 : 2));
   m.satsUsed = N.satsUsed;
@@ -324,7 +349,7 @@ proto::Beacon makeBeacon() {
   b.mode = P.power.state();
   b.flags = (P.recording ? proto::B_RECORDING : 0) | (N.fix && !N.spoof && !N.recovering ? proto::B_FIX : 0) |
             (N.spoof ? proto::B_SPOOF : 0) | (clockx::trusted() ? proto::B_TIME_OK : 0) |
-            (storage::sdOk() ? proto::B_SD_OK : 0);
+            (storage::sdOk() && !g_sdError ? proto::B_SD_OK : 0);
   b.alerts = P.alerts.unacked();
   b.tempCorr100 = s16(N.env.tempCorr, 100);
   b.battPct = N.pwr.batteryKnown() ? N.pwr.pct : 255;
@@ -338,6 +363,12 @@ proto::Beacon makeBeacon() {
 
 void sendPacketEvent(const uint8_t* b, size_t n) {
   if (n) radio::sendEvent(b, n);
+}
+
+void sendLifecycle(uint8_t result=255,uint32_t operation=0) {
+  uint8_t b[20];
+  sendPacketEvent(b,proto::encodeHikeState(H.phase,result,H.revision,H.id,H.endedAt,
+      operation ? operation : H.operation,b,sizeof(b)));
 }
 
 void sendInfo() {
@@ -360,6 +391,7 @@ void sendInfo() {
   info.hasSettings=g_clientSettings; info.tempOffset100=S.tempOffset100; info.strideCm=lroundf(S.strideM*100);
   uint8_t b[128];
   sendPacketEvent(b, proto::encodeInfo(info, b, sizeof(b)));
+  sendLifecycle();
 }
 
 void sendSats() {
@@ -487,21 +519,28 @@ void flushCamp() {
   if (!P.campN) return;
   ensureStorage();
   proto::Point p;
-  for (uint8_t i = 0; i < P.campN; i++) {
-    if (proto::decodePoint(P.campBuf[i], proto::POINT_SIZE, p)) {
-      if (!storage::appendPoint(p, storage::CsvExtra{0, NAN})) g_sdError = true;
+  uint8_t saved=0;
+  while (saved<P.campN) {
+    if (!proto::decodePoint(P.campBuf[saved],proto::POINT_SIZE,p) ||
+        !storage::appendPoint(p,storage::CsvExtra{0,NAN})) {
+      g_sdError=true; break;
     }
+    saved++;
   }
-  P.campN = 0;
-  P.lastFlushAt = N.now;
-  saveRecordCheckpoint();
-  dlog::flush();  // SD всё равно проснулась — заодно журнал
+  if (saved) {
+    P.campN-=saved;
+    memmove(P.campBuf,P.campBuf+saved,P.campN*proto::POINT_SIZE);
+    saveRecordCheckpoint();
+  }
+  if (!P.campN) P.lastFlushAt=N.now;
+  dlog::flush();
 }
 
-void logPoint(bool startAnchor=false) {
+void logPoint(bool startAnchor=false, bool gap=false) {
+  if (H.phase!=hike::ACTIVE && !gap) return;
   proto::Point p{};
   p.time = N.now;
-  bool paused = !P.recording;
+  bool paused = gap || !P.recording;
   bool haveGps = !paused && N.fix && !N.spoof && N.src == 1;
   // На паузе (едем на машине и т. п.) — только датчики: без координат, в трек и километраж не идёт
   bool havePdr = false;
@@ -537,6 +576,8 @@ void logPoint(bool startAnchor=false) {
               (P.power.state() == logic::ECONOMY && !P.power.moving()));
   if (camp) {
     // На стоянке копим в RTC-памяти — SD не трогаем на каждой записи
+    if (P.campN>=CAMP_BUF) flushCamp();
+    if (P.campN>=CAMP_BUF) { g_sdError=true; return; }
     proto::encodePoint(p, P.campBuf[P.campN++], proto::POINT_SIZE);
     if (P.campN >= CAMP_BUF || N.now - P.lastFlushAt >= SD_FLUSH_S) flushCamp();
   } else {
@@ -561,6 +602,7 @@ void logPoint(bool startAnchor=false) {
 }
 
 void addMark(uint8_t type, const char* text, uint8_t textLen) {
+  if (H.phase!=hike::ACTIVE) return;
   proto::Mark m{};
   ensureStorage();
   m.id = storage::nextMarkId();
@@ -587,6 +629,50 @@ void restoreSavedPoint(const proto::Point& p) {
   if (p.startAnchor) { P.startAnchor=true; P.startLat=p.lat7/1e7; P.startLon=p.lon7/1e7; }
   if (gps) { P.haveGood=true; P.goodLat=p.lat7/1e7; P.goodLon=p.lon7/1e7; P.goodTime=p.time; P.startAnchor=false; P.spoof.restoreLastGood(P.goodLat,P.goodLon,p.time); }
   P.lastPointTime=p.time;
+}
+
+uint8_t changeHike(uint8_t action,uint32_t expectedId,uint32_t revision,uint32_t operation) {
+  if (hike::replay(H,action,expectedId,revision,operation)) return proto::ACK_OK;
+  uint32_t newId=0;
+  if (action==hike::START) {
+    uint32_t previous=g_prefs.getULong("hike",0);
+    if (previous==UINT32_MAX || H.id==UINT32_MAX) return proto::ACK_BUSY;
+    newId=max(N.now,max(H.id,previous)+1);
+  }
+  hike::State next;
+  uint8_t result=hike::transition(H,action,expectedId,revision,operation,newId,
+      clockx::trusted()?N.now:0,next);
+  if (result!=proto::ACK_OK) return result;
+  if (g_sync.active) return proto::ACK_BUSY;
+  for (const auto& job:g_syncWait) if (job.active) return proto::ACK_BUSY;
+  ensureStorage();
+  if (!storage::sdOk() || g_sdError) return proto::ACK_BUSY;
+  if (action==hike::START) {
+    // Preserve the previous completion before moving on to a new ID.
+    if (H.phase==hike::ENDED && !storage::saveCompletion(H.id,&H,sizeof(H))) return proto::ACK_BUSY;
+    if (!storage::prepareHike(newId)) { storage::openHike(H.id); return proto::ACK_BUSY; }
+  } else {
+    if (action==hike::FINISH && H.phase==hike::ACTIVE && N.now>P.lastPointTime) logPoint();
+    if (action==hike::RESUME) logPoint(false,true);
+    flushCamp();
+    if (g_sdError || P.campN || !storage::sdOk()) return proto::ACK_BUSY;
+  }
+  if (!saveLifecycle(next)) return proto::ACK_BUSY;
+  if (action==hike::START) {
+    newHike(newId); P.nextLogAt=N.now;
+  } else if (action==hike::RESUME) {
+    P.recording=true; g_prefs.putBool("rec",true);
+    P.stepDet.resume(); P.distance.update(N.now,P.stepDet.count(),false,false,0,0,0,S.strideM);
+    P.haveGood=false; P.spoof.forgetLastGood(); P.nextLogAt=N.now+1;
+    LOGI(M_SYS,"поход продолжен после прерывания; время разрыва неизвестно");
+  } else {
+    P.recording=false; g_prefs.putBool("rec",false);
+    gps::power(false); N.gpsOn=false;
+    // NVS already contains END. Failure of this mirror must not reopen the hike.
+    if (!storage::saveCompletion(H.id,&H,sizeof(H))) LOGW(M_SD,"END в NVS; копия .end пока не записана");
+    LOGI(M_SYS,"поход завершён %lu",(unsigned long)H.id);
+  }
+  return proto::ACK_OK;
 }
 
 // ---------------------------------------------------------------------------
@@ -705,17 +791,22 @@ void handleCommand(const uint8_t* data, size_t len) {
       }
 #endif
       break;
-    case proto::CMD_NEW_HIKE:
-      if (g_sync.active || c.time != P.hikeStart) { res = proto::ACK_BUSY; break; }
+    case proto::CMD_GET_HIKE_END: {
       ensureStorage();
-      if (!storage::sdOk()) { res = proto::ACK_BUSY; break; }
-      flushCamp();
-      if (g_sdError) { res = proto::ACK_BUSY; break; }
-      newHike(N.now);
-      P.recording = true;
-      P.nextLogAt = N.now;
-      g_shiftFromPoint = clockx::trusted() ? NO_SHIFT : 0;
-      g_shiftFromMark = clockx::trusted() ? NO_SHIFT : 0;
+      hike::State ended;
+      if (c.time==H.id && H.phase==hike::ENDED) ended=H;
+      else if (!storage::readCompletion(c.time,&ended,sizeof(ended)) || !hike::valid(ended) ||
+               ended.phase!=hike::ENDED || ended.id!=c.time) { res=proto::ACK_BUSY; break; }
+      sendPacketEvent(b,proto::encodeHikeState(ended.phase,254,ended.revision,ended.id,
+          ended.endedAt,ended.operation,b,sizeof(b)));
+      break;
+    }
+    case proto::CMD_HIKE_ACTION: {
+      res=changeHike(c.flag,c.time,c.revision,c.operation);
+      sendInfo(); sendLifecycle(res,c.operation); return;
+    }
+    case proto::CMD_NEW_HIKE:
+      res=proto::ACK_UNSUPPORTED; // Legacy combined end/start cannot bypass explicit lifecycle.
       break;
     case proto::CMD_DELETE_HIKE:
       if (!c.time) { res = proto::ACK_BAD_ARGS; break; }
@@ -724,16 +815,18 @@ void handleCommand(const uint8_t* data, size_t len) {
       if (!storage::deleteHike(c.time)) res = proto::ACK_BUSY;
       break;
     case proto::CMD_RECORD:
-      if (c.flag && !P.recording && (P.hikeStart == 0 || (int32_t)(N.now - P.lastPointTime) > 6 * 3600)) newHike(N.now);
+      if (H.phase!=hike::ACTIVE) { res=proto::ACK_BUSY; break; }
       P.recording = c.flag;
       g_prefs.putBool("rec",P.recording);
       if (!c.flag) P.distance.update(N.now,P.stepDet.count(),false,false,0,0,0,S.strideM);
       break;
     case proto::CMD_MARK:
+      if (H.phase!=hike::ACTIVE) { res=proto::ACK_BUSY; break; }
       addMark(c.markType, c.text, c.textLen);
       ui::play(ui::Sound::MARK);
       break;
     case proto::CMD_CLAP:
+      if (H.phase!=hike::ACTIVE) { res=proto::ACK_BUSY; break; }
       ui::play(ui::Sound::CLAP);
       addMark(5, "", 0);
       break;
@@ -851,19 +944,31 @@ void handleCommand(const uint8_t* data, size_t len) {
 // ---------------------------------------------------------------------------
 
 void handleButton(ui::Button e) {
+  e=ui::hikeButton(e);
   if (e != ui::Button::NONE) LOGD(M_UI, "кнопка %u", (unsigned)e);
   switch (e) {
+    case ui::Button::HIKE_START:
+    case ui::Button::HIKE_FINISH:
+    case ui::Button::HIKE_RESUME: {
+      uint8_t action=e==ui::Button::HIKE_START?hike::START:(e==ui::Button::HIKE_FINISH?hike::FINISH:hike::RESUME);
+      const auto result=changeHike(action,H.id,H.revision,esp_random()|1u);
+      ui::hikeResult(result==proto::ACK_OK); sendInfo();
+      break;
+    }
     case ui::Button::A_SHORT:  // метка
+      if (H.phase!=hike::ACTIVE) break;
       addMark(0, "", 0);
       ui::play(ui::Sound::MARK);
       break;
     case ui::Button::A_LONG:  // хлопушка
+      if (H.phase!=hike::ACTIVE) break;
       ui::play(ui::Sound::CLAP);
       addMark(5, "", 0);
       break;
     case ui::Button::B_SHORT:  // экран / листать
       ui::nextPage();
       break;
+    case ui::Button::PAIR:
     case ui::Button::B_LONG:  // окно подключения + сопряжение нового телефона
       radio::openWindow(makeBeacon(), true);
       ui::play(ui::Sound::WINDOW);
@@ -1076,7 +1181,7 @@ void secondTick() {
   if (N.src!=1 && P.startAnchor) {
     N.lat=P.startLat; N.lon=P.startLon; N.haveLat=true; N.src=4;
   }
-  P.distance.update(N.now,P.stepDet.count(),P.recording,N.src==1&&!N.spoof,N.lat,N.lon,N.hdop,S.strideM);
+  if (H.phase==hike::ACTIVE) P.distance.update(N.now,P.stepDet.count(),P.recording,N.src==1&&!N.spoof,N.lat,N.lon,N.hdop,S.strideM);
   P.distM=P.distance.meters();
   if (!N.haveLat && P.haveGood) {
     N.lat = P.goodLat;
@@ -1088,7 +1193,7 @@ void secondTick() {
 
   // Запись
   // На паузе GPS выключен, но датчики пишутся дальше — раз в минуту (как на стоянке), без координат
-  if (P.hikeStart && (int32_t)(N.now - P.nextLogAt) >= 0) {
+  if (H.phase==hike::ACTIVE && P.hikeStart && (int32_t)(N.now - P.nextLogAt) >= 0) {
     logPoint();
     uint16_t every = P.power.logIntervalS();
     if (!P.recording && every < S.logCampS) every = S.logCampS;
@@ -1102,7 +1207,7 @@ void secondTick() {
 
   if (P.power.low()) active |= proto::AL_LOW_BATT;
   if (P.power.critical()) active |= proto::AL_CRIT_BATT;
-  if (g_sdError && storage::sdOk() == false) active |= proto::AL_SD_ERROR;
+  if (g_sdError) active |= proto::AL_SD_ERROR;
   logic::Alerts::Decision d = P.alerts.update(N.now, active);
   if (d.openWindow) {
     LOGI(M_SYS, "тревога 0x%02X, новые 0x%02X — открываю окно", P.alerts.active(), d.fresh);
@@ -1177,7 +1282,7 @@ void goToSleep(int32_t forceS = 0) {
   if (P.campN && N.now - P.lastFlushAt >= SD_FLUSH_S) flushCamp();
   // Будим на ближайшее: запись (если идёт) или маячок (если не невидимка); иначе через час
   uint32_t wakeAt = N.now + 3600;
-  if (P.hikeStart && (int32_t)(P.nextLogAt - wakeAt) < 0) wakeAt = P.nextLogAt;
+  if (H.phase==hike::ACTIVE && P.hikeStart && (int32_t)(P.nextLogAt - wakeAt) < 0) wakeAt = P.nextLogAt;
   uint16_t beaconEvery = P.power.beaconIntervalS(S.beaconS);
   if (beaconEvery && (int32_t)(P.nextBeaconAt - wakeAt) < 0) wakeAt = P.nextBeaconAt;
   int32_t sleepS = (int32_t)(wakeAt - N.now);
@@ -1326,7 +1431,8 @@ void console() {
       onClockJump(d);
       Serial.printf("часы переставлены на %+ld с (как от телефона), t=%lu\n", (long)d, (unsigned long)N.now);
     } else if (!strcmp(line, "newhike")) {
-      newHike(clockx::now());
+      auto res=changeHike(hike::START,H.id,H.revision,esp_random()|1u);
+      Serial.printf("START: %u\n",res); sendInfo();
       LOGI(M_SYS, "новый поход %lu (команда)", (unsigned long)P.hikeStart);
     } else if (!strcmp(line, "win")) {
       radio::openWindow(makeBeacon(), true);
@@ -1356,7 +1462,7 @@ uint8_t buildChecks(proto::Check* c) {
   if (!pr.bme) c[n++] = {5, 2, 1, 0x76};
   else if (!pr.bmeIdOk) c[n++] = {5, 2, 2, pr.bmeAddr};
   else c[n++] = {5, 0, 0, pr.bmeAddr};
-  if (!storage::sdOk()) c[n++] = {6, 2, 9, 0};
+  if (!storage::sdOk() || g_sdError) c[n++] = {6, 2, 9, 0};
   else if (storage::freeMb() < 100) c[n++] = {6, 1, 10, 0};
   else c[n++] = {6, 0, 0, 0};
   if (!gps::isOn()) c[n++] = {7, 0, 7, 0};
@@ -1421,7 +1527,7 @@ void setup() {
   bool cold = wake == ESP_SLEEP_WAKEUP_UNDEFINED;
 
   memcpy(&P, g_rtcBlob, sizeof(P));
-  if (P.magic != PERSIST_MAGIC) initPersist();
+  if (P.magic != PERSIST_MAGIC) { initPersist(); cold=true; }
   P.stepDet.resume();
   P.bootCount++;
 
@@ -1430,7 +1536,7 @@ void setup() {
   bool rtcOk = clockx::begin(cold);
   N.now = clockx::now();
   if (cold) {
-    initPersist(); P.bootCount=1; P.recording=g_prefs.getBool("rec",true); applySettings();
+    initPersist(); P.bootCount=1; P.recording=false; applySettings();
     logBoot(g_prefs);
     if (!rtcOk) LOGE(M_RTC, "DS1302: нет ответа RAM; CLK=%d DAT=%d RST=%d, проверь питание и общий GND", PIN_RTC_CLK, PIN_RTC_DAT, PIN_RTC_RST);
     else if (!clockx::trusted()) LOGW(M_RTC, "часы не проверены: стояли или не ставились");
@@ -1444,6 +1550,7 @@ void setup() {
       LOGD(M_PWR, "проснулся: %s", wake == ESP_SLEEP_WAKEUP_EXT1 ? "кнопка" : (wake == ESP_SLEEP_WAKEUP_EXT0 ? "движение" : "?"));
     }
   }
+  loadLifecycle(cold);
   sensors::begin(cold);
   if (wake == ESP_SLEEP_WAKEUP_EXT0) {
     sensors::clearMotion();
@@ -1479,28 +1586,18 @@ void setup() {
            S.gpsPulseS, S.beaconS, S.logMovingS, S.logCampS, S.debug ? "вкл" : "выкл");
     }
     loadBlacklist();
-    // Продолжить поход, если последняя запись свежее 6 ч; иначе новый.
-    // При непроверенных часах «6 ч назад» посчитать нельзя — начинаем новый: его начало и записи
-    // сдвинутся, когда придёт время (onClockJump). Иначе остаётся поход с началом «из будущего»
-    uint32_t hike = g_prefs.getULong("hike", 0);
-    uint32_t last = g_prefs.getULong("last", 0);
-    if (clockx::trusted() && hike && last && N.now >= last && N.now - last < 6 * 3600) {
-      P.hikeStart = hike;
-      P.lastPointTime = last;
-      storage::openHike(hike);
+    P.hikeStart=H.id;
+    if (H.id && H.phase!=hike::ERROR) {
+      storage::openHike(H.id);
       storage::forEachPoint(restoreSavedPoint);
       P.distM=P.distance.meters();
       EnergyCheckpoint energy{};
       if (g_prefs.getBytesLength("energy")==sizeof(energy)) g_prefs.getBytes("energy",&energy,sizeof(energy));
-      if (energy.hike==hike && isfinite(energy.used) && energy.used>=0) P.usedMah=energy.used;
-      LOGI(M_SYS, "продолжаю поход %lu (последняя запись %lu с назад)", (unsigned long)hike, (unsigned long)(N.now - last));
-    } else {
-      newHike(N.now);
+      if (energy.hike==H.id && isfinite(energy.used) && energy.used>=0) P.usedMah=energy.used;
     }
-    g_shiftFromPoint = clockx::trusted() ? NO_SHIFT : storage::pointCount();
-    g_shiftFromMark = clockx::trusted() ? NO_SHIFT : storage::markCount();
-    P.nextLogAt = N.now;
-    P.nextBeaconAt = N.now;
+    P.recording=false;
+    g_shiftFromPoint=g_shiftFromMark=NO_SHIFT;
+    P.nextLogAt=N.now; P.nextBeaconAt=N.now;
     // После включения 2 мин окно подключения (без сопряжения новых) и не спим
     g_awakeUntil = millis() + 120000;
     radio::openWindow(makeBeacon(), false);
@@ -1530,7 +1627,7 @@ void loop() {
     g_lastAccelMs = ms;
     float ax,ay,az;
     if (sensors::readAccel(ax,ay,az)) {
-      P.stepDet.feed(ax,ay,az,ms);
+      if (H.phase==hike::ACTIVE) P.stepDet.feed(ax,ay,az,ms);
       // Диагностика реальной ходьбы: амплитуда и число отсчётов, доступные в журнале телефона.
       static float lo = 100, hi = 0;
       static uint32_t samples = 0, at = 0;

@@ -45,6 +45,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import com.vabugeode.app.protocol.HikeResultMsg
+import com.vabugeode.app.protocol.HikeStateMsg
+import com.vabugeode.app.store.HikeStateRow
+import com.vabugeode.app.store.HikePendingRow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -95,6 +98,14 @@ class ProtocolDeviceRepository(
     private var transportJobs: List<Job> = emptyList()
 
     override val link = MutableStateFlow(LinkState.DISCONNECTED)
+    val lifecycle = MutableStateFlow<HikeStateMsg?>(null)
+    val lifecycleFresh = MutableStateFlow(false)
+    val lifecyclePending = MutableStateFlow(false)
+    private var lifecycleReply: Pair<Long, CompletableDeferred<HikeStateMsg>>? = null
+    fun supportsLifecycle(): Boolean = lastInfo?.let {
+        it.fwMajor>0 || it.fwMinor>1 || (it.fwMinor==1 && it.fwPatch>=21)
+    } == true
+
 
     /** Когда последний раз что-то приходило от гаджета (или сохранено в базе) */
     val lastSeenMs = MutableStateFlow<Long?>(null)
@@ -274,6 +285,8 @@ class ProtocolDeviceRepository(
     fun use(t: Transport) {
         if (t === transport) return
         connectionEpoch++
+        lifecycle.value=null; lifecycleFresh.value=false; lifecyclePending.value=false
+        lifecycleReply?.second?.cancel(); lifecycleReply=null
         statusReceivedAt = null
         _statusFresh.value = false
         scope.launch { persist(force = true) }
@@ -328,6 +341,11 @@ class ProtocolDeviceRepository(
 
     private suspend fun restore(key: String) {
         val dao = store ?: return
+        val savedLife=dao.latestHikeState(key)
+        val pendingLife=dao.hikePending(key)
+        if (transport.key!=key) return
+        lifecycle.value=savedLife?.let { runCatching { Codec.decodeMsg(it.data) as HikeStateMsg }.getOrNull() }
+        lifecyclePending.value=pendingLife!=null
         val g = dao.gadget(key) ?: return
         if (transport.key != key) return  // источник сменился, пока читали базу
         lastSeenMs.value = g.lastSeenMs
@@ -409,6 +427,7 @@ class ProtocolDeviceRepository(
                     val was = link.value
                     if (st != was) {
                         connectionEpoch++
+                        lifecycleFresh.value=false
                         statusReceivedAt = null
                         _statusFresh.value = false
                     }
@@ -433,6 +452,10 @@ class ProtocolDeviceRepository(
         val selected = transport
         if (link.value != LinkState.CONNECTED || stats.value.syncing) {
             _notices.tryEmit("Подключитесь к гаджету и дождитесь окончания синхронизации")
+            return@withLock false
+        }
+        if (!delete && supportsLifecycle()) {
+            _notices.tryEmit("Завершение и начало нового похода теперь выполняются отдельно")
             return@withLock false
         }
         val code = if (delete) Proto.CMD_DELETE_HIKE else Proto.CMD_NEW_HIKE
@@ -464,8 +487,62 @@ class ProtocolDeviceRepository(
         }
     }
 
+    private fun recordControlsAllowed() = !supportsLifecycle() ||
+        (lifecycleFresh.value && lifecycle.value?.phase==HikeStateMsg.ACTIVE)
+
+    suspend fun changeHike(action: Int, expected: HikeStateMsg? = lifecycle.value): Boolean = hikeLock.withLock {
+        val current=lifecycle.value
+        if (!supportsLifecycle() || current==null || expected==null || expected.hike!=current.hike || expected.revision!=current.revision || !lifecycleFresh.value || !hasFreshStatus() ||
+            lifecyclePending.value || stats.value.syncing) {
+            _notices.tryEmit("Подключитесь и дождитесь состояния похода и окончания синхронизации")
+            return@withLock false
+        }
+        val target=transport
+        val epoch=connectionEpoch
+        val operation=(java.util.UUID.randomUUID().leastSignificantBits and 0xffffffffL).coerceAtLeast(1)
+        val command=Cmd.HikeAction(action,current.hike,current.revision,operation)
+        val bytes=Codec.encode(command)
+        val reply=CompletableDeferred<HikeStateMsg>()
+        lifecycleReply=operation to reply
+        hikeBusy.value=true
+        try {
+            // Write intent before the command can leave the phone.
+            store?.putHikePending(HikePendingRow(target.key,bytes))
+            lifecyclePending.value=true
+            val result=withTimeoutOrNull(15_000) {
+                val sent=sendLock.withLock {
+                    target===transport && epoch==connectionEpoch && hasFreshStatus() &&
+                        lifecycleFresh.value && lifecycle.value?.revision==current.revision && target.send(bytes)
+                }
+                if (sent) reply.await() else null
+            }
+            if (target!==transport || epoch!=connectionEpoch || result==null) {
+                _notices.tryEmit("Результат не подтверждён. Подключитесь и проверьте состояние похода; команда не будет повторена автоматически.")
+                false
+            } else {
+                store?.clearHikePending(target.key); lifecyclePending.value=false
+                if (result.result!=Proto.ACK_OK) {
+                    _notices.tryEmit("Действие не выполнено: состояние изменилось, устройство занято или данные не удалось сохранить. Проверьте SD и повторите после обновления.")
+                    false
+                } else {
+                    _notices.tryEmit(if (result.phase==HikeStateMsg.ENDED) "Поход завершён и сохранён на устройстве" else "Состояние похода сохранено")
+                    // A final buffered point may have been written during END.
+                    send(Cmd.SyncTrack(if (points.isEmpty()) 0 else points.lastKey()/1000))
+                    send(Cmd.SyncMarks((markMap.values.maxOfOrNull { it.tsUtcMs } ?: 0)/1000))
+                    true
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            _notices.tryEmit("Не удалось подтвердить операцию похода. Проверьте состояние после подключения.")
+            false
+        } finally {
+            lifecycleReply=null; hikeBusy.value=false
+        }
+    }
+
     private fun send(cmd: Cmd, requireFreshStatus: Boolean = false) {
-        if (requireFreshStatus && !hasFreshStatus()) {
+        if (requireFreshStatus && (!hasFreshStatus() || !recordControlsAllowed())) {
             _notices.tryEmit("Подключите устройство и дождитесь свежих показаний")
             return
         }
@@ -475,7 +552,7 @@ class ProtocolDeviceRepository(
             val bytes = Codec.encode(cmd)
             if (sendLock.withLock {
                 target === transport && (!requireFreshStatus ||
-                    (epoch == connectionEpoch && hasFreshStatus())) && target.send(bytes)
+                    (epoch == connectionEpoch && hasFreshStatus() && recordControlsAllowed())) && target.send(bytes)
             }) {
                 addLog(LogEntry(System.currentTimeMillis(), true, cmdName(bytes), bytes.size, bytes.toHex()))
                 stats.value = stats.value.copy(packetsOut = stats.value.packetsOut + 1)
@@ -490,7 +567,7 @@ class ProtocolDeviceRepository(
     override fun addMark(type: MarkType, text: String) = send(Cmd.Mark(type.ordinal, text), requireFreshStatus = true)
     override fun clap() = send(Cmd.Clap, requireFreshStatus = true)
     override fun setRecording(on: Boolean) {
-        if (!hasFreshStatus()) {
+        if (!hasFreshStatus() || !recordControlsAllowed()) {
             _notices.tryEmit("Подключите устройство и дождитесь свежих показаний")
             return
         }
@@ -539,7 +616,7 @@ class ProtocolDeviceRepository(
 
     // ---- Входящие пакеты ----
 
-    private fun onPacket(p: Packet) {
+    private suspend fun onPacket(p: Packet) {
         val msg = try {
             Codec.decodeMsg(p.data)
         } catch (e: ProtocolException) {
@@ -556,6 +633,29 @@ class ProtocolDeviceRepository(
         if (!noisy) addLog(LogEntry(System.currentTimeMillis(), false, msgName(msg), p.data.size, p.data.toHex()))
 
         when (msg) {
+            is HikeStateMsg -> {
+                if (msg.result==HikeStateMsg.ARCHIVE) {
+                    if (msg.phase==HikeStateMsg.ENDED) store?.putHikeState(HikeStateRow(transport.key,msg.hike,msg.revision,p.data))
+                    return
+                }
+                val old=lifecycle.value
+                // A corrupt NVS can no longer supply its previous revision. Do not hide that error.
+                if (old!=null && msg.revision<old.revision && msg.phase!=HikeStateMsg.ERROR) return
+                val key=transport.key
+                store?.putHikeState(HikeStateRow(key,msg.hike,msg.revision,p.data))
+                lifecycle.value=msg; lifecycleFresh.value=true
+                if (msg.phase==HikeStateMsg.ENDED && old?.phase!=HikeStateMsg.ENDED) {
+                    send(Cmd.SyncTrack(if (points.isEmpty()) 0 else points.lastKey()/1000))
+                    send(Cmd.SyncMarks((markMap.values.maxOfOrNull { it.tsUtcMs } ?: 0)/1000))
+                }
+                val reply=lifecycleReply
+                if (reply!=null && reply.first==msg.operation && msg.result!=HikeStateMsg.SNAPSHOT) reply.second.complete(msg)
+                else if (reply==null && msg.result==HikeStateMsg.SNAPSHOT && lifecyclePending.value) {
+                    // Reconcile only; never automatically resend an operation after reconnect/restart.
+                    store?.clearHikePending(key); lifecyclePending.value=false
+                    _notices.tryEmit("Состояние похода проверено на устройстве")
+                }
+            }
             is StatusMsg -> {
                 lastStatusBytes = p.data
                 onStatus(msg)
@@ -608,7 +708,7 @@ class ProtocolDeviceRepository(
             }
             is AckMsg -> {
                 settingReply?.let { (code,reply) -> if (code==msg.cmd) reply.complete(msg.result) }
-                if (msg.result != Proto.ACK_OK && !(msg.cmd==Proto.CMD_ACHIEVEMENT && msg.result==Proto.ACK_BUSY)) {
+                if (msg.result != Proto.ACK_OK && msg.cmd!=Proto.CMD_GET_HIKE_END && !(msg.cmd==Proto.CMD_ACHIEVEMENT && msg.result==Proto.ACK_BUSY)) {
                 hikeReply?.let { (code, _, reply) -> if (code == msg.cmd) reply.complete(msg.result) }
                 AppLog.w("BLE", "гаджет отклонил ${cmdNameByCode(msg.cmd)}: ${ackText(msg.result)}")
                 _notices.tryEmit(if (msg.cmd == Proto.CMD_CALIB_COMPASS && msg.result == Proto.ACK_BAD_ARGS)
@@ -629,9 +729,11 @@ class ProtocolDeviceRepository(
         if (firstInfo && supportsPdr()) send(pdrSettings)
         val newHike = m.hikeStartUtc != hikeStartSec
         if (newHike) {
+            statusReceivedAt=null; _statusFresh.value=false
             // Другой поход на устройстве: в памяти — только его точки. Что уже скачано раньше, берём из базы,
             // иначе вкладка «Графики» покажет лишь хвост, а гаджет будет заново слать весь поход
             AppLog.i("SYNC", "поход на гаджете ${m.hikeStartUtc}, в приложении был $hikeStartSec")
+            if (supportsLifecycle()) hikeStartSec?.let { send(Cmd.HikeEnd(it)) }
             hikeStartSec = m.hikeStartUtc
             hikeStartMs.value = m.hikeStartUtc?.let { it * 1000 }
             if (!firstInfo) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
@@ -807,6 +909,7 @@ class ProtocolDeviceRepository(
         }
 
         fun msgName(m: Any): String = when (m) {
+            is HikeStateMsg -> "HIKE_STATE ${m.hike}: ${m.phase}"
             is HikeResultMsg -> "HIKE_RESULT ${m.hike}: ${ackText(m.result)}"
             is StatusMsg -> "STATUS #${m.seq}"
             is SatsMsg -> "SATS ×${m.sats.size}"
@@ -823,6 +926,8 @@ class ProtocolDeviceRepository(
         fun cmdName(bytes: ByteArray) = cmdNameByCode(Codec.cmdCode(bytes))
 
         fun cmdNameByCode(code: Int) = when (code) {
+            Proto.CMD_GET_HIKE_END -> "GET_HIKE_END"
+            Proto.CMD_HIKE_ACTION -> "HIKE_ACTION"
             Proto.CMD_NEW_HIKE -> "NEW_HIKE"
             Proto.CMD_DELETE_HIKE -> "DELETE_HIKE"
             Proto.CMD_PDR_SETTINGS -> "PDR_SETTINGS"

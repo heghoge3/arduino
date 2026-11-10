@@ -72,7 +72,7 @@ class AchievementStoreTest {
         context.deleteDatabase(name)
         val old=Room.databaseBuilder(context,LegacyAchievementDb::class.java,name).build()
         val rows=points("tracker");old.dao().putPoints(rows);old.dao().putHike(HikeRow("tracker",base,"Архив"));old.close()
-        val migrated=Room.databaseBuilder(context,StoreDb::class.java,name).addMigrations(MIGRATION_3_4).build()
+        val migrated=Room.databaseBuilder(context,StoreDb::class.java,name).addMigrations(MIGRATION_3_4, com.vabugeode.app.store.MIGRATION_4_5).build()
         assertEquals(rows.size,migrated.dao().points("tracker",base).size)
         assertEquals("Архив",migrated.dao().hikeNames().first().single().name)
         assertTrue(migrated.dao().achievementSelections().first().isEmpty())

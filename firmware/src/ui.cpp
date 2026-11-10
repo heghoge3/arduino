@@ -10,6 +10,7 @@
 #include "pins.h"
 #include "radio.h"
 #include "storage.h"
+#include "hike_menu.h"
 
 namespace ui {
 
@@ -20,7 +21,10 @@ bool g_oledOk = false;
 bool g_screenOn = false;
 screeninput::Controls g_controls(SCREEN_ON_MS, BTN_DEBOUNCE_MS, BTN_LONG_MS);
 uint8_t g_page = 0;
-constexpr uint8_t PAGES = 4;
+constexpr uint8_t PAGES = 5;
+hike::Menu g_hikeMenu;
+uint32_t g_menuRevision=0;
+bool g_hikeError=false;
 
 // ---- Звук и свет: шаги «вкл мс, выкл мс, цвет» ----
 struct Step {
@@ -163,6 +167,21 @@ void drawPage4() {
   }
 }
 
+void drawHike() {
+  const auto phase=static_cast<hike::Phase>(H.phase);
+  drawHeader("поход");
+  const char* state=phase==hike::ACTIVE ? "Идёт запись" :
+      (phase==hike::ENDED ? "Поход завершён" :
+      (phase==hike::RECOVERY ? "Поход прерван" : (phase==hike::IDLE ? "Готов к походу" : "Ошибка хранения")));
+  oled.drawUTF8(0,27,g_hikeError ? "Не сохранено!" : state);
+  const auto action=g_hikeMenu.action(phase);
+  const char* label=action==hike::START ? "Начать поход" : (action==hike::FINISH ? "Завершить поход" :
+      (action==hike::RESUME ? "Продолжить поход" : (action==4 ? "Подключить телефон" : "Показать данные")));
+  oled.drawUTF8(0,41,label);
+  oled.drawUTF8(0,53,g_hikeMenu.confirming ? "B держать 1,5с" : "A: выбор  B: OK");
+  oled.drawUTF8(0,64,g_hikeMenu.confirming ? "A: отмена" : "");
+}
+
 }  // namespace
 
 void begin(bool coldBoot, int wakePin) {
@@ -186,23 +205,47 @@ void begin(bool coldBoot, int wakePin) {
   g_controls.begin(millis(), g_oledOk, wakePin == PIN_BTN_A ? Button::A_SHORT :
                    (wakePin == PIN_BTN_B ? Button::B_SHORT : Button::NONE));
   g_screenOn = g_controls.active();
+  g_page=H.phase==hike::ACTIVE ? 0 : 4;
+  g_menuRevision=H.revision;
   if (g_screenOn) { oled.setPowerSave(0); draw(); }
   (void)coldBoot;
 }
 
 Button poll() {
   tickPattern();
+  if (g_menuRevision!=H.revision) {
+    g_hikeMenu.reset(); g_menuRevision=H.revision; g_hikeError=false;
+  }
   const Button event = g_controls.poll(digitalRead(PIN_BTN_A) == LOW,
                                        digitalRead(PIN_BTN_B) == LOW, millis());
   if (g_screenOn != g_controls.active()) {
     g_screenOn = g_controls.active();
     if (g_oledOk) oled.setPowerSave(g_screenOn ? 0 : 1);
-    if (g_screenOn) { g_page = 0; draw(); }
+    g_hikeMenu.reset(); g_hikeError=false;
+    if (g_screenOn) { g_page = H.phase==hike::ACTIVE ? 0 : 4; draw(); }
   }
   return event;
 }
 
 bool anyHeld() { return g_controls.held(); }
+
+Button hikeButton(Button e) {
+  if (g_oledOk && g_screenOn && g_page!=4 && e==Button::B_LONG) {
+    g_page=4; g_hikeMenu.reset(); g_hikeError=false; draw(); return Button::NONE;
+  }
+  if (g_page!=4 || !g_oledOk || !g_screenOn) return e;
+  const auto phase=static_cast<hike::Phase>(H.phase);
+  if (!g_hikeMenu.confirming && e==Button::B_SHORT) {
+    auto action=g_hikeMenu.action(phase);
+    if (action==0) { g_page=0; draw(); return Button::NONE; }
+    if (action==4) { draw(); return Button::PAIR; }
+  }
+  auto result=g_hikeMenu.input(e,phase);
+  if (e!=Button::NONE) { g_hikeError=false; draw(); }
+  return result;
+}
+
+void hikeResult(bool ok) { g_hikeError=!ok; g_hikeMenu.reset(); g_menuRevision=H.revision; draw(); }
 
 void play(Sound s) {
   switch (s) {
@@ -228,7 +271,7 @@ bool busy() { return g_pattern != nullptr; }
 void screenOn() {
   if (!g_oledOk) return;
   if (!g_screenOn) {
-    g_page = 0;
+    g_page = H.phase==hike::ACTIVE ? 0 : 4;
     oled.setPowerSave(0);
   }
   g_screenOn = true;
@@ -255,7 +298,8 @@ void draw() {
     case 0: drawPage1(); break;
     case 1: drawPage2(); break;
     case 2: drawPage3(); break;
-    default: drawPage4(); break;
+    case 3: drawPage4(); break;
+    default: drawHike(); break;
   }
   oled.sendBuffer();
 }

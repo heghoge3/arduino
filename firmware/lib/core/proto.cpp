@@ -153,6 +153,12 @@ size_t encodeHikeResult(uint8_t cmd, uint8_t result, uint32_t hike, uint8_t* out
   return w.done();
 }
 
+size_t encodeHikeState(uint8_t phase,uint8_t result,uint32_t revision,uint32_t hike,
+                       uint32_t endedAt,uint32_t operation,uint8_t* out,size_t cap) {
+  Writer w(out,cap); w.header(MSG_HIKE_STATE); w.u8(phase); w.u8(result);
+  w.u32(revision); w.u32(hike); w.u32(endedAt); w.u32(operation); return w.done();
+}
+
 size_t encodeAlert(uint32_t time, uint8_t alerts, uint8_t fresh, uint8_t battPct, uint8_t spoofMask, uint8_t* out, size_t cap) {
   Writer w(out, cap);
   w.header(MSG_ALERT);
@@ -283,10 +289,15 @@ uint8_t decodeCommand(const uint8_t* in, size_t len, Command& c) {
       c.a = r.u16(); c.altDm = r.i16(); c.flag = r.u8();
       if (r.atEnd() && (c.a < 30 || c.a > 150 || c.altDm < -1800 || c.altDm > 1800 || c.flag > 1)) return ACK_BAD_ARGS;
       break;
+    case CMD_HIKE_ACTION:
+      c.flag=r.u8(); c.time=r.u32(); c.revision=r.u32(); c.operation=r.u32();
+      if(c.flag<1 || c.flag>3 || !c.operation || !c.revision) return ACK_BAD_ARGS;
+      break;
     case CMD_SYNC_TRACK:
     case CMD_SYNC_MARKS:
     case CMD_SYNC_LOG:
     case CMD_NEW_HIKE:
+    case CMD_GET_HIKE_END:
     case CMD_DELETE_HIKE: c.time = r.u32(); break;
     default: return ACK_UNSUPPORTED;
   }

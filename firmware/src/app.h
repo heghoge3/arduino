@@ -9,8 +9,9 @@
 #include "spoof.h"
 #include "steps.h"
 #include "walk_distance.h"
+#include "hike_state.h"
 
-constexpr uint32_t PERSIST_MAGIC = 0x56424736;  // «VBG6»: экономный режим и ручной старт
+constexpr uint32_t PERSIST_MAGIC = 0x56424737;  // «VBG6»: экономный режим и ручной старт
 constexpr uint8_t CAMP_BUF = 15;                // записей на стоянке до сброса на SD
 
 // Настройки (NVS): меняются командами с телефона
@@ -98,6 +99,7 @@ struct Snapshot {
 };
 
 extern Persist P;
+extern hike::State H;
 extern Settings S;
 extern Snapshot N;
 

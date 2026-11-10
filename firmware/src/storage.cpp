@@ -89,6 +89,7 @@ uint32_t freeMb() { return g_sd ? (SD.totalBytes() - SD.usedBytes()) / (1024 * 1
 
 void openHike(uint32_t hikeStart) {
   g_hike = hikeStart;
+  if (!hikeStart) return;
   fileNames(hikeStart);
   g_ramPointCount = 0;
   g_ramMarkCount = 0;
@@ -109,10 +110,44 @@ void openHike(uint32_t hikeStart) {
 
 uint32_t hikeStart() { return g_hike; }
 
+bool prepareHike(uint32_t id) {
+  if (!id || !g_sd || freeMb()==0) return false;
+  openHike(id);
+  for (const char* path : {g_trackCsv,g_trackBin,g_markCsv,g_markBin}) {
+    File f=SD.open(path,FILE_APPEND);
+    if (!f) return false;
+    f.flush(); f.close();
+  }
+  return true;
+}
+
+bool readCompletion(uint32_t id,void* data,size_t size) {
+  if (!g_sd || !id) return false;
+  char path[48]; snprintf(path,sizeof(path),"/tracks/%lu.end",(unsigned long)id);
+  File f=SD.open(path,FILE_READ);
+  bool ok=f && f.size()==size && f.read((uint8_t*)data,size)==size;
+  f.close(); return ok;
+}
+
+bool saveCompletion(uint32_t id,const void* data,size_t size) {
+  if (!g_sd || !id || size>64) return false;
+  char path[48]; snprintf(path,sizeof(path),"/tracks/%lu.end",(unsigned long)id);
+  File f=SD.open(path,FILE_WRITE);
+  if (!f) return false;
+  bool ok=f.write((const uint8_t*)data,size)==size;
+  f.flush(); f.close();
+  uint8_t check[64]; f=SD.open(path,FILE_READ);
+  ok=ok && f && f.size()==size && f.read(check,size)==size && !memcmp(check,data,size);
+  f.close(); return ok;
+}
+
 bool deleteHike(uint32_t hike) {
-  return hikefiles::removeArchived(hike, g_hike, g_sd,
+  bool ok=hikefiles::removeArchived(hike, g_hike, g_sd,
       [](const char* path) { return SD.exists(path); },
       [](const char* path) { return SD.remove(path); });
+  if (!ok) return false;
+  char path[48]; snprintf(path,sizeof(path),"/tracks/%lu.end",(unsigned long)hike);
+  return !SD.exists(path) || SD.remove(path);
 }
 
 bool appendPoint(const proto::Point& p, const CsvExtra& extra) {

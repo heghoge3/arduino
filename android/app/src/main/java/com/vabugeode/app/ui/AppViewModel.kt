@@ -247,6 +247,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 sum.copy(name = named[id])
             }
         }
+        .combine(dao.hikeStates()) { summaries, rows ->
+            val states=rows.associate { row -> (row.device to row.hike) to
+                (runCatching { Codec.decodeMsg(row.data) as com.vabugeode.app.protocol.HikeStateMsg }.getOrNull()) }
+            summaries.map { h -> states[h.device to h.hike]?.let {
+                h.copy(phase=it.phase,completedAtMs=it.endedAt.takeIf { t -> t>0 }?.times(1000))
+            } ?: h }
+        }
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

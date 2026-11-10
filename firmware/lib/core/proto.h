@@ -29,6 +29,7 @@ enum Msg : uint8_t {
   MSG_ALERT = 0x08,
   MSG_LOG = 0x09,
   MSG_HIKE_RESULT = 0x0A,
+  MSG_HIKE_STATE = 0x0B,
 };
 
 // Команды телефона
@@ -60,6 +61,8 @@ enum CmdCode : uint8_t {
   CMD_SET_START = 0x19,
   CMD_BLACKLIST_V2=0x1A,
   CMD_ACHIEVEMENT=0x1B,
+  CMD_HIKE_ACTION=0x1C,
+  CMD_GET_HIKE_END=0x1D,
 };
 
 enum AckResult : uint8_t {
@@ -214,6 +217,8 @@ size_t encodePoint(const Point& m, uint8_t* out, size_t cap);
 size_t encodeSyncDone(uint8_t what, uint32_t count, uint8_t* out, size_t cap);
 size_t encodeAck(uint8_t cmd, uint8_t result, uint8_t* out, size_t cap);
 size_t encodeHikeResult(uint8_t cmd, uint8_t result, uint32_t hike, uint8_t* out, size_t cap);
+size_t encodeHikeState(uint8_t phase, uint8_t result, uint32_t revision, uint32_t hike,
+                       uint32_t endedAt, uint32_t operation, uint8_t* out, size_t cap);
 size_t encodeAlert(uint32_t time, uint8_t alerts, uint8_t fresh, uint8_t battPct, uint8_t spoofMask, uint8_t* out, size_t cap);
 size_t encodeLog(const LogLine& m, uint8_t* out, size_t cap);
 // Сводка маячка — 18 байт (без company id)
@@ -232,6 +237,7 @@ struct BlEntry {
 };
 
 struct Command {
+  uint32_t revision, operation;
   uint8_t code;
   uint32_t time;          // SET_TIME, SYNC_TRACK/MARKS; SYNC_LOG — номер строки
   int16_t tzMin;          // SET_TIME

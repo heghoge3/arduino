@@ -32,6 +32,9 @@ object Proto {
     const val MSG_ALERT = 0x08
     const val MSG_LOG = 0x09
     const val MSG_HIKE_RESULT = 0x0A
+    const val MSG_HIKE_STATE = 0x0B
+    const val CMD_HIKE_ACTION = 0x1C
+    const val CMD_GET_HIKE_END = 0x1D
 
     // Команды телефона
     const val CMD_SET_TIME = 0x01
@@ -243,7 +246,17 @@ data class BeaconMsg(
 
 data class HikeResultMsg(val cmd: Int, val result: Int, val hike: Long) : DeviceMsg
 
+data class HikeStateMsg(val phase: Int, val result: Int, val revision: Long,
+    val hike: Long, val endedAt: Long, val operation: Long) : DeviceMsg {
+    companion object {
+        const val IDLE=0; const val ACTIVE=1; const val RECOVERY=2; const val ENDED=3; const val ERROR=4
+        const val START=1; const val FINISH=2; const val RESUME=3; const val SNAPSHOT=255; const val ARCHIVE=254
+    }
+}
+
 sealed interface Cmd {
+    data class HikeEnd(val hike: Long) : Cmd
+    data class HikeAction(val action: Int, val expectedHike: Long, val revision: Long, val operation: Long) : Cmd
     data class NewHike(val expectedHike: Long) : Cmd
     data class DeleteHike(val hike: Long) : Cmd
     data class SetTime(val timeUtc: Long, val tzOffsetMin: Int) : Cmd
@@ -283,6 +296,11 @@ object Codec {
     // ---- Телефон: команды → байты ----
 
     fun encode(cmd: Cmd): ByteArray = when (cmd) {
+        is Cmd.HikeEnd -> packet(Proto.CMD_GET_HIKE_END,4) { u32(cmd.hike) }
+        is Cmd.HikeAction -> packet(Proto.CMD_HIKE_ACTION, 13) {
+            require(cmd.action in 1..3 && cmd.operation in 1..0xffffffffL && cmd.revision in 1..0xffffffffL && cmd.expectedHike in 0..0xffffffffL)
+            u8(cmd.action); u32(cmd.expectedHike); u32(cmd.revision); u32(cmd.operation)
+        }
         is Cmd.NewHike -> packet(Proto.CMD_NEW_HIKE, 4) { u32(cmd.expectedHike) }
         is Cmd.DeleteHike -> packet(Proto.CMD_DELETE_HIKE, 4) { u32(cmd.hike) }
         is Cmd.SetTime -> packet(Proto.CMD_SET_TIME, 6) { u32(cmd.timeUtc); i16(cmd.tzOffsetMin) }
@@ -325,6 +343,10 @@ object Codec {
     fun decodeCmd(data: ByteArray): Cmd {
         val r = reader(data)
         return when (val code = r.u8()) {
+            Proto.CMD_GET_HIKE_END -> Cmd.HikeEnd(r.u32())
+            Proto.CMD_HIKE_ACTION -> Cmd.HikeAction(r.u8(),r.u32(),r.u32(),r.u32()).also {
+                if (it.action !in 1..3 || it.operation==0L || it.revision==0L) throw ProtocolException("Неверная операция похода")
+            }
             Proto.CMD_NEW_HIKE -> Cmd.NewHike(r.u32())
             Proto.CMD_DELETE_HIKE -> Cmd.DeleteHike(r.u32())
             Proto.CMD_SET_TIME -> Cmd.SetTime(r.u32(), r.i16())
@@ -418,6 +440,9 @@ object Codec {
             u32(m.steps); u16(if (m.headingDeg.isFinite()) scaled(m.headingDeg, 10.0) else 65535); u16(scaled(m.speedKmh, 10.0))
         }
         is SyncDoneMsg -> packet(Proto.MSG_SYNC_DONE, 5) { u8(m.what); u32(m.count) }
+        is HikeStateMsg -> packet(Proto.MSG_HIKE_STATE,18) {
+            u8(m.phase); u8(m.result); u32(m.revision); u32(m.hike); u32(m.endedAt); u32(m.operation)
+        }
         is HikeResultMsg -> packet(Proto.MSG_HIKE_RESULT, 6) { u8(m.cmd); u8(m.result); u32(m.hike) }
         is AckMsg -> packet(Proto.MSG_ACK, 2) { u8(m.cmd); u8(m.result) }
         is AlertMsg -> packet(Proto.MSG_ALERT, 8) { u32(m.timeUtc); u8(m.alerts); u8(m.fresh); u8(m.battPct); u8(m.spoofMask) }
@@ -487,6 +512,10 @@ object Codec {
                 ).let { if(it.startAnchor) it.copy(lat=it.lat?:0.0,lon=it.lon?:0.0) else it }
             }
             Proto.MSG_SYNC_DONE -> SyncDoneMsg(r.u8(), r.u32())
+            Proto.MSG_HIKE_STATE -> HikeStateMsg(r.u8(),r.u8(),r.u32(),r.u32(),r.u32(),r.u32()).also {
+                if (it.phase !in 0..4 || it.revision==0L || (it.phase in 1..3 && it.hike==0L) ||
+                    (it.result !in 0..4 && it.result !in 254..255)) throw ProtocolException("Неверное состояние похода")
+            }
             Proto.MSG_HIKE_RESULT -> HikeResultMsg(r.u8(), r.u8(), r.u32())
             Proto.MSG_ACK -> AckMsg(r.u8(), r.u8())
             Proto.MSG_ALERT -> AlertMsg(r.u32(), r.u8(), r.u8(), r.u8(), r.u8())
