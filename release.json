@@ -1,0 +1,17 @@
+{
+  "applicationId": "com.vabugeode.app",
+  "versionName": "0.10.6",
+  "versionCode": 29,
+  "file": "vabugeode-0.10.6.apk",
+  "bytes": 36024866,
+  "sha256": "6e2ce0f490bff95bdcd6e3ebe36b1a9fdaf89c508c413f14554c7466bedaa443",
+  "certificateSha256": "f18a2b68ee3edc07189996577aca1b46f76d852925ef34eee123be8ebfe56453",
+  "apkSourceCommit": "a8119421b443db3bfd6ebc67ae6d5aefa6e007c1",
+  "firmwareSourceCommit": "3bc01cf26899b9448ceed65d9638184b5dd1ab5d",
+  "gpsPolicy": 2,
+  "pairedFirmware": "0.1.25 (V2 only, hardware acceptance pending)",
+  "androidUnitTests": 151,
+  "firmwareNativeTests": 77,
+  "deviceInstallationVerified": false,
+  "createdUtc": "2026-11-10T22:48:17.337341+00:00"
+}
