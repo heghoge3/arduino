@@ -1,6 +1,14 @@
 package com.vabugeode.app.demo
 
 import com.vabugeode.app.astro.SunCalc
+import com.vabugeode.app.protocol.HikeStateMsg
+import com.vabugeode.app.protocol.Codec
+import com.vabugeode.app.data.toTrackPoint
+import com.vabugeode.app.data.toMark
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
 import com.vabugeode.app.model.DeviceStatus
 import com.vabugeode.app.model.EnvState
 import com.vabugeode.app.model.GpsFix
@@ -40,6 +48,7 @@ import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
@@ -48,12 +57,13 @@ import kotlin.random.Random
  * Наружу общается только через [VirtualTransport] байтами — как настоящий ESP32 по BLE.
  *
  * Симулирует поход под Петербургом. Сценарий:
- * - старт сегодня в 14:00 МСК, первые 2 часа уже «записаны» (история);
+ * - обычный запуск IDLE; отдельный START через протокол V2;
+ * - restart(historyMin) генерирует подготовленные записи для тестов/истории;
  * - дальше поход идёт вживую с ускорением времени;
  * - после заката резко падает температура (исходная идея проекта);
  * - стоянки с выключенным GPS, потеря сигнала в здании, эпизоды подмены GNSS.
  */
-class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
+class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true, private val storage: EmulatorStorage? = null) {
 
     private val zone = ZoneId.of("Europe/Moscow")
     private val rnd = Random(42)
@@ -65,7 +75,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     )
         private set
 
-    /** Меняется при каждом перезапуске — это «новый поход» (другое hike_start). */
+    /** Сигнал перезапуска/выключения для транспорта; сам по себе не создаёт новый ID. */
     val restarts = MutableStateFlow(0)
 
     /** Во сколько раз демо-время быстрее реального. */
@@ -114,15 +124,157 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     private var idleIntervalMs = 60_000L
     private val scriptedDone = mutableSetOf<Int>()
 
-    init {
-        if (autoStart) restart()
+    val lifecycle=MutableStateFlow(HikeStateMsg(0,255,1,0,0,0))
+    val sdFailed=MutableStateFlow(false)
+    val powered=MutableStateFlow(true)
+    val loseNextReply=MutableStateFlow(false)
+    private var lastAction: Cmd.HikeAction?=null
+    private val completions=linkedMapOf<Long,HikeStateMsg>()
+    private var checkpointAt=0L
+    private var savedCheckpoint:ByteArray?=null
+
+    init { if(autoStart) boot() }
+
+    private fun runClock() {
+        job?.cancel()
+        job=scope.launch {
+            while(isActive){
+                delay(TICK_MS)
+                if(powered.value){advance(TICK_MS*speed.value);scriptedMarks();publish()}
+                if(simMs-checkpointAt>=300_000){checkpoint();checkpointAt=simMs}
+            }
+        }
+    }
+
+    private fun boot() {
+        val saved=storage?.load()
+        if(saved!=null){
+            try { restore(saved) } catch(_:Exception){
+                lifecycle.value=HikeStateMsg(4,255,1,0,0,0)
+                recording=false;publish();runClock();return
+            }
+        }else{
+            restart(historyMin=0,live=false)
+            lifecycle.value=HikeStateMsg(0,255,1,0,0,0)
+            recording=false;points.clear();markList.clear();publish();checkpoint()
+        }
+        // Opening the app is not a gadget reboot. Only an explicit scenario changes ACTIVE to RECOVERY.
+        runClock()
+    }
+
+    fun reboot() {
+        val timeBefore=simMs
+        val saved=storage?.load()?:savedCheckpoint
+        if(saved!=null)try {restore(saved)}catch(_:Exception){lifecycle.value=HikeStateMsg(4,255,1,0,0,0)}
+        simMs=maxOf(simMs,timeBefore)
+        val old=lifecycle.value
+        if(old.phase==HikeStateMsg.ACTIVE)lifecycle.value=old.copy(phase=2,revision=old.revision+1)
+        recording=false;powered.value=true;publish();checkpoint();restarts.value++
+    }
+
+    fun losePower() {
+        val saved=storage?.load()?:savedCheckpoint
+        if(saved!=null)runCatching{restore(saved)}.getOrElse {lifecycle.value=HikeStateMsg(4,255,1,0,0,0)}
+        recording=false;powered.value=false;checkpoint();restarts.value++
+    }
+
+    fun shutdown(finish: Boolean): Boolean {
+        if(finish && lifecycle.value.phase in listOf(1,2)){
+            val state=lifecycle.value
+            if(handle(Cmd.HikeAction(2,state.hike,state.revision,java.util.UUID.randomUUID().leastSignificantBits.and(0xffffffffL).coerceAtLeast(1)))!=Proto.ACK_OK)return false
+        }
+        if(sdFailed.value)return false
+        powered.value=false
+        if(!checkpoint()){powered.value=true;return false}
+        restarts.value++;return true
+    }
+
+    fun setSdFailure(failed: Boolean){sdFailed.value=failed;publish()}
+    fun archivedEnd(id: Long)=completions[id]
+    fun stateMessage(result:Int=255,operation:Long=lifecycle.value.operation)=lifecycle.value.copy(result=result,operation=operation)
+
+    fun hikeAction(cmd: Cmd.HikeAction): Int {
+        val old=lifecycle.value
+        if(cmd.action !in 1..3 || cmd.operation !in 1..0xffffffffL || cmd.revision !in 1..0xffffffffL)return Proto.ACK_BAD_ARGS
+        if(old.phase!=4 && lastAction==cmd)return Proto.ACK_OK
+        if(!powered.value||sdFailed.value||old.phase==4||cmd.expectedHike!=old.hike||cmd.revision!=old.revision)return Proto.ACK_BUSY
+        if((cmd.action==1&&old.phase !in listOf(0,3)) || (cmd.action==2&&old.phase !in listOf(1,2)) ||
+            (cmd.action==3&&old.phase!=2))return Proto.ACK_BUSY
+        val before=snapshot()
+        when(cmd.action){
+            1 -> {
+                if(old.phase==3)completions[old.hike]=old
+                val next=maxOf(simMs/1000,old.hike+1)
+                restart(historyMin=0,live=false,notify=false)
+                startMs=next*1000;simMs=startMs;points.clear();markList.clear()
+                lifecycle.value=HikeStateMsg(1,255,old.revision+1,next,0,cmd.operation)
+                recording=true
+            }
+            2 -> {if(simMs>(points.lastOrNull()?.tsUtcMs?:0))points.add(makePoint(isResting(),spoofTarget(),isIndoor()));recording=false;lifecycle.value=old.copy(phase=3,revision=old.revision+1,endedAt=simMs/1000,operation=cmd.operation)}
+            3 -> {
+                points.add(makePoint(true,null,false).copy(src=PositionSource.PAUSE,lat=Double.NaN,lon=Double.NaN))
+                recording=true;lifecycle.value=old.copy(phase=1,revision=old.revision+1,operation=cmd.operation)
+            }
+            else -> return Proto.ACK_BAD_ARGS
+        }
+        lastAction=cmd;publish()
+        if(!checkpoint()){restore(before);lifecycle.value=lifecycle.value.copy(phase=4);recording=false;publish();runClock();return Proto.ACK_BUSY}
+        if(lifecycle.value.phase==3)completions[lifecycle.value.hike]=lifecycle.value
+        runClock();return Proto.ACK_OK
+    }
+
+    fun checkpoint(): Boolean = runCatching {
+        if(lifecycle.value.phase==4)return false
+        val bytes=snapshot()
+        if(storage?.save(bytes)==false)false else {savedCheckpoint=bytes;true}
+    }.getOrDefault(false)
+
+    fun snapshot(): ByteArray {
+        val bytes=ByteArrayOutputStream()
+        DataOutputStream(bytes).use { out ->
+            fun packet(b:ByteArray){out.writeInt(b.size);out.write(b)}
+            out.writeInt(0x56325331);packet(Codec.encode(lifecycle.value))
+            out.writeBoolean(lastAction!=null);lastAction?.let {packet(Codec.encode(it))}
+            out.writeLong(startMs);out.writeLong(simMs);out.writeLong(sunsetMs)
+            out.writeDouble(lat);out.writeDouble(lon);out.writeDouble(heading);out.writeInt(steps)
+            out.writeDouble(distanceM);out.writeDouble(usedMah);out.writeBoolean(recording)
+            out.writeBoolean(timeSynced);out.writeBoolean(powered.value)
+            out.writeInt(points.size);for(i in points.indices)packet(Codec.encode(pointMsg(i)))
+            out.writeInt(markList.size);for(i in markList.indices)packet(Codec.encode(markMsg(i)))
+            out.writeInt(completions.size);for(m in completions.values)packet(Codec.encode(m))
+            out.writeLong(java.util.zip.CRC32().apply {update(bytes.toByteArray())}.value)
+        }
+        return bytes.toByteArray()
+    }
+
+    private fun restore(bytes: ByteArray) {
+        require(bytes.size>=12)
+        val size=bytes.size-8
+        require(java.nio.ByteBuffer.wrap(bytes,size,8).long==java.util.zip.CRC32().apply{update(bytes,0,size)}.value)
+        DataInputStream(ByteArrayInputStream(bytes.copyOf(size))).use { input ->
+            fun packet():ByteArray {val size=input.readInt();require(size in 2..1024);return ByteArray(size).also {input.readFully(it)}}
+            fun count()=input.readInt().also {require(it in 0..200_000)}
+            require(input.readInt()==0x56325331)
+            lifecycle.value=Codec.decodeMsg(packet()) as HikeStateMsg
+            lastAction=if(input.readBoolean())Codec.decodeCmd(packet()) as Cmd.HikeAction else null
+            startMs=input.readLong();simMs=input.readLong();sunsetMs=input.readLong()
+            lat=input.readDouble();lon=input.readDouble();heading=input.readDouble();steps=input.readInt()
+            distanceM=input.readDouble();usedMah=input.readDouble();recording=input.readBoolean()
+            timeSynced=input.readBoolean();powered.value=input.readBoolean()
+            points=ArrayList(List(count()){(Codec.decodeMsg(packet()) as PointMsg).let {it.toTrackPoint().copy(speedKmh=it.speedKmh)}})
+            markList=ArrayList(List(count()){(Codec.decodeMsg(packet()) as MarkMsg).toMark()})
+            completions.clear();repeat(count()){val m=Codec.decodeMsg(packet()) as HikeStateMsg;completions[m.hike]=m}
+            require(input.available()==0);markSeq=markList.maxOfOrNull{it.id}?:0
+        }
+        publish()
     }
 
     /**
-     * Перезапуск сценария с начала.
+     * Генератор подготовленного сценария для тестов и искусственной истории.
+     * Пользовательское начало/завершение проходят только через HIKE_ACTION.
      * historyMin — сколько минут похода «уже записано» к моменту открытия.
      */
-    fun restart(historyMin: Int = 120, day: LocalDate = LocalDate.now(zone), live: Boolean = true) {
+    fun restart(historyMin: Int = 120, day: LocalDate = LocalDate.now(zone), live: Boolean = true, notify: Boolean = true) {
         job?.cancel()
         val today = day
         // +N секунд на каждый перезапуск: у каждого похода свой hike_start, как на настоящем устройстве
@@ -140,8 +292,11 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
         scriptedDone.clear()
         timeSynced = false
 
+        lifecycle.value=HikeStateMsg(1,255,lifecycle.value.revision+1,startMs/1000,0,0)
+        lastAction=null
+
         // История: первые 2 часа похода считаем сразу
-        logLine(2, 0, "включение: питание, прошивка 0.1.0 (эмулятор)")
+        logLine(2, 0, "включение: питание, прошивка V2 (эмулятор)")
         logLine(2, 5, "SD 7580 МБ, свободно 7400 МБ")
         logLine(1, 6, "часы не проверены — ждём телефон или GPS")
         logLine(2, 0, "новый поход ${startMs / 1000}")
@@ -153,17 +308,10 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             scriptedMarks()
         }
         publish()
-        restarts.value++
+        if(notify)restarts.value++
         if (!live) return
 
-        job = scope.launch {
-            while (isActive) {
-                delay(TICK_MS)
-                advance(TICK_MS * speed.value)
-                scriptedMarks()
-                publish()
-            }
-        }
+        runClock()
     }
 
     // ---- Сценарий ----
@@ -192,6 +340,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     private fun isIndoor(): Boolean = minute() in 196.0..206.0
 
     private fun scriptedMarks() {
+        if(lifecycle.value.phase!=1 || sdFailed.value)return
         val m = minute().toInt()
         val script = mapOf(
             32 to (MarkType.INTERESTING to "Старая водонапорная башня"),
@@ -211,6 +360,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
 
     private fun advance(dtMs: Long) {
         simMs += dtMs
+        if(lifecycle.value.phase!=1 || !powered.value)return
         val dt = dtMs / 1000.0
         val resting = isResting()
         val spoof = spoofTarget()
@@ -231,7 +381,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             val d = speedMs * dt
             lat += d * cos(Math.toRadians(heading)) / M_PER_DEG
             lon += d * sin(Math.toRadians(heading)) / (M_PER_DEG * cos(Math.toRadians(lat)))
-            distanceM += d
+            if(recording)distanceM += d
             steps += (d / STEP_M).toInt().coerceAtLeast(1)
             if (pdrActive) {
                 // Оценка по шагам немного «уплывает» (~5 % пути)
@@ -268,7 +418,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
         // Запись точки: раз в 10 с в движении, раз в 60 с на стоянке
         sinceLastPointMs = if (sinceLastPointMs == Long.MAX_VALUE) Long.MAX_VALUE else sinceLastPointMs + dtMs
         val interval = if (resting) idleIntervalMs else movingIntervalMs
-        if (recording && (sinceLastPointMs >= interval)) {
+        if (!sdFailed.value && (sinceLastPointMs >= interval)) {
             sinceLastPointMs = 0
             points.add(makePoint(resting, spoof, indoor))
         }
@@ -276,13 +426,15 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
 
     private fun makePoint(resting: Boolean, spoof: Pair<Double, Double>?, indoor: Boolean): TrackPoint {
         val env = envNow(resting)
-        val gps = gpsNow(resting, spoof, indoor)
+        val gps = gpsNow(resting || !recording || lifecycle.value.phase!=1, spoof, indoor)
         val src = when {
-            pdrActive -> PositionSource.PDR
+            lifecycle.value.phase!=1 -> PositionSource.NONE
+            !recording -> PositionSource.PAUSE
+            pdrActive || indoor || spoof!=null -> PositionSource.NONE
             resting -> PositionSource.NONE
             else -> PositionSource.GPS
         }
-        val (pLat, pLon) = if (pdrActive) pdrLat to pdrLon else lat to lon
+        val (pLat, pLon) = if(!recording) Double.NaN to Double.NaN else if (pdrActive) pdrLat to pdrLon else lat to lon
         val pw = powerNow()
         return TrackPoint(
             tsUtcMs = simMs,
@@ -400,10 +552,12 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
         val resting = isResting()
         val spoof = spoofTarget()
         val indoor = isIndoor()
-        val gps = gpsNow(resting, spoof, indoor)
+        val gps = gpsNow(resting || !recording || lifecycle.value.phase!=1, spoof, indoor)
         val env = envNow(resting)
         val src = when {
-            pdrActive -> PositionSource.PDR
+            lifecycle.value.phase!=1 -> PositionSource.NONE
+            !recording -> PositionSource.PAUSE
+            pdrActive || indoor || spoof!=null -> PositionSource.NONE
             resting -> PositionSource.NONE
             else -> PositionSource.GPS
         }
@@ -414,7 +568,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
         current = DeviceStatus(
             timeUtcMs = simMs,
             mode = if (resting) PowerMode.CAMP else PowerMode.MOVING,
-            recording = recording,
+            recording = recording && lifecycle.value.phase==1,
             gps = gps, env = env, power = powerNow(),
             steps = steps, headingDeg = norm360(heading),
             distanceKm = distanceM / 1000.0,
@@ -425,14 +579,14 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
 
     // ---- Выдача данных в формате протокола (как прошивка) ----
 
-    val hikeStartUtcSec: Long get() = startMs / 1000
+    val hikeStartUtcSec: Long get() = lifecycle.value.hike
     val pointCount: Int get() = points.size
     val markCount: Int get() = markList.size
 
     fun statusMsg(seq: Int): StatusMsg {
         val st = current ?: run { publish(); current!! }
         val g = st.gps
-        var flags = Proto.F_SD_OK
+        var flags = if(sdFailed.value) 0 else Proto.F_SD_OK
         if (st.recording) flags = flags or Proto.F_RECORDING
         if (g.fix != GpsFix.OFF) flags = flags or Proto.F_GPS_ON
         if (g.spoof) flags = flags or Proto.F_SPOOF
@@ -442,7 +596,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             timeUtc = st.timeUtcMs / 1000, mode = st.mode.ordinal, flags = flags, fix = g.fix.ordinal,
             satsUsed = g.satsUsed, satsView = g.satsInView,
             hdop = if (g.fix == GpsFix.FIX_2D || g.fix == GpsFix.FIX_3D) g.hdop else null,
-            lat = st.lat, lon = st.lon, src = srcCode(st.positionSource), spoofMask = g.spoofMask,
+            lat = st.lat?.takeIf {it.isFinite()}, lon = st.lon?.takeIf {it.isFinite()}, src = srcCode(st.positionSource), spoofMask = g.spoofMask,
             altGps = g.altGps, speedKmh = if (st.mode == PowerMode.MOVING) g.speedKmh.coerceAtLeast(0.0) else 0.0,
             courseDeg = g.courseDeg,
             tempRaw = st.env.tempRaw, tempCorr = st.env.tempCorr, humidity = st.env.humidity,
@@ -457,7 +611,7 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     /** Сводка для маячка — как в прошивке (makeBeacon). */
     fun beaconMsg(): BeaconMsg {
         val st = current ?: run { publish(); current!! }
-        var flags = Proto.B_SD_OK
+        var flags = if(sdFailed.value) 0 else Proto.B_SD_OK
         if (st.recording) flags = flags or Proto.B_RECORDING
         if (st.gps.fix == GpsFix.FIX_3D || st.gps.fix == GpsFix.FIX_2D) flags = flags or Proto.B_FIX
         if (st.gps.spoof) flags = flags or Proto.B_SPOOF
@@ -491,20 +645,20 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
             else -> CheckMsg(7, 0, 0, 0)
         }
         return InfoMsg(
-            fwMajor = 0, fwMinor = 1, fwPatch = 0, chip = 1,
+            fwMajor = 0, fwMinor = 1, fwPatch = 23, chip = 1,
             uptimeSec = (simMs - startMs) / 1000,
             sdTotalMb = 7580, sdFreeMb = 7480L - points.size / 40, gnssMask = 0b11,
-            hikeStartUtc = startMs / 1000,
+            hikeStartUtc = lifecycle.value.hike.takeIf{it>0},
             checks = listOf(
-                CheckMsg(1, 0, 0, 0x3C),
+                CheckMsg(1, 0, 0, 0x3F),
                 CheckMsg(2, 0, 0, 0x40),
-                CheckMsg(3, 0, 0, 0x68),
+                CheckMsg(3, 0, 0, 0x69),
                 CheckMsg(4, 1, 3, 0x0D),
                 CheckMsg(5, 0, 0, 0x76),
-                CheckMsg(6, 0, 0, 0),
+                CheckMsg(6, if(sdFailed.value)2 else 0, if(sdFailed.value)9 else 0, 0),
                 gpsCheck,
                 CheckMsg(8, if (st.power.percent < 20) 1 else 0, if (st.power.percent < 20) 8 else 0, 0),
-                // Часы DS1302: до первой сверки с телефоном время считается непроверенным
+                // Часы DS3231: до первой сверки с телефоном время считается непроверенным
                 if (timeSynced) CheckMsg(9, 0, 0, 0) else CheckMsg(9, 1, 11, 0),
             ),
         )
@@ -513,10 +667,10 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     fun pointMsg(i: Int): PointMsg {
         val p = points[i]
         return PointMsg(
-            timeUtc = p.tsUtcMs / 1000, lat = p.lat, lon = p.lon, src = srcCode(p.src),
+            timeUtc = p.tsUtcMs / 1000, lat = p.lat.takeIf {it.isFinite()}, lon = p.lon.takeIf {it.isFinite()}, src = srcCode(p.src),
             spoof = p.spoof, spoofMask = p.spoofMask, spoofLat = p.spoofLat, spoofLon = p.spoofLon,
             tempRaw = p.tempRaw, tempCorr = p.tempCorr, humidity = p.humidity, pressureHpa = p.pressureHpa,
-            altBaro = p.altBaro, altGps = p.altGps, battMv = (p.battV * 1000).toInt(), battPct = p.battPercent,
+            altBaro = p.altBaro, altGps = p.altGps, battMv = (p.battV * 1000).roundToInt(), battPct = p.battPercent,
             sats = p.sats, hdop = if (p.sats > 0) p.hdop else null, steps = p.steps.toLong(),
             headingDeg = p.headingDeg, speedKmh = p.speedKmh.coerceAtLeast(0.0),
         )
@@ -557,18 +711,21 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     fun handle(cmd: Cmd): Int {
         logLine(3, 9, "команда ${cmd::class.simpleName}")
         when (cmd) {
-            is Cmd.HikeAction, is Cmd.HikeEnd, is Cmd.NewHike, is Cmd.DeleteHike -> return Proto.ACK_UNSUPPORTED // история демо хранится в телефоне
+            is Cmd.HikeAction -> return hikeAction(cmd)
+            is Cmd.HikeEnd -> return if(archivedEnd(cmd.hike)!=null || (lifecycle.value.hike==cmd.hike&&lifecycle.value.phase==3))Proto.ACK_OK else Proto.ACK_BUSY
+            is Cmd.NewHike, is Cmd.DeleteHike -> return Proto.ACK_UNSUPPORTED
             is Cmd.SetTime -> {
                 if (!timeSynced) logLine(2, 6, "время с телефона, часы проверены")
                 timeSynced = true // время в демо ускорено — телефонное не применяем
             }
             is Cmd.PhonePos -> {}
-            is Cmd.Record -> recording = cmd.on
+            is Cmd.Record -> {if(lifecycle.value.phase!=1)return Proto.ACK_BUSY;recording = cmd.on}
             is Cmd.Mark -> {
+                if(lifecycle.value.phase!=1 || sdFailed.value)return Proto.ACK_BUSY
                 val type = MarkType.entries.getOrNull(cmd.type) ?: return Proto.ACK_BAD_ARGS
                 addMarkInternal(type, cmd.text)
             }
-            Cmd.Clap -> addMarkInternal(MarkType.SYNC, "")
+            Cmd.Clap -> {if(lifecycle.value.phase!=1 || sdFailed.value)return Proto.ACK_BUSY;addMarkInternal(MarkType.SYNC, "")}
             Cmd.Find -> {} // пищать нечему
             Cmd.AchievementChime -> {}
             is Cmd.SetIntervals -> {
@@ -591,14 +748,16 @@ class DemoDevice(private val scope: CoroutineScope, autoStart: Boolean = true) {
     }
 
     private fun addMarkInternal(type: MarkType, text: String) {
+        if(lifecycle.value.phase!=1 || sdFailed.value)return
         val p = points.lastOrNull { !it.spoof }
-        markList.add(Mark(++markSeq, simMs, type, text, p?.lat ?: lat, p?.lon ?: lon))
+        markList.add(Mark(++markSeq, simMs, type, text, p?.lat?.takeIf{it.isFinite()} ?: lat, p?.lon?.takeIf{it.isFinite()} ?: lon))
         logLine(2, 8, "метка #$markSeq ${type.title}")
     }
 
     // ---- Журнал ----
 
     private fun logLine(level: Int, module: Int, text: String) {
+        if(logs.size>=5000)logs.removeAt(0)
         if (level == 3 && !debug) return
         logs.add(LogMsg(++logSeq, simMs / 1000, (simMs - startMs) / 1000, level, timeSynced, module, text))
     }

@@ -22,7 +22,7 @@ import org.junit.Test
 class VirtualLinkTest {
 
     private class Rig(scope: TestScope, blacklist: List<BlacklistPoint> = emptyList()) {
-        val dev = DemoDevice(scope.backgroundScope)
+        val dev = DemoDevice(scope.backgroundScope).also {it.restart()}
         val transport = VirtualTransport(scope.backgroundScope, dev)
         val repo = ProtocolDeviceRepository(scope.backgroundScope, transport, blacklist)
     }
@@ -114,7 +114,7 @@ class VirtualLinkTest {
         assertEquals(false, r.repo.status.value!!.recording)
         val n = r.dev.pointCount
         advanceTimeBy(10_000)
-        assertEquals("запись на паузе, а точки пишутся", n, r.dev.pointCount)
+        assertTrue("пауза должна сохранять датчики", r.dev.pointCount > n)
         r.repo.setRecording(true)
         advanceTimeBy(10_000)
         assertTrue(r.dev.pointCount > n)

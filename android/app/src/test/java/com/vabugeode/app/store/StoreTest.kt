@@ -42,7 +42,7 @@ class StoreTest {
 
     @Test
     fun dataSurvivesRestartAndResyncIsIncremental() = runTest {
-        val dev = DemoDevice(backgroundScope)
+        val dev = DemoDevice(backgroundScope).also {it.restart()}
         val t1 = VirtualTransport(backgroundScope, dev)
         val repo1 = ProtocolDeviceRepository(backgroundScope, t1, emptyList(), db.dao())
         repo1.connect()

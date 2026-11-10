@@ -2,6 +2,7 @@ package com.vabugeode.app.transport
 
 import com.vabugeode.app.demo.DemoDevice
 import com.vabugeode.app.model.LinkState
+import com.vabugeode.app.protocol.HikeStateMsg
 import com.vabugeode.app.protocol.AckMsg
 import com.vabugeode.app.protocol.Cmd
 import com.vabugeode.app.protocol.Codec
@@ -29,7 +30,7 @@ class VirtualTransport(
     private val device: DemoDevice,
 ) : Transport {
 
-    override val deviceName = "vabuGEOde-01 (виртуальное)"
+    override val deviceName = "vabuGEOde V2 (эмулятор)"
     override val key = VIRTUAL_ID
     override val state = MutableStateFlow(LinkState.DISCONNECTED)
     override val incoming = MutableSharedFlow<Packet>(extraBufferCapacity = 8192)
@@ -48,14 +49,14 @@ class VirtualTransport(
                 if (state.value == LinkState.CONNECTED) {
                     disconnect()
                     delay(800)
-                    connect()
+                    if(device.powered.value)connect()
                 }
             }
         }
     }
 
     override fun connect() {
-        if (session != null) return
+        if (session != null || !device.powered.value) return
         state.value = LinkState.CONNECTING
         session = scope.launch {
             delay(700) // поиск и подключение
@@ -86,6 +87,7 @@ class VirtualTransport(
     override suspend fun send(data: ByteArray): Boolean {
         if (state.value != LinkState.CONNECTED) return false
         delay(30) // задержка радио
+        if(state.value!=LinkState.CONNECTED || !device.powered.value)return false
         val code = Codec.cmdCode(data)
         val cmd = try {
             Codec.decodeCmd(data)
@@ -93,10 +95,26 @@ class VirtualTransport(
             emit(Channel.EVENT, AckMsg(code, Proto.ACK_BAD_ARGS))
             return true
         }
+        val previous=device.hikeStartUtcSec
         val result = device.handle(cmd)
+        if(previous!=device.hikeStartUtcSec){sentPoints=0;sentMarks=0}
+        if(cmd is Cmd.HikeAction){
+            if(device.loseNextReply.value){device.loseNextReply.value=false;return true}
+            emit(Channel.EVENT,device.infoMsg())
+            emit(Channel.EVENT,device.stateMessage())
+            emit(Channel.EVENT,device.stateMessage(result,cmd.operation))
+            return true
+        }
         emit(Channel.EVENT, AckMsg(code, result))
         when (cmd) {
-            Cmd.GetInfo -> emit(Channel.EVENT, device.infoMsg())
+            Cmd.GetInfo -> {
+                emit(Channel.EVENT, device.infoMsg())
+                emit(Channel.EVENT,device.stateMessage())
+            }
+            is Cmd.HikeEnd -> if(result==Proto.ACK_OK){
+                val state=device.archivedEnd(cmd.hike)?:device.lifecycle.value
+                emit(Channel.EVENT,state.copy(result=HikeStateMsg.ARCHIVE))
+            }
             is Cmd.SyncTrack -> {
                 val from = device.firstPointSince(cmd.sinceUtc)
                 val to = device.pointCount

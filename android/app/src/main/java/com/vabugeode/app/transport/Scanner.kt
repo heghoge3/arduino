@@ -47,10 +47,11 @@ class VirtualScanner(
         scanning.value = true
         job = scope.launch {
             while (isActive) {
-                if (!isConnected()) {
+                if(!device.powered.value)found.value=emptyMap()
+                if (!isConnected() && device.powered.value) {
                     val now = System.currentTimeMillis()
                     found.value = mapOf(
-                        VIRTUAL_ID to FoundGadget(VIRTUAL_ID, "vabuGEOde (эмулятор)", -55, device.beaconMsg(), now)
+                        VIRTUAL_ID to FoundGadget(VIRTUAL_ID, "vabuGEOde V2 (эмулятор)", -55, device.beaconMsg(), now)
                     )
                 }
                 delay(3000)

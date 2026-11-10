@@ -64,7 +64,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * Источник данных — эмулятор или настоящий гаджет по BLE. Путь данных один:
      * устройство → байты протокола → транспорт → репозиторий → экраны.
      */
-    val demo = DemoDevice(viewModelScope)
+    private val emulatorPrefs=app.getSharedPreferences("emulator-v2",0)
+    val demo = DemoDevice(viewModelScope,storage=object:com.vabugeode.app.demo.EmulatorStorage {
+        override fun load():ByteArray?=emulatorPrefs.getString("checkpoint",null)?.let {
+            runCatching {android.util.Base64.decode(it,android.util.Base64.NO_WRAP)}.getOrElse {ByteArray(0)}
+        }
+        override fun save(bytes:ByteArray)=emulatorPrefs.edit().putString("checkpoint",
+            android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP)).commit()
+    })
     private val virtualTransport = VirtualTransport(viewModelScope, demo)
 
     private val dao = StoreDb.get(app).dao().also { AppLog.start(it) }
@@ -272,7 +279,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newHike() {
         if (repo.hikeBusy.value) return
-        if (repo.currentTransport.key == VIRTUAL_ID) { demo.restart(); return }
+        if (repo.currentTransport.key == VIRTUAL_ID) { viewModelScope.launch {repo.changeHike(com.vabugeode.app.protocol.HikeStateMsg.START)}; return }
         val hike = repo.hikeStartMs.value?.div(1000) ?: return
         viewModelScope.launch { repo.manageHike(hike, delete = false) }
     }

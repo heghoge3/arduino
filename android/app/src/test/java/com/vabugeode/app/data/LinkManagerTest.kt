@@ -77,7 +77,8 @@ class LinkManagerTest {
         advanceTimeBy(5000)
         assertEquals(LinkState.CONNECTED, r.repo.link.value)
         assertEquals(VIRTUAL_ID, r.link.lastBeacon.value?.id)
-        assertTrue("история не догрузилась", r.repo.track.value.isNotEmpty())
+        assertTrue("до явного старта не должно быть трека", r.repo.track.value.isEmpty())
+        assertEquals(0,r.repo.lifecycle.value?.phase)
     }
 
     @Test

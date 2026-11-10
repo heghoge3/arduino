@@ -168,10 +168,10 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
 }
 
 @Composable
-private fun EmulatorPanel(vm: AppViewModel) {
+internal fun EmulatorPanel(vm: AppViewModel) {
     val speed by vm.demo.speed.collectAsStateWithLifecycle()
     Panel(accent = Palette.Geo) {
-        SectionLabel("Эмулятор", color = Palette.Geo)
+        SectionLabel("Эмулятор V2", color = Palette.Geo)
         Spacer(Modifier.height(6.dp))
         Text(
             "Шлёт байты по тому же протоколу, что и прошивка, а приложение их разбирает. Сценарий: поход под Петербургом, закат, стоянки, потеря сигнала в здании, подмена GPS.",
@@ -191,8 +191,16 @@ private fun EmulatorPanel(vm: AppViewModel) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = { vm.demo.restart() }, modifier = Modifier.fillMaxWidth()) {
-            Text("Начать демо-поход заново")
-        }
+        val sdFailed by vm.demo.sdFailed.collectAsStateWithLifecycle()
+        val powered by vm.demo.powered.collectAsStateWithLifecycle()
+        val lost by vm.demo.loseNextReply.collectAsStateWithLifecycle()
+        Text("Это виртуальный прибор. Начало и завершение — обычными кнопками приложения. Сценарии ниже влияют только на эмулятор.",color=Palette.TextDim)
+        OutlinedButton(onClick={ vm.demo.reboot();vm.repo.connect() },modifier=Modifier.fillMaxWidth()) { Text(if(powered)"Сбой и перезапуск прибора" else "Включить виртуальный прибор") }
+        OutlinedButton(onClick={ vm.demo.setSdFailure(!sdFailed);vm.repo.refreshInfo() },modifier=Modifier.fillMaxWidth()) { Text(if(sdFailed)"Восстановить SD" else "Смоделировать ошибку SD") }
+        OutlinedButton(onClick={vm.demo.loseNextReply.value=!lost},modifier=Modifier.fillMaxWidth()) { Text(if(lost)"Потеря ответа включена — отменить" else "Потерять ответ следующей команды похода") }
+        OutlinedButton(onClick={vm.repo.disconnect()},modifier=Modifier.fillMaxWidth()) { Text("Разорвать связь с телефоном") }
+        OutlinedButton(onClick={vm.demo.losePower()},modifier=Modifier.fillMaxWidth()) { Text("Внезапное отключение / разрядка") }
+        OutlinedButton(onClick={vm.demo.shutdown(false)},modifier=Modifier.fillMaxWidth()) { Text("Выключить, оставив поход незавершённым") }
+        OutlinedButton(onClick={vm.demo.shutdown(true)},modifier=Modifier.fillMaxWidth()) { Text("Завершить поход и выключить") }
     }
 }
