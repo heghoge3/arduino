@@ -64,6 +64,7 @@ class StoreTest {
         assertEquals(LinkState.DISCONNECTED, repo2.link.value)
         assertEquals(stored, repo2.track.value.size)
         assertNotNull("последнее состояние не восстановилось", repo2.status.value)
+        org.junit.Assert.assertFalse("кэш после перезапуска не является живыми данными", repo2.statusFresh.value)
         assertNotNull(repo2.lastSeenMs.value)
         assertEquals(repo1.hikeStartMs.value, repo2.hikeStartMs.value)
 

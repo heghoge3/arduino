@@ -31,6 +31,10 @@ import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -77,6 +81,10 @@ fun HomeScreen(
     val track by vm.repo.track.collectAsStateWithLifecycle()
     val sun by vm.sun.collectAsStateWithLifecycle()
     val start by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
+    val fresh by vm.repo.statusFresh.collectAsStateWithLifecycle()
+    val link by vm.repo.link.collectAsStateWithLifecycle()
+    val live = fresh && link == LinkState.CONNECTED
+    var showSaved by remember(live, vm.repo.currentTransport.key) { mutableStateOf(false) }
     val st = status ?: return NotConnected(vm, contentPadding)
 
     Column(
@@ -88,8 +96,21 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
-        OfflineBanner(vm)
-        StatusRow(st, start)
+        if (!live) {
+            ReadingsNotice(link, st.timeUtcMs) {
+                if (link == LinkState.DISCONNECTED) vm.link.connectNow()
+                else vm.repo.refreshReadings()
+            }
+            TextButton(onClick = { showSaved = !showSaved }) {
+                Text(if (showSaved) "Скрыть сохранённые показания" else "Показать сохранённые показания")
+            }
+            if (!showSaved) {
+                Text("Записи доступны во вкладках «Походы», «Графики» и «Карта».", color = Palette.TextDim)
+                return@Column
+            }
+            SectionLabel("Сохранённые показания")
+        }
+        StatusRow(st, start, live)
         TempHero(st, track, sun)
         GpsCard(st)
         WeatherPanel(vm)
@@ -141,22 +162,26 @@ fun HomeScreen(
             )
         }
 
-        Actions(st, onMark, onClap, onToggle = { vm.repo.setRecording(!st.recording) })
+        Actions(st, onMark, onClap, enabled = live, onToggle = { vm.repo.setRecording(!st.recording) })
+        Text("Пауза маршрута не завершает поход: шаги и датчики продолжают записываться.",
+            style = MaterialTheme.typography.bodySmall, color = Palette.TextDim)
         Spacer(Modifier.height(8.dp))
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StatusRow(st: DeviceStatus, start: Long?) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Датчики пишутся всегда; кнопка включает и выключает только GPS (пауза — переезд на машине)
-        if (st.recording) Pill("GPS вкл", Palette.Good) else Pill("GPS выкл", Palette.Bad, blink = true)
-        Pill(st.mode.title, if (st.mode == PowerMode.MOVING) Palette.Good else Palette.Cold)
-        Spacer(Modifier.weight(1f))
-        Column(horizontalAlignment = Alignment.End) {
+private fun StatusRow(st: DeviceStatus, start: Long?, live: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (st.recording) Pill("Маршрут: запись", Palette.Good)
+            else Pill("Маршрут: пауза", Palette.Warn)
+            Pill(st.mode.title, if (st.mode == PowerMode.MOVING) Palette.Good else Palette.Cold)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(Fmt.time(st.timeUtcMs), style = MaterialTheme.typography.titleMedium, color = Palette.Text)
             if (start != null) {
-                Text("в пути ${Fmt.duration(st.timeUtcMs - start)}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
+                Text("${if (live) "с начала" else "на момент данных"} ${Fmt.duration(st.timeUtcMs - start)}", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
             }
         }
     }
@@ -230,19 +255,20 @@ private fun GpsCard(st: DeviceStatus) {
         )
         g.spoof -> Quad(
             Palette.Bad, Icons.Filled.Warning, "Подозрение на подмену GPS",
-            "Приёмник уверенно показывает ${g.fix.title}, но координаты ложные. Эти точки не идут в трек — позиция считается по шагам.",
+            "Координаты не прошли проверку и не включены в маршрут. Это подозрение, а не доказанная подмена; шаги продолжают считаться.",
         )
         g.fix == GpsFix.OFF -> Quad(
             Palette.Cold, Icons.Filled.GpsOff, "GPS выключен",
-            "Стоянка — экономим заряд. Включится, когда начнёте двигаться.",
+            if (!st.recording) "Запись маршрута на паузе. Нажмите «Продолжить», чтобы вернуть её."
+            else "Приёмник сейчас отключён для экономии энергии; включение зависит от движения, заряда и настроек.",
         )
         g.fix == GpsFix.SEARCHING -> Quad(
             Palette.Warn, Icons.Filled.GpsOff, "Ищет спутники",
-            "Видно ${g.satsInView}, сигнал слабый (в здании?). Пока позиция по шагам — приблизительно.",
+            "Видно спутников: ${g.satsInView}. Достоверных координат пока нет. На открытом месте приём обычно лучше; шаги продолжают считаться.",
         )
         else -> Quad(
             Palette.Good, Icons.Filled.GpsFixed, "GPS: сигнал хороший",
-            "${g.fix.title} | ${g.satsUsed} из ${g.satsInView} спутников | HDOP ${Fmt.num(g.hdop)} | ±${Fmt.num(g.hdop * 3, 0)} м",
+            "${g.fix.title} | ${g.satsUsed} из ${g.satsInView} спутников | HDOP ${Fmt.num(g.hdop)}",
         )
     }
     Panel(accent = color) {
@@ -278,24 +304,25 @@ private fun GpsCard(st: DeviceStatus) {
 }
 
 @Composable
-private fun Actions(st: DeviceStatus, onMark: () -> Unit, onClap: () -> Unit, onToggle: () -> Unit) {
+private fun Actions(st: DeviceStatus, onMark: () -> Unit, onClap: () -> Unit, enabled: Boolean, onToggle: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ActionButton(Icons.Filled.BookmarkAdd, "Метка", Palette.Warn, Modifier.weight(1f), onMark)
-        ActionButton(Icons.Filled.Movie, "Хлопушка", Palette.Sunset, Modifier.weight(1f), onClap)
+        ActionButton(Icons.Filled.BookmarkAdd, "Метка", Palette.Warn, Modifier.weight(1f), onMark, enabled)
+        ActionButton(Icons.Filled.Movie, "Хлопушка", Palette.Sunset, Modifier.weight(1f), onClap, enabled)
         ActionButton(
             if (st.recording) Icons.Filled.GpsOff else Icons.Filled.GpsFixed,
-            if (st.recording) "Выкл GPS" else "Вкл GPS",
+            if (st.recording) "Пауза" else "Продолжить",
             if (st.recording) Palette.Bad else Palette.Good,
-            Modifier.weight(1f), onToggle,
+            Modifier.weight(1f), onToggle, enabled,
         )
     }
 }
 
 @Composable
-private fun ActionButton(icon: ImageVector, label: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun ActionButton(icon: ImageVector, label: String, color: Color, modifier: Modifier, onClick: () -> Unit, enabled: Boolean) {
     // Кнопка терминала: рамка в цвет действия, подпись «[ МЕТКА ]»
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.height(64.dp),
         shape = RoundedCornerShape(2.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, color),
@@ -340,7 +367,7 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
             } else {
                 Text(
                     if (name == null) "Выберите гаджет на вкладке «Гаджет»."
-                    else "Гаджет пока не слышно. Он выходит в эфир раз в 30–60 с; чтобы сразу — зажмите B на 1,5 с.",
+                    else "Устройство пока не слышно. Включите его и поднесите телефон ближе. Для подключения кнопкой: разбудите экран, отпустите кнопку, затем удерживайте B 1,5 с (прошивка V1).",
                     style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
                 )
             }
@@ -357,28 +384,31 @@ private fun NotConnected(vm: AppViewModel, contentPadding: PaddingValues) {
     }
 }
 
-/** Связи нет, но данные из базы есть — честно показать, насколько они старые. */
+/** Connection alone does not confirm current readings or completion of a hike. */
 @Composable
-private fun OfflineBanner(vm: AppViewModel) {
-    val link by vm.repo.link.collectAsStateWithLifecycle()
-    val seen by vm.repo.lastSeenMs.collectAsStateWithLifecycle()
-    if (link == LinkState.CONNECTED) return
-    val s = seen ?: return
-    Panel(accent = Palette.Warn, padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    if (link == LinkState.CONNECTING) "Подключение…" else "Нет связи с гаджетом",
-                    style = MaterialTheme.typography.titleMedium, color = Palette.Warn,
-                )
-                Text(
-                    "Данные на ${Fmt.time(s)} (${Fmt.duration(System.currentTimeMillis() - s)} назад)",
-                    style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
-                )
-            }
-            if (link == LinkState.DISCONNECTED) {
-                Button(onClick = { vm.link.connectNow() }, shape = RoundedCornerShape(2.dp)) { Text("Обновить") }
-            }
+internal fun ReadingsNotice(link: LinkState, statusTimeMs: Long, onRefresh: () -> Unit) {
+    Panel(accent = Palette.Warn) {
+        Text(
+            when (link) {
+                LinkState.CONNECTED -> "Ожидаем свежие показания"
+                LinkState.CONNECTING -> "Подключаемся к устройству"
+                else -> "Сохранённые данные"
+            },
+            style = MaterialTheme.typography.titleMedium, color = Palette.Warn,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text("Показания прибора на ${Fmt.dateTime(statusTimeMs)}",
+            style = MaterialTheme.typography.bodyMedium, color = Palette.Text)
+        Text(
+            if (link == LinkState.CONNECTED)
+                "Связь есть, но текущее состояние ещё не подтверждено. Дождитесь обновления."
+            else "Текущее состояние устройства неизвестно. Оно может продолжать запись; потеря связи не завершает поход.",
+            style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onRefresh, enabled = link != LinkState.CONNECTING,
+            shape = RoundedCornerShape(2.dp)) {
+            Text(if (link == LinkState.CONNECTED) "Запросить показания" else "Подключить устройство")
         }
     }
 }

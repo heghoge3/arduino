@@ -18,38 +18,9 @@ namespace {
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE);
 bool g_oledOk = false;
 bool g_screenOn = false;
-uint32_t g_screenUntil = 0;
+screeninput::Controls g_controls(SCREEN_ON_MS, BTN_DEBOUNCE_MS, BTN_LONG_MS);
 uint8_t g_page = 0;
 constexpr uint8_t PAGES = 4;
-
-// ---- Кнопки ----
-struct Btn {
-  explicit Btn(int p) : pin(p) {}
-  int pin;
-  bool down = false;
-  bool longFired = false;
-  uint32_t downAt = 0;
-};
-Btn g_a(PIN_BTN_A), g_b(PIN_BTN_B);
-
-Button pollButton(Btn& b, Button shortEv, Button longEv) {
-  bool pressed = digitalRead(b.pin) == LOW;
-  uint32_t now = millis();
-  if (pressed && !b.down) {
-    b.down = true;
-    b.longFired = false;
-    b.downAt = now;
-  } else if (pressed && b.down) {
-    if (!b.longFired && now - b.downAt >= BTN_LONG_MS) {
-      b.longFired = true;
-      return longEv;
-    }
-  } else if (!pressed && b.down) {
-    b.down = false;
-    if (!b.longFired && now - b.downAt >= BTN_DEBOUNCE_MS) return shortEv;
-  }
-  return Button::NONE;
-}
 
 // ---- Звук и свет: шаги «вкл мс, выкл мс, цвет» ----
 struct Step {
@@ -197,14 +168,6 @@ void drawPage4() {
 void begin(bool coldBoot, int wakePin) {
   pinMode(PIN_BTN_A, INPUT_PULLUP);
   pinMode(PIN_BTN_B, INPUT_PULLUP);
-  // Нажатие началось ещё во сне: считаем кнопку нажатой с момента пробуждения
-  for (Btn* b : {&g_a, &g_b}) {
-    if (b->pin == wakePin) {
-      b->down = true;
-      b->longFired = false;
-      b->downAt = 0;
-    }
-  }
 #if BUZZER_ACTIVE
   pinMode(PIN_BUZZER, OUTPUT);
   digitalWrite(PIN_BUZZER, LOW);
@@ -220,21 +183,26 @@ void begin(bool coldBoot, int wakePin) {
     oled.enableUTF8Print();
     oled.setPowerSave(1);
   }
+  g_controls.begin(millis(), g_oledOk, wakePin == PIN_BTN_A ? Button::A_SHORT :
+                   (wakePin == PIN_BTN_B ? Button::B_SHORT : Button::NONE));
+  g_screenOn = g_controls.active();
+  if (g_screenOn) { oled.setPowerSave(0); draw(); }
   (void)coldBoot;
 }
 
 Button poll() {
   tickPattern();
-  if (g_screenOn && (int32_t)(millis() - g_screenUntil) >= 0) {
-    g_screenOn = false;
-    if (g_oledOk) oled.setPowerSave(1);
+  const Button event = g_controls.poll(digitalRead(PIN_BTN_A) == LOW,
+                                       digitalRead(PIN_BTN_B) == LOW, millis());
+  if (g_screenOn != g_controls.active()) {
+    g_screenOn = g_controls.active();
+    if (g_oledOk) oled.setPowerSave(g_screenOn ? 0 : 1);
+    if (g_screenOn) { g_page = 0; draw(); }
   }
-  Button e = pollButton(g_a, Button::A_SHORT, Button::A_LONG);
-  if (e != Button::NONE) return e;
-  return pollButton(g_b, Button::B_SHORT, Button::B_LONG);
+  return event;
 }
 
-bool anyHeld() { return g_a.down || g_b.down; }
+bool anyHeld() { return g_controls.held(); }
 
 void play(Sound s) {
   switch (s) {
@@ -264,7 +232,7 @@ void screenOn() {
     oled.setPowerSave(0);
   }
   g_screenOn = true;
-  g_screenUntil = millis() + SCREEN_ON_MS;
+  g_controls.show(millis());
   draw();
 }
 
@@ -274,7 +242,7 @@ void nextPage() {
     return;
   }
   g_page = (g_page + 1) % PAGES;
-  g_screenUntil = millis() + SCREEN_ON_MS;
+  g_controls.show(millis());
   draw();
 }
 
@@ -302,7 +270,7 @@ void splash(const char* line2) {
   oled.drawUTF8(0, 52, line2);
   oled.sendBuffer();
   g_screenOn = true;
-  g_screenUntil = millis() + 2500;
+  g_controls.show(millis());
 }
 
 void sleep() {
@@ -311,6 +279,7 @@ void sleep() {
   g_pattern = nullptr;
   if (g_oledOk) oled.setPowerSave(1);
   g_screenOn = false;
+  g_controls.hide();
 }
 
 }  // namespace ui

@@ -1,10 +1,11 @@
 // Кнопки, пищалка, светодиод, экран (ТЗ, раздел 10). Раскладка кнопок — в config.h.
 #pragma once
 #include <stdint.h>
+#include "screen_input.h"
 
 namespace ui {
 
-enum class Button : uint8_t { NONE, A_SHORT, A_LONG, B_SHORT, B_LONG };
+using Button = screeninput::Button;
 
 enum class Sound : uint8_t {
   MARK,         // короткий писк
@@ -17,7 +18,7 @@ enum class Sound : uint8_t {
   ACHIEVEMENT,  // короткая наградная последовательность
 };
 
-// wakePin — кнопка, разбудившая из сна: её нажатие засчитывается, даже если уже отпустили
+// wakePin — кнопка, разбудившая из сна: при наличии экрана только включает его.
 void begin(bool coldBoot, int wakePin = -1);
 // Опрос кнопок (с антидребезгом). Вызывать каждую итерацию
 Button poll();

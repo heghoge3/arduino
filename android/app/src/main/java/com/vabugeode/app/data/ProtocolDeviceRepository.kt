@@ -88,6 +88,7 @@ class ProtocolDeviceRepository(
     initialTransport: Transport,
     private val initialBlacklist: List<BlacklistPoint>,
     private val store: StoreDao? = null,
+    private val elapsedMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : DeviceRepository {
 
     private var transport: Transport = initialTransport
@@ -97,6 +98,17 @@ class ProtocolDeviceRepository(
 
     /** Когда последний раз что-то приходило от гаджета (или сохранено в базе) */
     val lastSeenMs = MutableStateFlow<Long?>(null)
+
+    // Only STATUS from this connection makes readings current. INFO/history/DB do not.
+    // Monotonic time avoids extending freshness when phone time is corrected.
+    private var statusReceivedAt: Long? = null
+    private var connectionEpoch = 0L
+    private val _statusFresh = MutableStateFlow(false)
+    val statusFresh: StateFlow<Boolean> = _statusFresh
+    private fun hasFreshStatus(): Boolean = statusReceivedAt?.let {
+        link.value == LinkState.CONNECTED && transport.state.value == LinkState.CONNECTED &&
+            elapsedMs() - it in 0 until STATUS_FRESH_MS
+    } == true
 
     /** Приложение на экране: тревоги видны человеку — можно подтверждать их гаджету */
     var foreground = true
@@ -215,6 +227,12 @@ class ProtocolDeviceRepository(
 
     init {
         attach(initialTransport)
+        scope.launch {
+            while (isActive) {
+                delay(1_000)
+                _statusFresh.value = hasFreshStatus()
+            }
+        }
         // Самопроверка на устройстве идёт раз в минуту — INFO перезапрашиваем, чтобы не устаревал
         scope.launch {
             while (isActive) {
@@ -255,6 +273,9 @@ class ProtocolDeviceRepository(
     /** Сменить источник байтов: старый отключается, данные очищаются (это другое устройство). */
     fun use(t: Transport) {
         if (t === transport) return
+        connectionEpoch++
+        statusReceivedAt = null
+        _statusFresh.value = false
         scope.launch { persist(force = true) }
         transport.disconnect()
         // Загрузка из базы для прошлого источника могла ещё не закончиться — иначе она допишет
@@ -379,10 +400,18 @@ class ProtocolDeviceRepository(
         transport = t
         restoreJob = if (store != null) scope.launch { restore(t.key) } else null
         transportJobs = listOf(
-            scope.launch { t.incoming.collect { onPacket(it) } },
+            scope.launch { t.incoming.collect {
+                restoreJob?.join()
+                if (t === transport && t.state.value == LinkState.CONNECTED) onPacket(it)
+            } },
             scope.launch {
                 t.state.collect { st ->
                     val was = link.value
+                    if (st != was) {
+                        connectionEpoch++
+                        statusReceivedAt = null
+                        _statusFresh.value = false
+                    }
                     link.value = st
                     if (st != was) AppLog.i("BLE", "${t.deviceName}: ${was.title} → ${st.title}")
                     if (st == LinkState.CONNECTED) onConnected()
@@ -435,24 +464,37 @@ class ProtocolDeviceRepository(
         }
     }
 
-    private fun send(cmd: Cmd) {
+    private fun send(cmd: Cmd, requireFreshStatus: Boolean = false) {
+        if (requireFreshStatus && !hasFreshStatus()) {
+            _notices.tryEmit("Подключите устройство и дождитесь свежих показаний")
+            return
+        }
         val target=transport
+        val epoch=connectionEpoch
         scope.launch {
             val bytes = Codec.encode(cmd)
-            if (sendLock.withLock { target===transport && target.send(bytes) }) {
+            if (sendLock.withLock {
+                target === transport && (!requireFreshStatus ||
+                    (epoch == connectionEpoch && hasFreshStatus())) && target.send(bytes)
+            }) {
                 addLog(LogEntry(System.currentTimeMillis(), true, cmdName(bytes), bytes.size, bytes.toHex()))
                 stats.value = stats.value.copy(packetsOut = stats.value.packetsOut + 1)
             } else {
                 AppLog.w("BLE", "команда ${cmdName(bytes)} не ушла: нет связи")
-                _notices.tryEmit("Устройство не подключено")
+                _notices.tryEmit(if (requireFreshStatus) "Команда не отправлена: дождитесь свежих показаний устройства"
+                    else "Устройство не подключено")
             }
         }
     }
 
-    override fun addMark(type: MarkType, text: String) = send(Cmd.Mark(type.ordinal, text))
-    override fun clap() = send(Cmd.Clap)
+    override fun addMark(type: MarkType, text: String) = send(Cmd.Mark(type.ordinal, text), requireFreshStatus = true)
+    override fun clap() = send(Cmd.Clap, requireFreshStatus = true)
     override fun setRecording(on: Boolean) {
-        send(Cmd.Record(on))
+        if (!hasFreshStatus()) {
+            _notices.tryEmit("Подключите устройство и дождитесь свежих показаний")
+            return
+        }
+        send(Cmd.Record(on), requireFreshStatus = true)
         if (on) phonePosition?.invoke()?.let { (lat, lon, acc) -> send(Cmd.PhonePos(lat, lon, acc)) }
         send(Cmd.GetInfo) // мог начаться новый поход
     }
@@ -460,7 +502,7 @@ class ProtocolDeviceRepository(
 
     fun achievementChime() {
         val supported=lastInfo?.let {it.fwMajor>0 || it.fwMinor>1 || (it.fwMinor==1&&it.fwPatch>=17)}==true
-        if(supported && link.value==LinkState.CONNECTED && status.value?.recording==true) send(Cmd.AchievementChime)
+        if(supported && status.value?.recording==true) send(Cmd.AchievementChime, requireFreshStatus = true)
     }
 
     fun setBlacklistRadius(index: Int, radiusM: Int) {
@@ -473,6 +515,13 @@ class ProtocolDeviceRepository(
     }
 
     fun refreshInfo() = send(Cmd.GetInfo)
+
+    fun refreshReadings() {
+        if (link.value != LinkState.CONNECTED) return
+        liveWanted = true
+        send(Cmd.Session(live = true))
+        send(Cmd.GetInfo)
+    }
 
     private fun onConnected() = scope.launch {
         // Сначала дочитать базу: тогда догрузим только то, чего в телефоне ещё нет
@@ -627,6 +676,8 @@ class ProtocolDeviceRepository(
         }
         val st = m.toStatus(lastSats)
         status.value = st
+        statusReceivedAt = elapsedMs()
+        _statusFresh.value = hasFreshStatus()
         lastInfo?.let { info.value = buildInfo(it, st) }
     }
 
@@ -684,6 +735,7 @@ class ProtocolDeviceRepository(
     }
 
     companion object {
+        const val STATUS_FRESH_MS = 5_000L
         private fun sysName(s: Int) = when (s) { 0 -> "GPS"; 1 -> "BDS"; 2 -> "GLO"; else -> "GAL" }
 
         private fun srcOf(s: Int) = when (s) { 4 -> PositionSource.START; 1 -> PositionSource.GPS; 2 -> PositionSource.PDR; 3 -> PositionSource.PAUSE; else -> PositionSource.NONE }

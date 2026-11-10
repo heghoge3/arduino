@@ -5,7 +5,7 @@
 // Версия прошивки (уходит в INFO)
 constexpr uint8_t FW_MAJOR = 0;
 constexpr uint8_t FW_MINOR = 1;
-constexpr uint8_t FW_PATCH = 19;
+constexpr uint8_t FW_PATCH = 20;
 
 // Пищалка: тип выяснится при сборке (ТЗ, раздел 2).
 // 1 — активная (просто подать HIGH), 0 — пассивная (тон через ledc)
@@ -18,8 +18,8 @@ constexpr uint16_t BUZZER_TONE_HZ = 2700;  // для пассивной
 constexpr uint32_t BTN_LONG_MS = 1500;
 constexpr uint32_t BTN_DEBOUNCE_MS = 30;
 
-// Экран: включается по кнопке B на столько
-constexpr uint32_t SCREEN_ON_MS = 10000;
+// Экран: любая кнопка будит; гаснет после бездействия. Запись продолжается.
+constexpr uint32_t SCREEN_ON_MS = 15000;
 
 // Запись (по умолчанию; часть меняется командами с телефона и хранится в NVS)
 constexpr uint16_t DEF_LOG_MOVING_S = 10;

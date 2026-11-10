@@ -77,6 +77,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             BlacklistPoint(60.1161, 31.3864, 5000, "Ладога, о. Кареджи"),
         )),
         store = dao,
+        elapsedMs = android.os.SystemClock::elapsedRealtime,
     )
 
     fun setBlacklistRadius(index: Int, radiusM: Int) {
