@@ -22,8 +22,9 @@ struct Store {
  bool flushLogs(){calls.push_back(4);return !failLog;}
 };
 poweroff::Slider requested(){poweroff::Slider c;c.begin(true,0);c.observe(false,1);c.observe(false,51);return c;}
-void default_profile_preserves_gesture(){
- TEST_ASSERT_EQUAL(0,int(POWER_PROFILE));TEST_ASSERT_FALSE(POWER_SLIDER);TEST_ASSERT_EQUAL(-1,PIN_POWER_SWITCH);
+void primary_profile_is_slider_legacy_gesture_requires_explicit_selection(){
+ TEST_ASSERT_EQUAL(1,int(POWER_PROFILE));TEST_ASSERT_TRUE(POWER_SLIDER);
+ TEST_ASSERT_TRUE(POWER_SLIDER_BENCH);TEST_ASSERT_EQUAL(-1,PIN_POWER_SWITCH);
  powergesture::Start g;g.tick(true,true,1);TEST_ASSERT_FALSE(g.done());g.tick(true,true,4001);TEST_ASSERT_TRUE(g.done());
 }
 void off_bounce_and_timer_wrap(){
@@ -93,7 +94,7 @@ void repeated_off_does_not_write_or_cut_twice(){
  TEST_ASSERT_FALSE(c.save(poweroff::OtaPhase::None,false,s));TEST_ASSERT_EQUAL(calls,s.calls.size());
 }
 int main(){UNITY_BEGIN();
- RUN_TEST(default_profile_preserves_gesture);RUN_TEST(off_bounce_and_timer_wrap);
+ RUN_TEST(primary_profile_is_slider_legacy_gesture_requires_explicit_selection);RUN_TEST(off_bounce_and_timer_wrap);
  RUN_TEST(boot_with_switch_off_cannot_start_work);RUN_TEST(off_saves_same_hike_and_next_boot_asks_resume);
  RUN_TEST(finished_history_and_idle_are_not_reopened);RUN_TEST(corrupt_session_or_revision_overflow_keeps_hold);
  RUN_TEST(every_save_failure_keeps_hold_and_stops_later_actions);RUN_TEST(receiving_must_abort_before_data_and_failure_never_releases);

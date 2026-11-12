@@ -24,21 +24,22 @@ jobs:
           path: ~/.platformio
           key: pio-${{ hashFiles('firmware/platformio.ini') }}
       - run: pip install platformio
-      - name: Регрессии часов и питания без платы
+      # Historical test_host/clock_test.cpp emulates removed DS1302 GPIOs.
+      # Current DS3231 calendar checks run in the native test_v2 suite below.
+      - name: Регрессии энергосбережения без платы
         run: |
           mkdir -p /tmp/vabugeode-tests
-          g++ -std=gnu++17 -Wall -Wextra -Itest_host -Isrc -Iinclude -Ilib/core test_host/clock_test.cpp src/clock.cpp lib/core/nmea.cpp -Wl,--wrap=time,--wrap=settimeofday -o /tmp/vabugeode-tests/clock_test
-          /tmp/vabugeode-tests/clock_test
           g++ -std=gnu++17 -Wall -Wextra -Isrc -Ilib/core test_host/power_test.cpp lib/core/logic.cpp -o /tmp/vabugeode-tests/power_test
           /tmp/vabugeode-tests/power_test
       - name: Тесты ядра (протокол, NMEA, подмена, шаги, логика)
         run: pio test -e native
-      - name: Сборка под ESP32-S3
-        run: pio run -e s3 -e s3_fake
+      - name: Проверки профилей, включая запрет сборки без GPIO
+        run: python3 tools/check_power_profiles.py
+      - name: USB-стенд ползунка — автономная сборка ожидает GPIO
+        run: pio run -e s3_slider_bench
       - name: Прошивки
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-bin
+          name: firmware-slider-usb-bench
           path: |
-            firmware/.pio/build/s3/firmware.bin
-            firmware/.pio/build/s3_fake/firmware.bin
+            firmware/.pio/build/s3_slider_bench/firmware.bin

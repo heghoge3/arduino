@@ -8,8 +8,9 @@ import tempfile
 def main():
     root = Path(__file__).resolve().parents[1]
     cases = [
-        ("default gesture", [], None),
-        ("USB-only slider bench", ["V2_POWER_PROFILE=1", "V2_SLIDER_BENCH=1"], None),
+        ("primary slider refuses unassigned GPIO", [], "Slider GPIO is not assigned"),
+        ("explicit legacy gesture", ["V2_POWER_PROFILE=0"], None),
+        ("explicit bench uses default slider", ["V2_SLIDER_BENCH=1"], None),
         ("unassigned GPIO", ["V2_POWER_PROFILE=1"], "Slider GPIO is not assigned"),
     ]
     for pin in (0, 3, 7, 19, 20, 45):

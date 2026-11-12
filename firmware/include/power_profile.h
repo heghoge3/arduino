@@ -3,7 +3,7 @@
 #include "pins.h"
 
 #ifndef V2_POWER_PROFILE
-#define V2_POWER_PROFILE 0
+#define V2_POWER_PROFILE 1
 #endif
 #ifndef V2_SLIDER_BENCH
 #define V2_SLIDER_BENCH 0
