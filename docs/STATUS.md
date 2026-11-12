@@ -17,15 +17,19 @@ ST7567, пассивный зуммер; цикл START/END/RESUME сохран�
 | Часть | Версия | Состояние |
 |---|---|---|
 | ESP32 V2, исходники и сборка | 0.1.30; USB-база 0.1.29 | BLE OTA: два слота, подпись P-256, самопроверка/откат; ползунок GPIO3/HOLD7. 97 native, 11 compile-probes, 4 сборки; аппаратная приёмка не выполнена |
-| Android | 0.10.7, versionCode 30 | BLE OTA из подписанного образа в APK, проверка фактического результата; 163 теста. Подписанный release готовится тем же ключом; проверенный прошлый APK ниже |
+| Android | 0.10.7, versionCode 30 | BLE OTA из подписанного образа в APK, проверка фактического результата; 163 теста. Release APK собран и подписан прежним ключом; внутри проверенный образ 0.1.30 |
 | V2 корпуса/платы | Проектирование | Детали заказаны, реальные замеры ожидаются; изготовление ещё не утверждено |
 
-- APK 0.10.6: [страница файла на GitHub — Download raw / ⬇](https://github.com/heghoge3/arduino/blob/artifacts/android-v0.10.6/vabugeode-0.10.6.apk),
-  [прямая ссылка без перенаправления GitHub](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/android-v0.10.6/vabugeode-0.10.6.apk).
+- APK **0.10.7**: [скачать напрямую](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/android-v0.10.7/vabugeode-0.10.7.apk),
+  [страница файла GitHub](https://github.com/heghoge3/arduino/blob/artifacts/android-v0.10.7/vabugeode-0.10.7.apk),
+  [SHA256SUMS](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/android-v0.10.7/SHA256SUMS).
   Если встроенный браузер чата не скачивает, открыть ссылку во внешнем браузере телефона.
-  Прямая загрузка проверена по SHA-256; файл тот же, повторной сборки/смены ключа нет.
-  Попытка добавить вложения в Releases получила HTTP 401 на uploads.github.com;
-  выпуск не создан. Наличие файла в artifacts подтверждено.
+- **Первая USB-подготовка V2**: [полный архив с базой 0.1.29 и обновлением 0.1.30](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/firmware-v0.1.30/vabugeode-v2-ota-bootstrap-0.1.29.zip),
+  [страница файла GitHub](https://github.com/heghoge3/arduino/blob/artifacts/firmware-v0.1.30/vabugeode-v2-ota-bootstrap-0.1.29.zip),
+  [инструкция и условия приёмки](ble-ota-v2.md). На старой прошивке одного APK недостаточно.
+  EN/reset/flash/SD на V2 ещё не приняты; сначала макет и приватные копии.
+- Файлы в artifacts опубликованы, прямая загрузка сверена по SHA-256. Старые сборки
+  сохранены в своих ветках и разделах истории ниже; установки на телефон/прибор не предполагаются.
 - [Историческая прошивка 0.1.19 и материалы; это не целевая V2](https://github.com/heghoge3/arduino/raw/refs/heads/artifacts/firmware-v0.1.19/vabugeode-gps-fix-0.1.19.zip).
 - Ранее программные исходники 9465499 объединены в основную ветку вместе с
   аппаратной документацией. По уточнению владельца 09.11.2026 на телефоне установлен
@@ -36,7 +40,7 @@ ST7567, пассивный зуммер; цикл START/END/RESUME сохран�
 ## Ключ и перенос данных
 
 Старый ключ потерян; у владельца резервной копии нет. По его разрешению создан новый.
-APK 0.10.2 и последующие, включая 0.10.6, НЕ обновляют старую установку 0.10.1 с другой подписью поверх.
+APK 0.10.2 и последующие, включая 0.10.7, НЕ обновляют старую установку 0.10.1 с другой подписью поверх.
 09.11.2026 владелец отказался от переноса данных старой установки. Специальный импорт
 для перехода на новый ключ больше не является задачей или блокером. По последнему
 уточнению переход запланирован после существенных изменений; удаление/установка не подтверждены.
@@ -401,6 +405,22 @@ OFF при OTA учитывает реальный приём/выбранный
 
 Отдельный OTA-ключ создан и локально резервирован приватно; APK-ключ прежний.
 [Хранение ключа](ota-signing.md): внешний backup/Library не подтверждены.
+
+### Опубликованный комплект проверки
+
+Исходники `3bdac5b7e181b886b16b40f09d0939041251856c`, APK 0.10.7 (30), com.vabugeode.app,
+ARM64 + ARMv7, **36 523 485 байт**. `apksigner` подтвердил прежний постоянный сертификат;
+из готового APK извлечены assets: все три файла точно совпадают с принятым подписанным bundle.
+SHA-256 APK: `d2c750cdf4caa6f2ad6dc663084a7b081286f802ead9211c1947a468dcf3f029`.
+[Метаданные APK](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/android-v0.10.7/release.json).
+
+USB ZIP **981 632 байта**, SHA-256
+`a379954f232ea11ae765f4b1e8747af537afe60a704cd43917571a069513d4b2`.
+Внутренний SHA256SUMS проверен для каждого файла; приватных ключей/копий flash нет.
+[Метаданные USB-комплекта](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/firmware-v0.1.30/release.json).
+Это публикация программного комплекта для испытаний, не выполненная USB-подготовка владельца.
+CI исходного commit завершён успешно: [Firmware](https://github.com/heghoge3/arduino/actions/runs/43207670531),
+[Android APK](https://github.com/heghoge3/arduino/actions/runs/43207670484).
 
 ## Что пока не готово
 
