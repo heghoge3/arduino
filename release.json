@@ -1,0 +1,31 @@
+{
+  "applicationId": "com.vabugeode.app",
+  "versionName": "0.10.7",
+  "versionCode": 30,
+  "sourceCommit": "3bdac5b7e181b886b16b40f09d0939041251856c",
+  "filename": "vabugeode-0.10.7.apk",
+  "bytes": 36523485,
+  "sha256": "d2c750cdf4caa6f2ad6dc663084a7b081286f802ead9211c1947a468dcf3f029",
+  "certificateSha256": "f18a2b68ee3edc07189996577aca1b46f76d852925ef34eee123be8ebfe56453",
+  "abis": [
+    "arm64-v8a",
+    "armeabi-v7a"
+  ],
+  "ota": {
+    "targetVersion": "0.1.30",
+    "imageBytes": 764000,
+    "imageSha256": "952306b003ed4f84eaaec34005e7adc0b9cb73ae31ec20f35ec6bd5eb202c795",
+    "keyId": "a128f28662e56efc",
+    "usbBootstrapRequired": "0.1.29",
+    "model": "V2 Slider GPIO3/HOLD7",
+    "hardwareAccepted": false
+  },
+  "tests": {
+    "android": 163,
+    "firmwareNative": 97,
+    "gpioCompileChecks": 11,
+    "hostPower": 4,
+    "pythonTools": 4
+  },
+  "installationConfirmed": false
+}
