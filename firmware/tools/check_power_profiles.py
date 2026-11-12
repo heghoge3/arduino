@@ -8,21 +8,25 @@ import tempfile
 def main():
     root = Path(__file__).resolve().parents[1]
     cases = [
-        ("primary slider refuses unassigned GPIO", [], "Slider GPIO is not assigned"),
-        ("explicit legacy gesture", ["V2_POWER_PROFILE=0"], None),
-        ("explicit bench uses default slider", ["V2_SLIDER_BENCH=1"], None),
-        ("unassigned GPIO", ["V2_POWER_PROFILE=1"], "Slider GPIO is not assigned"),
+        ("primary slider GPIO3", ["EXPECT_SWITCH_PIN=3"], None),
+        ("explicit legacy gesture", ["V2_POWER_PROFILE=0", "EXPECT_SWITCH_PIN=-1"], None),
+        ("explicit bench uses default slider", ["V2_SLIDER_BENCH=1", "EXPECT_SWITCH_PIN=-1"], None),
+        ("unassigned override", ["V2_POWER_SWITCH_PIN=-1"], "Slider GPIO is not assigned"),
+        ("explicit GPIO3", ["V2_POWER_SWITCH_PIN=3", "EXPECT_SWITCH_PIN=3"], None),
     ]
-    for pin in (0, 3, 7, 19, 20, 45):
+    for pin in (0, 7, 19, 20, 45):
         cases.append((f"reserved/conflicting GPIO{pin}",
                       ["V2_POWER_PROFILE=1", f"V2_POWER_SWITCH_PIN={pin}"],
-                      "Slider GPIO needs an explicit reviewed pin allocation"))
+                      "Slider GPIO conflicts with a reserved, inaccessible or occupied pin"))
     cases.append(("physical input in bench", ["V2_POWER_PROFILE=1", "V2_SLIDER_BENCH=1",
                                               "V2_POWER_SWITCH_PIN=3"],
                   "Bench profile must not read a real switch GPIO"))
     with tempfile.TemporaryDirectory(prefix="v2-power-profiles-") as directory:
         source = Path(directory) / "probe.cpp"
-        source.write_text('#include "power_profile.h"\nint main(){return int(POWER_PROFILE);}\n')
+        source.write_text('#include "power_profile.h"\n'
+                          '#ifdef EXPECT_SWITCH_PIN\n'
+                          'static_assert(PIN_POWER_SWITCH==EXPECT_SWITCH_PIN,"Unexpected switch input");\n'
+                          '#endif\nint main(){return int(POWER_PROFILE);}\n')
         base = ["g++", "-std=c++17", f"-I{root / 'include'}", f"-I{root / 'lib/core'}",
                 "-c", str(source), "-o", str(Path(directory) / "probe.o")]
         for name, flags, error in cases:

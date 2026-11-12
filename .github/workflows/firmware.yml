@@ -33,11 +33,16 @@ jobs:
           /tmp/vabugeode-tests/power_test
       - name: Тесты ядра (протокол, NMEA, подмена, шаги, логика)
         run: pio test -e native
-      - name: Проверки профилей, включая запрет сборки без GPIO
+      - name: Проверки GPIO3 и защиты профилей
         run: python3 tools/check_power_profiles.py
-      - name: USB-стенд ползунка — автономная сборка ожидает GPIO
-        run: pio run -e s3_slider_bench
-      - name: Прошивки
+      - name: Основной профиль GPIO3, fake и USB-стенд
+        run: pio run -e s3 -e s3_fake -e s3_slider_bench
+      - name: Сборка GPIO3 — аппаратная проверка не выполнена
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-v2-slider-gpio3-unverified
+          path: firmware/.pio/build/s3/firmware.bin
+      - name: USB-стенд
         uses: actions/upload-artifact@v4
         with:
           name: firmware-slider-usb-bench

@@ -25,6 +25,7 @@ poweroff::Slider requested(){poweroff::Slider c;c.begin(true,0);c.observe(false,
 void primary_profile_is_slider_legacy_gesture_requires_explicit_selection(){
  TEST_ASSERT_EQUAL(1,int(POWER_PROFILE));TEST_ASSERT_TRUE(POWER_SLIDER);
  TEST_ASSERT_TRUE(POWER_SLIDER_BENCH);TEST_ASSERT_EQUAL(-1,PIN_POWER_SWITCH);
+ TEST_ASSERT_TRUE(sliderPinAllowed(3));TEST_ASSERT_FALSE(sliderPinAllowed(0));
  powergesture::Start g;g.tick(true,true,1);TEST_ASSERT_FALSE(g.done());g.tick(true,true,4001);TEST_ASSERT_TRUE(g.done());
 }
 void off_bounce_and_timer_wrap(){

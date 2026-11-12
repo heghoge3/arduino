@@ -10,7 +10,7 @@ class Diagnostic {
   struct Meta {
     uint32_t bootCount=0,hikeId=0,receiveMs=0,age[4]={UINT32_MAX,UINT32_MAX,UINT32_MAX,UINT32_MAX};
     float hdop=0;
-    uint8_t sats=0,fixType=0,quality=0,settle=0,clockSource=0,firmwarePatch=27;
+    uint8_t sats=0,fixType=0,quality=0,settle=0,clockSource=0,firmwarePatch=28;
     uint8_t freshSnrSystems=0;
     bool qualityCurrent=false,evaluated=false;
   };
