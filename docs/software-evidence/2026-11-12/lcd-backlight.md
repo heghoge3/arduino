@@ -1,7 +1,7 @@
 # GPIO14: программное управление подсветкой LCD V2
 
 12.11.2026. Задача владельца после разрешения нижней площадки GPIO14.
-Исходная база `a9a783d`; прошивка **0.1.31**, APK **0.10.8 (31)**.
+Исходная база `a9a783d`; [commit реализации](https://github.com/heghoge3/arduino/commit/dbc6d550f933505d5779f6e261eac369ac5325cf); прошивка **0.1.31**, APK **0.10.8 (31)**.
 Единый аппаратный контракт и первичные источники —
 [электрическая база](../../hardware-v2/electrical-baseline.md#lcd-backlight).
 
@@ -70,3 +70,19 @@
 Физический ключ/пайка не выбраны окончательно, PCB/корпус и закупка не выполнялись.
 На немодифицированном четырёхконтактном LCD подсветка останется подключённой к питанию.
 Эта проверка кода не является аппаратной приёмкой V2, установки не подтверждены.
+
+## Опубликованные артефакты
+
+- [APK 0.10.8](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/android-v0.10.8/vabugeode-0.10.8.apk):
+  36 523 889 байт, SHA-256 `3c5386946ebbcfb7aeddf4fab2b733a228cdd868d00c837986f73bf57d2b8acb`.
+- [Новый USB-комплект](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/firmware-v0.1.31/vabugeode-v2-ota-bootstrap-0.1.29.zip):
+  983 003 байта, SHA-256 `de80396535972b7a627b5951563a6f3c845ac05d61dc883433fd7d090b1a64a4`.
+- APK: versionCode31/package/ABI проверены, app.bin/manifest.bin/public.der внутри
+  побайтно совпали с проверенным bundle. Сертификат прежний, закреплённый в репозитории.
+- ZIP: CRC, состав, внутренние SHA256SUMS проверены; приватных ключей/flash-копий нет.
+- Оба файла заново скачаны по публичным raw-ссылкам и совпали с локальными по SHA-256.
+  Это проверка публикации, установка на телефон/прибор не выполнялась.
+
+GitHub CI для commit реализации:
+[Android APK](https://github.com/heghoge3/arduino/actions/runs/43274445896) — успешно.
+[Firmware](https://github.com/heghoge3/arduino/actions/runs/43274446170) — успешно.
