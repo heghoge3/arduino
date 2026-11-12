@@ -1,0 +1,16 @@
+{
+  "type": "v2-ota-test-kit",
+  "sourceCommit": "dbc6d550f933505d5779f6e261eac369ac5325cf",
+  "targetFirmware": "0.1.31",
+  "usbBase": "0.1.29",
+  "usbBaseIncludesBacklightDriver": true,
+  "requiredApk": "0.10.8",
+  "otaKeyId": "a128f28662e56efc",
+  "imageSha256": "2e5f71cadeecef1b3d13a6587b8d16ac5326746bb4726c85590e15d6950118bf",
+  "bootstrapSha256": "13cf95af8ddd1dc1fced214918eb62a0a88c2e07529f94ef7011c7958b87557c",
+  "hardwareAccepted": false,
+  "usbPreparationPerformed": false,
+  "archive": "vabugeode-v2-ota-bootstrap-0.1.29.zip",
+  "sha256": "de80396535972b7a627b5951563a6f3c845ac05d61dc883433fd7d090b1a64a4",
+  "bytes": 983003
+}
