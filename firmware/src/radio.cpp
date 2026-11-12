@@ -13,6 +13,7 @@ namespace radio {
 namespace {
 
 struct CmdItem {
+  uint32_t epoch;
   uint8_t len;
   uint8_t data[247];
 };
@@ -58,6 +59,7 @@ class ServerCB : public NimBLEServerCallbacks {
 
   void onDisconnect(NimBLEServer*, ble_gap_conn_desc*) override {
     LOGI(M_BLE, "телефон отключился");
+    g_clientEpoch++;
     g_conn = 0xFFFF;
     g_live = false;
     g_dropSecured = g_secured;
@@ -83,7 +85,7 @@ class ServerCB : public NimBLEServerCallbacks {
 class CommandCB : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* c) override {
     NimBLEAttValue v = c->getValue();
-    CmdItem item;
+    CmdItem item;item.epoch=g_clientEpoch;
     item.len = v.length() > sizeof(item.data) ? sizeof(item.data) : v.length();
     memcpy(item.data, v.data(), item.len);
     g_lastRxMs = millis();
@@ -230,7 +232,7 @@ void poll() {
 bool popCommand(uint8_t* buf, size_t& len) {
   if (!g_queue) return false;
   CmdItem item;
-  if (xQueueReceive(g_queue, &item, 0) != pdTRUE) return false;
+  do{if (xQueueReceive(g_queue, &item, 0) != pdTRUE) return false;}while(item.epoch!=g_clientEpoch);
   memcpy(buf, item.data, item.len);
   len = item.len;
   return true;

@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "android/**"
+      - "docs/ota-vectors.txt"
       - ".github/workflows/android.yml"
   workflow_dispatch:
 

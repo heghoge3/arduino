@@ -122,6 +122,7 @@ class LinkManager(
     }
 
     fun setSource(s: Source) {
+        if(repo.ota.busy)return
         if (s == source.value) return
         AppLog.i("LINK", "источник: ${if (s == Source.EMULATOR) "эмулятор" else "гаджет"}")
         _scanner.value.stop()
@@ -145,6 +146,7 @@ class LinkManager(
 
     /** Выбрать гаджет из найденных и подключиться */
     fun choose(g: FoundGadget) {
+        if(repo.ota.busy)return
         AppLog.i("LINK", "выбран гаджет ${g.name} ${g.id}, сигнал ${g.rssi} дБм")
         prefs.gadgetId = g.id
         prefs.gadgetName = g.name
@@ -157,6 +159,7 @@ class LinkManager(
     }
 
     fun forget() {
+        if(repo.ota.busy)return
         AppLog.i("LINK", "гаджет забыт")
         prefs.gadgetId = null
         prefs.gadgetName = null

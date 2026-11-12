@@ -48,6 +48,8 @@ class BleTransport(
     /** Последняя ошибка для человека (почему не подключилось) */
     val lastError = MutableStateFlow<String?>(null)
 
+    var negotiatedMtu:Int=23
+        private set
     private var gatt: BluetoothGatt? = null
     private var cmdChar: BluetoothGattCharacteristic? = null
     private var setupJob: Job? = null
@@ -74,6 +76,7 @@ class BleTransport(
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
             if (g !== gatt) return
+            if(status==BluetoothGatt.GATT_SUCCESS)negotiatedMtu=mtu
             AppLog.d("GATT", "MTU $mtu, код $status")
             complete(status)
         }
@@ -122,7 +125,7 @@ class BleTransport(
 
     private suspend fun setup(g: BluetoothGatt) {
         if (g !== gatt) return
-        // Сначала MTU: самый длинный пакет 99 байт, при MTU 23 не пролезет
+        // MTU 247 accommodates OTA DATA (238 bytes); OTA checks the negotiated value.
         op { g.requestMtu(Proto.MTU) }
         if (op(10_000) { g.discoverServices() } != BluetoothGatt.GATT_SUCCESS) {
             fail(g, "Не удалось прочитать сервисы гаджета")
@@ -183,6 +186,7 @@ class BleTransport(
         gatt?.close()
         gatt = null
         cmdChar = null
+        negotiatedMtu=23
         state.value = LinkState.DISCONNECTED
     }
 

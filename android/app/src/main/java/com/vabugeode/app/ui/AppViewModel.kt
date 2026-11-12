@@ -92,6 +92,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         blacklistSettings.save(repo.blacklist.value)
     }
 
+    init {
+        val context=app
+        repo.ota.bundle=runCatching {
+            val manifest=context.assets.open("firmware/manifest.bin").use{it.readBytes()}
+            val image=context.assets.open("firmware/app.bin").use{it.readBytes()}
+            val publicKey=context.assets.open("firmware/public.der").use{it.readBytes()}
+            com.vabugeode.app.protocol.OtaBundle(manifest,image,publicKey)
+        }.onFailure{
+            if(context.assets.list("firmware")?.contains("manifest.bin")==true)
+                repo.ota.bundleError="Образ прошивки в APK не прошёл проверку"
+        }.getOrNull()
+        val journal=context.getSharedPreferences("ota-operation",0)
+        repo.ota.journal=object:com.vabugeode.app.ota.OtaJournal {
+            override fun read(device:String)=journal.getString(device,null)
+            override fun write(device:String,value:String?){check(journal.edit().putString(device,value).commit()){"Не удалось сохранить состояние обновления на телефоне"}}
+        }
+    }
+
     private val pdrPrefs = app.getSharedPreferences("pdr", 0)
     val pdrSettings = MutableStateFlow(com.vabugeode.app.protocol.Cmd.PdrSettings(
         pdrPrefs.getInt("stride", 75).coerceIn(30, 150),

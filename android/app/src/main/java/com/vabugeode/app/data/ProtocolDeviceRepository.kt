@@ -123,6 +123,14 @@ class ProtocolDeviceRepository(
 
     /** Приложение на экране: тревоги видны человеку — можно подтверждать их гаджету */
     var foreground = true
+        set(value){field=value;if(!value)ota.background()}
+    val ota = com.vabugeode.app.ota.OtaClient(scope,
+        send={ bytes -> val target=transport;val epoch=connectionEpoch
+            check(target !is com.vabugeode.app.transport.BleTransport || target.negotiatedMtu>=247){"Для OTA нужен BLE MTU 247. Переподключите прибор"}
+            sendLock.withLock {target===transport&&epoch==connectionEpoch&&target.send(bytes)} },
+        connected={link.value==LinkState.CONNECTED&&transport.state.value==LinkState.CONNECTED},
+        ready={foreground&&hasFreshStatus()&&lifecycleFresh.value&&
+            lifecycle.value?.phase in listOf(HikeStateMsg.IDLE,HikeStateMsg.ENDED)&&!stats.value.syncing&&!hikeBusy.value&&!settingBusy.value})
 
     /** Живой сеанс (STATUS раз в секунду) или тихий (только метки и тревоги) */
     private var liveWanted = true
@@ -191,7 +199,7 @@ class ProtocolDeviceRepository(
     fun supportsEconomy(): Boolean = lastInfo?.let { it.fwMajor>0 || it.fwMinor>1 || (it.fwMinor==1 && it.fwPatch>=16) } == true
     private fun blacklistCommand() = Cmd.Blacklist(blacklist.value.map { Cmd.Blacklist.Entry(it.lat,it.lon,it.radiusM) }, supportsEconomy())
     private suspend fun changeSetting(cmd: Cmd): Boolean = settingMutex.withLock {
-        if (link.value!=LinkState.CONNECTED || !supportsEconomy()) {
+        if (ota.busy || link.value!=LinkState.CONNECTED || !supportsEconomy()) {
             _notices.tryEmit("Нужно подключить гаджет с прошивкой 0.1.16 или новее"); return@withLock false
         }
         val target=transport
@@ -283,7 +291,8 @@ class ProtocolDeviceRepository(
 
     /** Сменить источник байтов: старый отключается, данные очищаются (это другое устройство). */
     fun use(t: Transport) {
-        if (t === transport) return
+        if (t === transport || ota.busy) return
+        ota.deviceChanged(t.key)
         connectionEpoch++
         lifecycle.value=null; lifecycleFresh.value=false; lifecyclePending.value=false
         lifecycleReply?.second?.cancel(); lifecycleReply=null
@@ -432,6 +441,7 @@ class ProtocolDeviceRepository(
                         _statusFresh.value = false
                     }
                     link.value = st
+                    if(st!=was)ota.connection(st==LinkState.CONNECTED)
                     if (st != was) AppLog.i("BLE", "${t.deviceName}: ${was.title} → ${st.title}")
                     if (st == LinkState.CONNECTED) onConnected()
                     if (st == LinkState.DISCONNECTED && was != LinkState.DISCONNECTED) persist(force = true)
@@ -498,6 +508,7 @@ class ProtocolDeviceRepository(
         (lifecycleFresh.value && lifecycle.value?.phase==HikeStateMsg.ACTIVE)
 
     suspend fun changeHike(action: Int, expected: HikeStateMsg? = lifecycle.value): Boolean = hikeLock.withLock {
+        if(ota.busy)return@withLock false
         val current=lifecycle.value
         if (!supportsLifecycle() || current==null || expected==null || expected.hike!=current.hike || expected.revision!=current.revision || !lifecycleFresh.value || !hasFreshStatus() ||
             lifecyclePending.value || stats.value.syncing) {
@@ -549,6 +560,7 @@ class ProtocolDeviceRepository(
     }
 
     private fun send(cmd: Cmd, requireFreshStatus: Boolean = false) {
+        if(ota.busy && cmd !is Cmd.Session && cmd !is Cmd.GetInfo)return
         if (requireFreshStatus && (!hasFreshStatus() || !recordControlsAllowed())) {
             _notices.tryEmit("Подключите устройство и дождитесь свежих показаний")
             return
@@ -630,6 +642,10 @@ class ProtocolDeviceRepository(
     // ---- Входящие пакеты ----
 
     private suspend fun onPacket(p: Packet) {
+        if(p.data.size>=2&&(p.data[1].toInt() and 255)==com.vabugeode.app.protocol.OtaWire.QUERY){
+            runCatching{com.vabugeode.app.protocol.OtaWire.decode(p.data)}.onSuccess{ota.receive(it)}
+            return
+        }
         val msg = try {
             Codec.decodeMsg(p.data)
         } catch (e: ProtocolException) {
@@ -638,6 +654,7 @@ class ProtocolDeviceRepository(
             stats.value = stats.value.copy(errors = stats.value.errors + 1)
             return
         }
+        if(msg is AckMsg && msg.cmd in 0x30..0x35 && msg.result==Proto.ACK_UNSUPPORTED)ota.unsupported()
         val s = stats.value
         stats.value = s.copy(packetsIn = s.packetsIn + 1, bytesIn = s.bytesIn + p.data.size)
         lastSeenMs.value = System.currentTimeMillis()
@@ -733,6 +750,7 @@ class ProtocolDeviceRepository(
     }
 
     private fun onInfo(m: InfoMsg) {
+        if(!ota.busy && foreground)ota.check()
         val firstInfo = syncAfterInfo
         lastInfo = m
         if(supportsGpsPolicy2())phonePosition?.invoke()?.let{sendPhoneEvidence(it)}

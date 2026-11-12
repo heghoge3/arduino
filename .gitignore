@@ -15,3 +15,11 @@ captures/
 *.p12
 keystore.properties
 signing.properties
+
+# Python tool caches
+__pycache__/
+*.pyc
+
+# Private OTA signing material
+*-signing-key.pem
+*-signing-backup*.zip

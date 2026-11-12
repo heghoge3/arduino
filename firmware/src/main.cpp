@@ -22,6 +22,7 @@
 #include "pins.h"
 #include "power.h"
 #include "power_off.h"
+#include "ota.h"
 #include "power_profile.h"
 #include "proto.h"
 #include "radio.h"
@@ -792,8 +793,21 @@ void pumpSync() {
 // Команды телефона
 // ---------------------------------------------------------------------------
 
+ota::Conditions otaConditions(){
+ bool syncing=g_sync.active;for(const auto& job:g_syncWait)syncing|=job.active;
+ ota::Conditions c;c.idle=(H.phase==hike::IDLE||H.phase==hike::ENDED)&&!P.recording&&!syncing;
+ c.storage=storage::sdOk()&&!g_sdError&&!P.campN;c.on=powergate::switchOn()&&!g_sliderOff.busy();
+ c.powerKnown=N.pwr.batteryKnown()&&isfinite(N.pwr.voltage);c.voltage=N.pwr.voltage;c.percent=N.pwr.pct;return c;
+}
+
 void handleCommand(const uint8_t* data, size_t len) {
   radio::touch();
+  if(!powergate::sliderProfile()||powergate::switchOn()){
+    if(ota::handle(data,len,otaConditions()))return;
+  }
+  if(ota::exclusive() && proto::commandCode(data,len)!=proto::CMD_SESSION && proto::commandCode(data,len)!=proto::CMD_GET_INFO){
+    uint8_t b[8];sendPacketEvent(b,proto::encodeAck(proto::commandCode(data,len),proto::ACK_BUSY,b,sizeof(b)));return;
+  }
   proto::Command c;
   uint8_t res = proto::decodeCommand(data, len, c);
   uint8_t code = proto::commandCode(data, len);
@@ -957,7 +971,9 @@ void handleCommand(const uint8_t* data, size_t len) {
     case proto::CMD_GET_INFO:
       break;  // ответ после ACK
     case proto::CMD_SESSION:
-      radio::setLive(c.flag);
+      // OTA requires fresh STATUS and a responsive link even if a queued SESSION
+      // was created before the update began.
+      radio::setLive(ota::exclusive() || c.flag);
       break;
     case proto::CMD_BYE:
       break;  // рвём после ACK
@@ -1344,6 +1360,7 @@ void secondTick() {
 // ---------------------------------------------------------------------------
 
 bool canSleep(uint32_t ms) {
+  if(ota::exclusive())return false;
   // The bench has no switch GPIO and cannot wake on a virtual OFF.
   if(powergate::sliderProfile() && (g_sliderOff.busy() || !powergate::sliderWakeMask()))return false;
 #ifdef FAKE_SENSORS
@@ -1444,6 +1461,8 @@ void console() {
     }
     // Кто-то сидит в мониторе порта — 10 мин не уходим в глубокий сон (иначе USB пропадёт)
     if ((int32_t)(millis() + 600000 - g_awakeUntil) > 0) g_awakeUntil = millis() + 600000;
+    if(!strcmp(line,"ota provision")){Serial.println(ota::provision()?"V2 OTA commissioned":"OTA commissioning refused");continue;}
+    if(ota::exclusive()){Serial.println("OTA busy");continue;}
     if (!strcmp(line, "help")) {
       Serial.println("st — состояние; i2c — сканер шины; gps on|off|auto|echo — GPS; gpsdiag on|off — запись диагностического trace; pcas <тело> — команда модулю;"
                      " win — окно BLE; info — чип и SD; log — сбросить журнал на SD; debug on|off — подробный журнал");
@@ -1553,7 +1572,7 @@ void console() {
 }
 
 struct SliderSaveActions {
-  bool abortInactive(){return false;} // No OTA receiver yet; never pretend it aborted flash.
+  bool abortInactive(){return ota::abortForOff();}
   bool saveData(){
     N.now=clockx::now();
     if(H.phase==hike::ACTIVE)logPoint(); // Also retain steps added within the last logged second.
@@ -1603,8 +1622,8 @@ bool serviceSliderOff(uint32_t ms){
   }
   if(g_sliderOff.state()==poweroff::State::Requested){
     SliderSaveActions actions;
-    // No flash transfer exists in this version. Future OTA must supply real phase/busy/abort.
-    const bool release=g_sliderOff.save(poweroff::OtaPhase::None,false,actions);
+    // Flash writes are synchronous on this task: OFF is handled after a write returns.
+    const bool release=g_sliderOff.save(ota::offPhase(),false,actions);
     if(release){
       gps::power(false);N.gpsOn=false;
       ui::splash("OFF: данные сохранены");Serial.flush();
@@ -1693,6 +1712,7 @@ void logBoot(Preferences& prefs) {
 }
 
 void setup() {
+  ota::earlyBoot();
   powergate::begin();
   if(powergate::sliderProfile())g_sliderOff.begin(powergate::switchOn(),millis());
   setCpuFrequencyMhz(80);  // BLE и датчикам хватает, ток меньше
@@ -1787,6 +1807,7 @@ void setup() {
   }
   readEnvAndPower();
   if(cold && N.pwr.ok && isfinite(N.pwr.currentMa) && N.pwr.currentMa>1) P.avgMa=N.pwr.currentMa;
+  ota::begin();
   g_lastSecondMs = millis() - 1000;  // первый тик — сразу, не ждать секунду
 }
 
@@ -1802,7 +1823,12 @@ void loop() {
   }
   prevLoop = ms;
 
-  handleButton(ui::poll());
+  if(ota::exclusive() && ms-g_lastEnvMs>=1000){
+    g_lastEnvMs=ms;N.now=clockx::now();readEnvAndPower();
+    if(radio::live()){auto status=makeStatus();uint8_t bytes[128];radio::sendStatus(bytes,proto::encodeStatus(status,bytes,sizeof(bytes)));}
+  }
+  ota::poll(otaConditions(),hike::valid(H)&&powergate::available());
+  if(!ota::exclusive())handleButton(ui::poll());
 
   // Акселерометр 25 Гц — шаги
   if (ms - g_lastAccelMs >= 40) {
@@ -1826,17 +1852,17 @@ void loop() {
     else if (sensors::presence().mpu) dlog::counters().accelFail++;
   }
 
-  gps::poll();
+  if(!ota::exclusive())gps::poll();
 
   if (ms - g_lastSecondMs >= 1000) {
     g_lastSecondMs = ms;
-    secondTick();
+    if(!ota::exclusive())secondTick();
   }
 
   uint8_t cmd[247];
   size_t len;
   while (radio::popCommand(cmd, len)) handleCommand(cmd, len);
-  pumpSync();
+  if(!ota::exclusive())pumpSync();
   radio::poll();
   console();
 

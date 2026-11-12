@@ -89,6 +89,7 @@ class VirtualTransport(
         delay(30) // задержка радио
         if(state.value!=LinkState.CONNECTED || !device.powered.value)return false
         val code = Codec.cmdCode(data)
+        if(code in 0x30..0x35){emit(Channel.EVENT,AckMsg(code,Proto.ACK_UNSUPPORTED));return true}
         val cmd = try {
             Codec.decodeCmd(data)
         } catch (e: ProtocolException) {

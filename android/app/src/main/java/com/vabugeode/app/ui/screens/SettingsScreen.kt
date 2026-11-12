@@ -93,6 +93,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     ) {
         Spacer(Modifier.height(4.dp))
         val source by vm.link.source.collectAsStateWithLifecycle()
+        if(source==Source.GADGET)OtaPanel(vm)
         Panel {
             SectionLabel("Источник данных")
             Spacer(Modifier.height(8.dp))

@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "firmware/**"
+      - "android/app/src/main/assets/firmware/**"
       - "docs/protocol_vectors.json"
       - ".github/workflows/firmware.yml"
   workflow_dispatch:
@@ -23,7 +24,7 @@ jobs:
         with:
           path: ~/.platformio
           key: pio-${{ hashFiles('firmware/platformio.ini') }}
-      - run: pip install platformio
+      - run: pip install platformio cryptography
       # Historical test_host/clock_test.cpp emulates removed DS1302 GPIOs.
       # Current DS3231 calendar checks run in the native test_v2 suite below.
       - name: Регрессии энергосбережения без платы
@@ -36,7 +37,11 @@ jobs:
       - name: Проверки GPIO3 и защиты профилей
         run: python3 tools/check_power_profiles.py
       - name: Основной профиль GPIO3, fake и USB-стенд
-        run: pio run -e s3 -e s3_fake -e s3_slider_bench
+        run: pio run -e s3 -e s3_ota_bootstrap -e s3_fake -e s3_slider_bench
+      - name: Подпись и совместимость образа в APK (только публичный ключ)
+        run: |
+          python3 tools/verify_ota_bundle.py
+          python3 -m unittest discover -s tools -p test_ota_tools.py -v
       - name: Сборка GPIO3 — аппаратная проверка не выполнена
         uses: actions/upload-artifact@v4
         with:

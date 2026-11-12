@@ -542,3 +542,86 @@ Android увеличивает ageMs на ожидание в очереди; п
 Нужна согласованная пара версий: старый клиент не понимает политику и может продолжить
 собственную географическую фильтрацию. Новое приложение предупреждает о старой прошивке.
 Правила, ограничения и испытания: [gps-policy-v2.md](gps-policy-v2.md).
+
+## BLE OTA V2 wire1
+
+Реализовано в ESP32 0.1.30 и Android 0.10.7; первая USB-база 0.1.29.
+Основной BLE wire остаётся **2**. Шифрованные существующие Command/Event, MTU≥247.
+[Условия допуска, питание и приёмка](ble-ota-v2.md). Ниже действующий контракт,
+не старое предложение. Все многобайтные числа LE; ECDSA r/s — unsigned big endian.
+
+Команды: `[2, code:u8, request/operation:u32, body...]`.
+QUERY 0x30 использует отдельный request, остальные — ID операции. Нулевой BEGIN запрещён.
+
+| Code | Body | Ответ/действие |
+|---|---|---|
+| 0x30 QUERY | пусто | OTA STATUS; факты текущего boot, без начала записи |
+| 0x31 BEGIN | manifest 136 байт | ACK offset=0 после допуска/начала неактивного слота; точный повтор идемпотентен |
+| 0x32 DATA | offset:u32, CRC32:u32, 1..224 байта | STATUS offset после flash write; повтор последнего chunk сверяется с flash |
+| 0x33 FINISH | пусто | Проверки/hash/подпись/NVS intent, затем выбор слота; повтор SELECTED операции OK |
+| 0x34 ABORT | пусто | Только до SELECTED; старая база не меняется |
+| 0x35 REBOOT | пусто | Только SELECTED+ON; ответ, 500 мс, reset |
+
+Ответ всегда 143 байта: byte0=2, byte1=0x30. request в ответе отражает поле запроса;
+operation — ID фактической операции. Это отдельный статус, не обычный ACK/STATUS.
+Старый приёмник возвращает обычный ACK_UNSUPPORTED: Android предлагает USB-подготовку.
+CRC32: IEEE polynomial 0xEDB88320, initial/final xor 0xFFFFFFFF, только payload DATA.
+Максимальная команда DATA=238 байт. Клиент: stop-and-wait, 5 с, 3 попытки; прибор:
+тайм-аут приёма 30 с и abort при потере защищённого соединения. После обрыва — с нуля.
+
+| Offset | Поле | Размер |
+|---:|---|---:|
+| 0 | wire=2, type=0x30 | 2 |
+| 2 | request | 4 |
+| 6 | operation | 4 |
+| 10 | phase: IDLE0, RECEIVING1, SELECTED2, TRIAL3, VALID4, FAILED5 | 1 |
+| 11 | result: OK0, BAD1, BUSY2, SIGNATURE3, COMPAT4, IO5, POWER6, SESSION7, OFFSET8, HASH9, TIMEOUT10, CANCELLED11 | 1 |
+| 12 | flags:u16: supported1, commissioned2, eligible4, batteryKnown8, ON16, confirmedHealthy32 | 2 |
+| 14 | product metadata | 24 |
+| 38 | slot size | 4 |
+| 42 | фактическая flash size, байт | 4 |
+| 46 | next expected offset | 4 |
+| 50 | точный размер работающего app.bin | 4 |
+| 54 | SHA-256 работающего app.bin | 32 |
+| 86 | SHA-256 сохранённой целевой операции, иначе нули | 32 |
+| 118 | efuse MAC в uint64 LE (идентификатор прибора, не секрет) | 8 |
+| 126 | pinned public key ID | 8 |
+| 134 | начальный допуск напряжения, мВ (3800) | 2 |
+| 136 | измеренное напряжение, мВ; 0 если неизвестно | 2 |
+| 138 | target release | 4 |
+| 142 | SDK boot state (VALID=2); успех также требует confirmedHealthy | 1 |
+
+Product metadata 24: magic `VBMETA1\0`(8), model1/revision1/power1/wire2 (4),
+layout:u32=1, release:u32, version major/minor/patch (3), buildFlags (1).
+flags=0 production, 1 fake, 2 USB bench. Подписываются только production Slider GPIO3/HOLD7.
+Модель/ревизия — явно подтверждённый при USB программный профиль, не автодетект PCB.
+
+Manifest фиксирован 136 байт; подпись над первыми **72** байтами SHA256withECDSA P-256:
+
+| Offset | Поле | Размер |
+|---:|---|---:|
+| 0 | magic `VBO1` | 4 |
+| 4 | manifest format=1 | 1 |
+| 5 | model=1 | 1 |
+| 6 | wiring revision=1 | 1 |
+| 7 | power profile=1 Slider | 1 |
+| 8 | layout=1 | 4 |
+| 12 | min wire=2, max wire=2, OTA wire=1, flags=0 | 4 |
+| 16 | release=(major<<16)\|(minor<<8)\|patch | 4 |
+| 20 | major/minor/patch, reserved=0 | 4 |
+| 24 | exact app.bin size | 4 |
+| 28 | minimum receiver release (сейчас 0x11D = 0.1.29) | 4 |
+| 32 | SHA-256 всего app.bin | 32 |
+| 64 | первые 8 байт SHA-256 DER public key | 8 |
+| 72 | ECDSA r32+s32, big endian | 64 |
+
+Хеш включает checksum/padding и ESP SHA footer; приёмник отдельно вычисляет точную
+длину ESP image, не использует неоднозначный SDK image_len как длину файла.
+Подписанный файл ≤0x140000, версия строго больше running и NVS highest.
+Несовпадающие metadata/чип/размер/hash/подпись запрещают выбор нового раздела.
+Подпись APK не является подписью этого manifest. Ключ: [ota-signing.md](ota-signing.md).
+
+[ota-vectors.txt](ota-vectors.txt): четыре hex-строки — public DER, manifest,
+синтетический ESP image, OTA STATUS. Это публичный тестовый ключ/данные, **не ключ
+производственной подписи и не прошивка для прибора**. Эфемерный приватный тестовый ключ
+не сохранялся. Android проверяет настоящую ECDSA на этих векторах.
