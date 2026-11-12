@@ -14,7 +14,7 @@ def main():
         ("unassigned override", ["V2_POWER_SWITCH_PIN=-1"], "Slider GPIO is not assigned"),
         ("explicit GPIO3", ["V2_POWER_SWITCH_PIN=3", "EXPECT_SWITCH_PIN=3"], None),
     ]
-    for pin in (0, 7, 19, 20, 45):
+    for pin in (0, 7, 14, 19, 20, 45):
         cases.append((f"reserved/conflicting GPIO{pin}",
                       ["V2_POWER_PROFILE=1", f"V2_POWER_SWITCH_PIN={pin}"],
                       "Slider GPIO conflicts with a reserved, inaccessible or occupied pin"))
@@ -24,6 +24,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix="v2-power-profiles-") as directory:
         source = Path(directory) / "probe.cpp"
         source.write_text('#include "power_profile.h"\n'
+                          'static_assert(PIN_LCD_BACKLIGHT==14,"Unexpected backlight pad");\n'
+                          'static_assert(!v2ForbiddenPin(14),"Approved GPIO14 pad must be available");\n'
+                          'static_assert(v2ForbiddenPin(15),"Other bottom pads must stay blocked");\n'
                           '#ifdef EXPECT_SWITCH_PIN\n'
                           'static_assert(PIN_POWER_SWITCH==EXPECT_SWITCH_PIN,"Unexpected switch input");\n'
                           '#endif\nint main(){return int(POWER_PROFILE);}\n')

@@ -32,7 +32,7 @@ constexpr bool sliderPinAllowed(int p) {
     p!=PIN_SDA && p!=PIN_SCL && p!=PIN_GPS_RX && p!=PIN_GPS_TX && p!=PIN_GPS_EN &&
     p!=PIN_SD_CS && p!=PIN_SD_MOSI && p!=PIN_SD_SCK && p!=PIN_SD_MISO &&
     p!=PIN_BTN_A && p!=PIN_BTN_B && p!=PIN_MPU_INT && p!=PIN_BUZZER &&
-    p!=PIN_POWER_HOLD && p!=PIN_RGB;
+    p!=PIN_POWER_HOLD && p!=PIN_RGB && p!=PIN_LCD_BACKLIGHT;
 }
 static_assert(!POWER_SLIDER || POWER_SLIDER_BENCH || sliderPinAllowed(PIN_POWER_SWITCH),
               "Slider GPIO conflicts with a reserved, inaccessible or occupied pin");
