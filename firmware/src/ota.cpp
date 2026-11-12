@@ -1,4 +1,5 @@
 #include "ota.h"
+#include "backlight.h"
 #include "ota_transfer.h"
 #include "../ota/public-key.h"
 #include "config.h"
@@ -140,7 +141,7 @@ void earlyBoot(){
  if(trial){
   const bool timer=esp_task_wdt_init(30,true)==ESP_OK;
   wdtAdded=timer&&(esp_task_wdt_add(nullptr)==ESP_OK||esp_task_wdt_status(nullptr)==ESP_OK);
-  if(!wdtAdded){bootFault=true;esp_ota_mark_app_invalid_rollback_and_reboot();}
+  if(!wdtAdded){bootFault=true;backlight::sleep();esp_ota_mark_app_invalid_rollback_and_reboot();}
  }
 }
 void begin(){
@@ -169,7 +170,7 @@ void poll(const Conditions& c,bool healthy){
  conditions=c;
  if(!healthyBoot){
   if(trial&&wdtAdded)esp_task_wdt_reset();
-  if(uint32_t(millis()-bootAt)>30000){if(trial)esp_ota_mark_app_invalid_rollback_and_reboot();bootFault=true;}
+  if(uint32_t(millis()-bootAt)>30000){if(trial){backlight::sleep();esp_ota_mark_app_invalid_rollback_and_reboot();}bootFault=true;}
   else if(uint32_t(millis()-bootAt)>=3000&&healthy&&c.on&&layout&&production()&&!bootFault){
    uint32_t marker=0x56424f31;bool nvsOk=prefs.putUInt("health",marker)==4&&prefs.getUInt("health",0)==marker;
    if(nvsOk&&esp_ota_mark_app_valid_cancel_rollback()==ESP_OK){
@@ -182,7 +183,7 @@ void poll(const Conditions& c,bool healthy){
   }
  }
  transfer.tick(millis(),radio::secured(),flash);
- if(rebootAt&&c.on&&int32_t(millis()-rebootAt)>=0)ESP.restart();
+ if(rebootAt&&c.on&&int32_t(millis()-rebootAt)>=0){backlight::sleep();ESP.restart();}
 }
 bool handle(const uint8_t* p,size_t n,const Conditions& c){
  if(n<2||p[1]<QUERY||p[1]>REBOOT)return false;

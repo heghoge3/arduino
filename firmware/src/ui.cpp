@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include "app.h"
+#include "backlight.h"
 #include "clock.h"
 #include "config.h"
 #include "pins.h"
@@ -222,15 +223,16 @@ void begin(bool coldBoot, int wakePin) {
   (void)coldBoot;
 }
 
-Button poll() {
+Button poll(bool actionsBlocked) {
   tickPattern();
   if (g_menuRevision!=H.revision) {
     g_hikeMenu.reset(); g_shutdown=false; g_menuRevision=H.revision; g_hikeError=false;
   }
   const Button event = g_controls.poll(digitalRead(PIN_BTN_A) == LOW,
-                                       digitalRead(PIN_BTN_B) == LOW, millis());
+                                       digitalRead(PIN_BTN_B) == LOW, millis(), actionsBlocked);
   if (g_screenOn != g_controls.active()) {
     g_screenOn = g_controls.active();
+    if (!g_screenOn) backlight::set(false);
     if (g_displayOk) oled.setPowerSave(g_screenOn ? 0 : 1);
     g_hikeMenu.reset(); g_shutdown=false; g_hikeError=false;
     if (g_screenOn) { g_page = H.phase==hike::ACTIVE ? 0 : 4; draw(); }
@@ -321,6 +323,7 @@ void draw() {
     default: drawHike(); break;
   }
   oled.sendBuffer();
+  backlight::set(true); // Light only after the initialized LCD has a frame.
 }
 
 void splash(const char* line2) {
@@ -334,9 +337,11 @@ void splash(const char* line2) {
   oled.sendBuffer();
   g_screenOn = true;
   g_controls.show(millis());
+  backlight::set(true);
 }
 
 void sleep() {
+  backlight::sleep(); // LOW first, before LCD power-save / HOLD release.
   buzzer(false);
   led(0, 0, 0);
   g_pattern = nullptr;

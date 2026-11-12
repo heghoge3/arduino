@@ -31,9 +31,17 @@ class Controls {
   bool active() const { return active_; }
   bool held() const { return a_.raw || b_.raw || a_.down || b_.down || suppress_; }
 
-  Button poll(bool a, bool b, uint32_t now) {
+  Button poll(bool a, bool b, uint32_t now, bool actionsBlocked = false) {
     const Button ea = update(a_, a, now, Button::A_SHORT, Button::A_LONG);
     const Button eb = update(b_, b, now, Button::B_SHORT, Button::B_LONG);
+    // OTA / shutdown error: wake is allowed, commands are not. Consume the whole
+    // gesture even if exclusive mode ends before the buttons are released.
+    if (actionsBlocked && (a_.raw || b_.raw || a_.down || b_.down ||
+                           ea != Button::NONE || eb != Button::NONE)) {
+      if (display_ && (a_.down || b_.down)) show(now);
+      suppress_ = true;
+      releasing_ = false;
+    }
     if (suppress_) {
       if (a || b) releasing_ = false;
       else if (!releasing_) { releasing_ = true; releasedAt_ = now; }

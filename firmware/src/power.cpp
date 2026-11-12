@@ -85,11 +85,12 @@ bool releaseSliderHold(){
  return true;
 }
 [[noreturn]] void cut(){
+ ui::sleep();
  if(available()){
    rtc_gpio_hold_dis((gpio_num_t)PIN_POWER_HOLD);level(false);
  }
  // USB/backfeed may keep ESP alive. Never restart a hike or call this deep sleep.
  delay(500);ui::splash("Питание не снято");
- for(;;)delay(1000);
+ for(;;){ui::poll(true);delay(5);}
 }
 }

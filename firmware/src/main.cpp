@@ -12,6 +12,7 @@
 #include <math.h>
 
 #include "app.h"
+#include "backlight.h"
 #include "blacklist_defaults.h"
 #include "clock.h"
 #include "config.h"
@@ -1626,7 +1627,7 @@ bool serviceSliderOff(uint32_t ms){
     const bool release=g_sliderOff.save(ota::offPhase(),false,actions);
     if(release){
       gps::power(false);N.gpsOn=false;
-      ui::splash("OFF: данные сохранены");Serial.flush();
+      ui::sleep();Serial.flush();
       g_sliderHoldReleased=powergate::releaseSliderHold();
     }else if(g_sliderOff.state()==poweroff::State::Failed){
       P.recording=false;
@@ -1636,6 +1637,11 @@ bool serviceSliderOff(uint32_t ms){
   }
   if(g_sliderOff.state()==poweroff::State::Released && !on && !g_sliderHoldReleased)
     g_sliderHoldReleased=powergate::releaseSliderHold();
+  if(g_sliderOff.state()==poweroff::State::Failed){
+    const bool visible=ui::screenActive();
+    ui::poll(true); // Keep the 15 s timer and wake; no hike/menu commands in OFF.
+    if(!visible&&ui::screenActive())ui::splash("Ошибка сохранения");
+  }
   // USB/backfeed can leave the CPU on after releasing HOLD. Never continue recording.
   console();delay(5);return true;
 }
@@ -1712,6 +1718,7 @@ void logBoot(Preferences& prefs) {
 }
 
 void setup() {
+  const bool backlightOk=backlight::begin(); // Before OTA rollback and peripheral init.
   ota::earlyBoot();
   powergate::begin();
   if(powergate::sliderProfile())g_sliderOff.begin(powergate::switchOn(),millis());
@@ -1719,6 +1726,7 @@ void setup() {
   Serial.begin(115200);
   g_bootMs = millis();
   dlog::begin();
+  if(!backlightOk)LOGW(M_PWR,"LCD backlight GPIO init failed; control disabled");
   if(POWER_SLIDER_BENCH)LOGW(M_PWR,"SLIDER_BENCH: USB only, virtual switch; no physical GPIO or OTA receiver");
 
   esp_sleep_wakeup_cause_t wake = esp_sleep_get_wakeup_cause();
@@ -1828,7 +1836,9 @@ void loop() {
     if(radio::live()){auto status=makeStatus();uint8_t bytes[128];radio::sendStatus(bytes,proto::encodeStatus(status,bytes,sizeof(bytes)));}
   }
   ota::poll(otaConditions(),hike::valid(H)&&powergate::available());
-  if(!ota::exclusive())handleButton(ui::poll());
+  const bool actionsBlocked=ota::exclusive();
+  const auto button=ui::poll(actionsBlocked);
+  if(!actionsBlocked)handleButton(button);
 
   // Акселерометр 25 Гц — шаги
   if (ms - g_lastAccelMs >= 40) {

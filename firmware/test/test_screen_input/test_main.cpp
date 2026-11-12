@@ -85,6 +85,39 @@ void headless_controls_keep_actions() {
   TEST_ASSERT_EQUAL(Button::B_SHORT, c.poll(false, false, 4030));
 }
 
+void ota_does_not_freeze_timeout_or_queue_button_actions() {
+  Controls c(15000, 30, 1500);
+  c.begin(0, true); c.show(0);
+  c.poll(false, false, 15000, true);
+  TEST_ASSERT_FALSE(c.active());
+  c.poll(true, false, 15100, true);
+  TEST_ASSERT_EQUAL(Button::NONE, c.poll(true, false, 15130, true));
+  TEST_ASSERT_TRUE(c.active());
+  TEST_ASSERT_EQUAL(Button::NONE, c.poll(true, false, 18000, true));
+  // OTA ends with A still held. Its release must not start/end a hike.
+  TEST_ASSERT_EQUAL(Button::NONE, c.poll(true, false, 18010));
+  c.poll(false, false, 18100);
+  TEST_ASSERT_EQUAL(Button::NONE, c.poll(false, false, 18130));
+  TEST_ASSERT_EQUAL(Button::NONE, c.poll(false, false, 18160));
+  c.poll(false, false, 33160);
+  TEST_ASSERT_FALSE(c.active());
+}
+
+void blocked_short_gesture_is_consumed_even_without_display() {
+  for (bool display : {false, true}) {
+    Controls c(15000, 30, 1500);
+    c.begin(0, display); c.show(0);
+    c.poll(false, true, 100, true);
+    TEST_ASSERT_EQUAL(Button::NONE, c.poll(false, true, 130, true));
+    c.poll(false, false, 200); // OTA ends before release is debounced.
+    TEST_ASSERT_EQUAL(Button::NONE, c.poll(false, false, 230));
+    TEST_ASSERT_EQUAL(Button::NONE, c.poll(false, false, 260));
+    c.poll(false, true, 300); c.poll(false, true, 330);
+    c.poll(false, false, 400);
+    TEST_ASSERT_EQUAL(Button::B_SHORT, c.poll(false, false, 430));
+  }
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(either_button_wakes_without_action);
@@ -92,5 +125,7 @@ int main(int, char**) {
   RUN_TEST(deep_sleep_wake_and_both_buttons_are_consumed);
   RUN_TEST(bounce_and_long_press_on_visible_screen);
   RUN_TEST(headless_controls_keep_actions);
+  RUN_TEST(ota_does_not_freeze_timeout_or_queue_button_actions);
+  RUN_TEST(blocked_short_gesture_is_consumed_even_without_display);
   return UNITY_END();
 }

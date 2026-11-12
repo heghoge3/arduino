@@ -21,7 +21,7 @@ enum class Sound : uint8_t {
 // wakePin — кнопка, разбудившая из сна: при наличии экрана только включает его.
 void begin(bool coldBoot, int wakePin = -1);
 // Опрос кнопок (с антидребезгом). Вызывать каждую итерацию
-Button poll();
+Button poll(bool actionsBlocked = false);
 Button hikeButton(Button event);
 void hikeResult(bool ok);
 bool anyHeld();
