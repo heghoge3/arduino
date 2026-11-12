@@ -1,6 +1,6 @@
 # Подсветка через AO3401 — прошивка 0.1.32 / APK 0.10.9
 
-12.11.2026. Владелец выбрал AO3401 по принципу GPS; исходная база `de02b7c`.
+12.11.2026. Владелец выбрал AO3401 по принципу GPS; исходная база `de02b7c`; [commit реализации](https://github.com/heghoge3/arduino/commit/94a360b50aae16c12ce473dac7d725c1c50edd91).
 Предыдущая [0.1.31](lcd-backlight.md) с HIGH=ON — история, её бинарники не подходят
 новому ключу. [Единственная схема/контакты/макетный BOM](../../hardware-v2/electrical-baseline.md#lcd-backlight).
 
@@ -57,3 +57,21 @@ AO3401, RPU10к G→S, RG330Ω GPIO14→G — макетный состав по
 ON/reset/OTA, свет после фактического rollback обоих образов, NVS/bonds/файлы до/после.
 Программные тесты не подтверждают работу ключа, EN, автономность или аппаратный откат.
 Детали не обмерены, PCB/CAD/покупки не запускались; установка файлов не подтверждена.
+
+## Передача и публикация
+
+Новый USB-комплект: 983451 байт, SHA-256
+`fa52c047e0f4ae4193be5950813e1513ee3ba11fb5f84489f4f3264f46dc98aa`.
+ZIP CRC, внутренние SHA256SUMS, состав и отсутствие приватных ключей проверены.
+Архив повторно скачан с публичной raw-ссылки и побайтно совпал с локальным.
+[Скачивание и состояние установки](../../STATUS.md).
+
+[APK 0.10.9](https://raw.githubusercontent.com/heghoge3/arduino/refs/heads/artifacts/android-v0.10.9/vabugeode-0.10.9.apk):
+36523877 байт, SHA-256 `963fa629ffc94064d07c1073bcc89445dd78bda8495638cf72cf1fd40f7ff4d7`.
+Сертификат совпал с закреплённым, app/manifest/public.der внутри APK побайтно совпали
+с проверенным подписанным bundle. Package/versionCode32/ABI проверены.
+APK повторно скачан по публичной raw-ссылке, SHA-256 совпал. Установка не выполнялась.
+
+GitHub CI: [Android APK](https://github.com/heghoge3/arduino/actions/runs/43277474515)
+успешно завершён для commit реализации.
+[Firmware CI](https://github.com/heghoge3/arduino/actions/runs/43277474448) также завершён успешно.
