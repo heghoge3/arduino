@@ -6,7 +6,23 @@
 #include "config.h"
 #include "ui.h"
 #include "power_gesture.h"
+#include "power_profile.h"
 namespace powergate {
+namespace { bool g_benchOn=true; }
+bool sliderProfile(){return POWER_SLIDER;}
+bool switchOn(){
+ if(!POWER_SLIDER)return true;
+ if(POWER_SLIDER_BENCH)return g_benchOn;
+ return digitalRead(PIN_POWER_SWITCH)!=LOW;
+}
+bool benchSwitch(bool on){
+ if(!POWER_SLIDER_BENCH)return false;
+ g_benchOn=on;return true;
+}
+uint64_t sliderWakeMask(){
+ return POWER_SLIDER&&!POWER_SLIDER_BENCH&&sliderPinAllowed(PIN_POWER_SWITCH)
+   ?uint64_t(1)<<(unsigned(PIN_POWER_SWITCH)&63):0;
+}
 bool available(){return PIN_POWER_HOLD==7 &&
  rtc_gpio_is_valid_gpio((gpio_num_t)PIN_POWER_HOLD) && PIN_POWER_HOLD!=PIN_BTN_A &&
  PIN_POWER_HOLD!=PIN_BTN_B && PIN_POWER_HOLD!=PIN_MPU_INT && PIN_POWER_HOLD!=PIN_SDA &&
@@ -18,8 +34,17 @@ void level(bool high){
  rtc_gpio_set_direction((gpio_num_t)PIN_POWER_HOLD,RTC_GPIO_MODE_OUTPUT_ONLY);
  rtc_gpio_set_level((gpio_num_t)PIN_POWER_HOLD,high?1:0);
 }
+void restoreSliderHold(){if(POWER_SLIDER&&available())level(true);}
 void begin(){
  if(!available())return;
+ if(POWER_SLIDER){
+   level(true);rtc_gpio_hold_dis((gpio_num_t)PIN_POWER_HOLD);
+   if(!POWER_SLIDER_BENCH){
+     rtc_gpio_deinit((gpio_num_t)PIN_POWER_SWITCH);
+     pinMode(PIN_POWER_SWITCH,INPUT_PULLUP);
+   }
+   return; // ON is supplied independently by the switch; no A+B gesture on boot/reset.
+ }
  if(esp_sleep_get_wakeup_cause()!=ESP_SLEEP_WAKEUP_UNDEFINED){
    // Restore output before releasing the retained level.
    level(true);rtc_gpio_hold_dis((gpio_num_t)PIN_POWER_HOLD);return;
@@ -51,6 +76,13 @@ bool retainForSleep(){
  if(!available())return true; // USB bench configuration, no power gate
  return rtc_gpio_set_level((gpio_num_t)PIN_POWER_HOLD,1)==ESP_OK &&
         rtc_gpio_hold_en((gpio_num_t)PIN_POWER_HOLD)==ESP_OK;
+}
+bool releaseSliderHold(){
+ if(!POWER_SLIDER || !available())return false;
+ // Recheck raw ON immediately before cutting; the first switch pole is independent.
+ if(switchOn())return false;
+ rtc_gpio_hold_dis((gpio_num_t)PIN_POWER_HOLD);level(false);
+ return true;
 }
 [[noreturn]] void cut(){
  if(available()){

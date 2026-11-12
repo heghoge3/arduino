@@ -147,6 +147,23 @@ void log(uint8_t level, uint8_t module, const char* fmt, ...) {
 
 uint32_t pending() { return g_ring.pending(); }
 
+bool flushForShutdown() {
+  flush();
+  if(!g_attached || !storage::sdOk())return false;
+  portENTER_CRITICAL(&g_mux);
+  const bool drained=g_ring.pending()==0;
+  const uint32_t expected=g_ring.flushed?g_ring.recs[(g_ring.flushed-1)%logbuf::RING_N].seq:logbuf::NO_SEQ;
+  portEXIT_CRITICAL(&g_mux);
+  if(!drained)return false;
+  File f=SD.open(LOG_BIN,FILE_READ);
+  const bool sizeOk=(f && uint64_t(f.size())==uint64_t(g_nAll)*REC) ||
+    (!g_nAll && !SD.exists(LOG_BIN)); // flush() may have just rotated all.bin to old.bin.
+  f.close();
+  if(!sizeOk)return false;
+  if(expected==logbuf::NO_SEQ)return true;
+  return g_nOld+g_nAll && seqAt(g_nOld+g_nAll-1)==expected && pending()==0;
+}
+
 bool urgent() { return g_errPending || g_ring.pending() >= logbuf::RING_N / 2; }
 
 void flush() {

@@ -246,7 +246,7 @@ Button hikeButton(Button e) {
   }
   if (g_page!=4 || !g_displayOk || !g_screenOn) return e;
   const auto phase=static_cast<hike::Phase>(H.phase);
-  g_hikeMenu.powerAvailable=powergate::available()&&phase!=hike::ERROR;
+  g_hikeMenu.powerAvailable=powergate::available()&&!powergate::sliderProfile()&&phase!=hike::ERROR;
   if(g_shutdown){
     if(e==Button::A_LONG)g_shutdown=false;
     if(e==Button::A_SHORT)g_finishOnShutdown=!g_finishOnShutdown;

@@ -121,6 +121,26 @@ bool prepareHike(uint32_t id) {
   return true;
 }
 
+bool verifyClosedCheckpoint() {
+  if(!g_sd)return false;
+  if(!g_hike)return true;
+  auto verify=[](const char* path,uint32_t count,size_t width,const uint8_t* latest) {
+    if(!SD.exists(path))return count==0;
+    File f=SD.open(path,FILE_READ);
+    bool ok=f && uint64_t(f.size())==uint64_t(count)*width;
+    uint8_t bytes[MARK_REC];
+    if(ok && count && latest)ok=f.seek((count-1)*width) &&
+      f.read(bytes,width)==int(width) && !memcmp(bytes,latest,width);
+    f.close();return ok;
+  };
+  const uint8_t* point=g_ramPoints&&g_ramPointCount
+    ?g_ramPoints+((g_ramPointCount-1)%RAM_POINTS)*proto::POINT_SIZE:nullptr;
+  const uint8_t* mark=g_ramMarks&&g_ramMarkCount
+    ?g_ramMarks+((g_ramMarkCount-1)%RAM_MARKS)*MARK_REC:nullptr;
+  return verify(g_trackBin,g_sdPointCount,proto::POINT_SIZE,point) &&
+    verify(g_markBin,g_sdMarkCount,MARK_REC,mark) && SD.exists(g_trackCsv) && SD.exists(g_markCsv);
+}
+
 bool readCompletion(uint32_t id,void* data,size_t size) {
   if (!g_sd || !id) return false;
   char path[48]; snprintf(path,sizeof(path),"/tracks/%lu.end",(unsigned long)id);

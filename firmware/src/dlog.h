@@ -22,6 +22,7 @@ void log(uint8_t level, uint8_t module, const char* fmt, ...) __attribute__((for
 
 // Сбросить накопленное на SD. Вызывается из основного цикла
 void flush();
+bool flushForShutdown(); // Closed binary log readback, plus no pending records.
 uint32_t pending();
 // Пора сбрасывать: есть ошибка или буфер заполнился наполовину
 bool urgent();

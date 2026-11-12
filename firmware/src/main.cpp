@@ -21,6 +21,8 @@
 #include "nmea.h"
 #include "pins.h"
 #include "power.h"
+#include "power_off.h"
+#include "power_profile.h"
 #include "proto.h"
 #include "radio.h"
 #include "sensors.h"
@@ -56,6 +58,9 @@ RTC_DATA_ATTR bool g_hikeUntrusted = false;  // поход начат по не�
 bool g_fixAnnounced = false;
 uint32_t g_clientEpoch=0;
 bool g_clientSettings=false;
+poweroff::Slider g_sliderOff;
+bool g_sliderQuiesced=false;
+bool g_sliderHoldReleased=false;
 
 // Синхронизация: идёт порциями в цикле, чтобы не блокировать остальное
 struct SyncJob {
@@ -793,6 +798,10 @@ void handleCommand(const uint8_t* data, size_t len) {
   uint8_t res = proto::decodeCommand(data, len, c);
   uint8_t code = proto::commandCode(data, len);
   uint8_t b[64];
+  if(powergate::sliderProfile() && (!powergate::switchOn() || g_sliderOff.busy())){
+    sendPacketEvent(b,proto::encodeAck(code,proto::ACK_BUSY,b,sizeof(b)));
+    return;
+  }
   if (res != proto::ACK_OK) {
     LOGW(M_CMD, "команда 0x%02X отклонена: код %u, %u байт", code, res, (unsigned)len);
     sendPacketEvent(b, proto::encodeAck(code, res, b, sizeof(b)));
@@ -991,12 +1000,13 @@ void handleCommand(const uint8_t* data, size_t len) {
 // ---------------------------------------------------------------------------
 
 void handleButton(ui::Button e) {
+  if(powergate::sliderProfile() && (!powergate::switchOn() || g_sliderOff.busy()))return;
   e=ui::hikeButton(e);
   if (e != ui::Button::NONE) LOGD(M_UI, "кнопка %u", (unsigned)e);
   switch (e) {
     case ui::Button::POWER_FINISH:
     case ui::Button::POWER_OPEN: {
-      if(!powergate::available())break;
+      if(!powergate::available() || powergate::sliderProfile())break;
       if(e==ui::Button::POWER_FINISH && (H.phase==hike::ACTIVE||H.phase==hike::RECOVERY)){
         if(changeHike(hike::FINISH,H.id,H.revision,esp_random()|1u)!=proto::ACK_OK){ui::hikeResult(false);break;}
       }else{
@@ -1334,6 +1344,8 @@ void secondTick() {
 // ---------------------------------------------------------------------------
 
 bool canSleep(uint32_t ms) {
+  // The bench has no switch GPIO and cannot wake on a virtual OFF.
+  if(powergate::sliderProfile() && (g_sliderOff.busy() || !powergate::sliderWakeMask()))return false;
 #ifdef FAKE_SENSORS
   (void)ms;
   return false;  // плата на USB, записи в PSRAM — не спим
@@ -1348,6 +1360,7 @@ bool canSleep(uint32_t ms) {
 
 // forceS > 0 — уснуть ровно на столько (консольная команда sleep, проверка сна на голой плате)
 void goToSleep(int32_t forceS = 0) {
+  if(powergate::sliderProfile() && (g_sliderOff.busy() || !powergate::sliderWakeMask()))return;
   if(!powergate::retainForSleep()){
     LOGE(M_PWR,"HOLD не удержан: сон отменён");return;
   }
@@ -1379,7 +1392,12 @@ void goToSleep(int32_t forceS = 0) {
   rtc_gpio_pullup_en((gpio_num_t)PIN_BTN_B);
   rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_A);
   rtc_gpio_pulldown_dis((gpio_num_t)PIN_BTN_B);
-  esp_sleep_enable_ext1_wakeup((1ULL << PIN_BTN_A) | (1ULL << PIN_BTN_B), ESP_EXT1_WAKEUP_ANY_LOW);
+  const uint64_t sliderMask=powergate::sliderWakeMask();
+  if(sliderMask){
+    rtc_gpio_pullup_en((gpio_num_t)PIN_POWER_SWITCH);
+    rtc_gpio_pulldown_dis((gpio_num_t)PIN_POWER_SWITCH);
+  }
+  esp_sleep_enable_ext1_wakeup((1ULL << PIN_BTN_A) | (1ULL << PIN_BTN_B) | sliderMask, ESP_EXT1_WAKEUP_ANY_LOW);
 #ifndef FAKE_SENSORS  // в эмуляции MPU нет, вывод INT висит в воздухе — будил бы сразу
   if (sensors::presence().mpu) {
     gpio_num_t pin = (gpio_num_t)PIN_MPU_INT;
@@ -1414,6 +1432,16 @@ void console() {
     if (!n) continue;
     line[n] = 0;
     n = 0;
+    if(!strcmp(line,"slider on") || !strcmp(line,"slider off")){
+      bool accepted=powergate::benchSwitch(!strcmp(line,"slider on"));
+      Serial.println(accepted?"USB bench switch input updated":"Slider test input unavailable in this profile");
+      continue;
+    }
+    // No console START/sleep/settings while saving, failed, or logically OFF on USB.
+    if(powergate::sliderProfile() && (!powergate::switchOn() || g_sliderOff.busy())){
+      Serial.println("OFF pending: only slider on|off is allowed; saving failure keeps HOLD");
+      continue;
+    }
     // Кто-то сидит в мониторе порта — 10 мин не уходим в глубокий сон (иначе USB пропадёт)
     if ((int32_t)(millis() + 600000 - g_awakeUntil) > 0) g_awakeUntil = millis() + 600000;
     if (!strcmp(line, "help")) {
@@ -1524,6 +1552,75 @@ void console() {
   }
 }
 
+struct SliderSaveActions {
+  bool abortInactive(){return false;} // No OTA receiver yet; never pretend it aborted flash.
+  bool saveData(){
+    N.now=clockx::now();
+    if(H.phase==hike::ACTIVE)logPoint(); // Also retain steps added within the last logged second.
+    P.recording=false;
+    gps::power(false);N.gpsOn=false;N.fix=false;N.src=0;
+    N.recovering=false;N.spoof=false;N.speedKmh=0;N.altValid=false;
+    flushCamp();
+    ensureStorage();
+    return !g_sdError && !P.campN && storage::verifyClosedCheckpoint();
+  }
+  bool saveSession(){
+    hike::State saved;
+    if(!poweroff::sessionForOff(H,saved) || !saveLifecycle(saved))return false;
+    const uint32_t last=P.lastPointTime;
+    const EnergyCheckpoint energy{P.hikeStart,P.usedMah};
+    EnergyCheckpoint check{};
+    return g_prefs.putULong("last",last)==sizeof(last) &&
+      g_prefs.getULong("last",UINT32_MAX)==last &&
+      g_prefs.putBytes("energy",&energy,sizeof(energy))==sizeof(energy) &&
+      g_prefs.getBytes("energy",&check,sizeof(check))==sizeof(check) &&
+      !memcmp(&energy,&check,sizeof(energy)) &&
+      g_prefs.putBool("rec",false)==1 && !g_prefs.getBool("rec",true);
+  }
+  bool flushLogs(){return dlog::flushForShutdown();}
+};
+
+bool serviceSliderOff(uint32_t ms){
+  if(!powergate::sliderProfile())return false;
+  const bool on=powergate::switchOn();
+  if(on && g_sliderHoldReleased){powergate::restoreSliderHold();g_sliderHoldReleased=false;}
+  g_sliderOff.observe(on,ms);
+  if(!g_sliderOff.busy()){
+    if(g_sliderQuiesced){
+      // Saving already made an active hike RECOVERY; ON is not RESUME.
+      uint8_t bytes[247];size_t len;while(radio::popCommand(bytes,len)){}
+      g_sliderQuiesced=false;
+      ui::splash("ON: запись не начата");
+      radio::openWindow(makeBeacon(),false);
+    }
+    return false;
+  }
+  if(!g_sliderQuiesced){
+    g_sliderQuiesced=true;
+    g_sync.active=false;for(auto& job:g_syncWait)job.active=false;
+    radio::disconnect();radio::shutdown();
+    ui::splash("Сохранение перед OFF");
+  }
+  if(g_sliderOff.state()==poweroff::State::Requested){
+    SliderSaveActions actions;
+    // No flash transfer exists in this version. Future OTA must supply real phase/busy/abort.
+    const bool release=g_sliderOff.save(poweroff::OtaPhase::None,false,actions);
+    if(release){
+      gps::power(false);N.gpsOn=false;
+      ui::splash("OFF: данные сохранены");Serial.flush();
+      g_sliderHoldReleased=powergate::releaseSliderHold();
+    }else if(g_sliderOff.state()==poweroff::State::Failed){
+      P.recording=false;
+      ui::splash("Ошибка сохранения");
+      Serial.println("OFF failed: data not confirmed, HOLD remains HIGH; recording is stopped");
+    }
+  }
+  if(g_sliderOff.state()==poweroff::State::Released && !on && !g_sliderHoldReleased)
+    g_sliderHoldReleased=powergate::releaseSliderHold();
+  // USB/backfeed can leave the CPU on after releasing HOLD. Never continue recording.
+  console();delay(5);return true;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -1597,10 +1694,12 @@ void logBoot(Preferences& prefs) {
 
 void setup() {
   powergate::begin();
+  if(powergate::sliderProfile())g_sliderOff.begin(powergate::switchOn(),millis());
   setCpuFrequencyMhz(80);  // BLE и датчикам хватает, ток меньше
   Serial.begin(115200);
   g_bootMs = millis();
   dlog::begin();
+  if(POWER_SLIDER_BENCH)LOGW(M_PWR,"SLIDER_BENCH: USB only, virtual switch; no physical GPIO or OTA receiver");
 
   esp_sleep_wakeup_cause_t wake = esp_sleep_get_wakeup_cause();
   bool cold = wake == ESP_SLEEP_WAKEUP_UNDEFINED;
@@ -1693,6 +1792,7 @@ void setup() {
 
 void loop() {
   uint32_t ms = millis();
+  if(serviceSliderOff(ms))return;
   // Долгие итерации цикла: SD, BLE или датчик подвисли
   static uint32_t prevLoop = 0;
   if (prevLoop) {

@@ -25,6 +25,8 @@ uint32_t freeMb();
 void openHike(uint32_t hikeStart);
 uint32_t hikeStart();
 bool prepareHike(uint32_t id);
+// Read back closed binary files after draining buffers. Does not prove SD power-loss durability.
+bool verifyClosedCheckpoint();
 bool readCompletion(uint32_t id, void* data, size_t size);
 bool saveCompletion(uint32_t id, const void* data, size_t size);
 // Удаление только неоткрытого похода; отсутствие файлов считается успешным повтором удаления.
