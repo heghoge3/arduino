@@ -4,8 +4,8 @@
 #include "ota_transfer.h"
 using namespace otawire;
 void setUp(){}void tearDown(){}
-Manifest candidate(){Manifest m;memcpy(m.bytes,"VBO1",4);m.bytes[4]=m.bytes[5]=m.bytes[6]=m.bytes[7]=1;put32(m.bytes+8,1);
- m.bytes[12]=m.bytes[13]=2;m.bytes[14]=1;put32(m.bytes+16,0x11e);m.bytes[21]=1;m.bytes[22]=30;put32(m.bytes+24,6);put32(m.bytes+28,0x11d);return m;}
+Manifest candidate(){Manifest m;memcpy(m.bytes,"VBO1",4);m.bytes[4]=m.bytes[5]=m.bytes[7]=1;m.bytes[6]=WIRING_REVISION;put32(m.bytes+8,1);
+ m.bytes[12]=m.bytes[13]=2;m.bytes[14]=1;put32(m.bytes+16,0x120);m.bytes[21]=1;m.bytes[22]=32;put32(m.bytes+24,6);put32(m.bytes+28,0x11d);return m;}
 struct Flash:Backend {
  std::vector<uint8_t> inactive,active{9,8,7};bool signatureOk=true,finishOk=true,writeOk=true,activateOk=true,abortOk=true,selected=false;
  unsigned starts=0,writes=0,aborts=0;
@@ -66,4 +66,11 @@ void timer_wrap_and_stale_session_cannot_commit(){
  t.tick(100,true,f);TEST_ASSERT_EQUAL(RECEIVING,t.phase);t.tick(0xfffffff0u+30001u,true,f);TEST_ASSERT_EQUAL(IDLE,t.phase);
  TEST_ASSERT_EQUAL(SESSION,t.finish(5,f));TEST_ASSERT_FALSE(f.selected);
 }
-int main(){UNITY_BEGIN();RUN_TEST(timer_wrap_and_stale_session_cannot_commit);RUN_TEST(signed_manifest_checked_before_erasing);RUN_TEST(chunks_are_acknowledged_once_duplicates_are_checked);RUN_TEST(disconnect_timeout_and_off_do_not_select_partial_image);RUN_TEST(activation_requires_complete_verified_image_and_is_idempotent);RUN_TEST(corrupt_image_or_flash_write_never_activates);RUN_TEST(counters_replay_and_begin_retries_are_bound);RUN_TEST(image_length_includes_checksum_padding_and_sha);return UNITY_END();}
+void other_backlight_wiring_rejected_before_erasing(){
+ for(uint8_t revision : {uint8_t(1),uint8_t(3)}){
+  Transfer t;Flash f;auto m=candidate();m.bytes[6]=revision;
+  TEST_ASSERT_EQUAL(BAD,t.begin(10,m.bytes,MANIFEST,0x11d,0x11d,true,1,f));
+  TEST_ASSERT_EQUAL(0,f.starts);TEST_ASSERT_FALSE(f.selected);
+ }
+}
+int main(){UNITY_BEGIN();RUN_TEST(other_backlight_wiring_rejected_before_erasing);RUN_TEST(timer_wrap_and_stale_session_cannot_commit);RUN_TEST(signed_manifest_checked_before_erasing);RUN_TEST(chunks_are_acknowledged_once_duplicates_are_checked);RUN_TEST(disconnect_timeout_and_off_do_not_select_partial_image);RUN_TEST(activation_requires_complete_verified_image_and_is_idempotent);RUN_TEST(corrupt_image_or_flash_write_never_activates);RUN_TEST(counters_replay_and_begin_retries_are_bound);RUN_TEST(image_length_includes_checksum_padding_and_sha);return UNITY_END();}

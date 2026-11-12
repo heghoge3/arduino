@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import ec,utils
 
 def verify(folder):
  manifest=(folder/'manifest.bin').read_bytes();image=(folder/'app.bin').read_bytes();der=(folder/'public.der').read_bytes()
- if len(manifest)!=136 or manifest[:8]!=b'VBO1\x01\x01\x01\x01' or manifest[8:16]!=struct.pack('<I',1)+bytes([2,2,1,0]) or manifest[23]:raise ValueError('Invalid manifest compatibility')
+ if len(manifest)!=136 or manifest[:8]!=b'VBO1\x01\x01\x02\x01' or manifest[8:16]!=struct.pack('<I',1)+bytes([2,2,1,0]) or manifest[23]:raise ValueError('Invalid AO3401 wiring-2 manifest compatibility')
  release,size,minimum=struct.unpack_from('<I',manifest,16)[0],*struct.unpack_from('<II',manifest,24)
  if release!=manifest[20]<<16|manifest[21]<<8|manifest[22] or not 0<minimum<=release:raise ValueError('Invalid version range')
  if size!=len(image) or not 0<size<=0x140000 or image[0]!=0xe9 or image[12:14]!=b'\x09\0':raise ValueError('Invalid image size/chip')

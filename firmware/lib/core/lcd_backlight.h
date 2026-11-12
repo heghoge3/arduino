@@ -2,8 +2,10 @@
 
 namespace lcdbacklight {
 
-// Output implements an active-HIGH LED switch, never LED power itself.
-// prepareOff must preload LOW before enabling output, including while RTC-held.
+// AO3401 high-side LED switch: gate LOW = ON, gate HIGH = OFF (3.3 V source).
+constexpr bool levelFor(bool on) { return !on; }
+// Output accepts logical ON/OFF, never LED power itself.
+// prepareOff must preload HIGH before enabling output, including while RTC-held.
 template<class Output> class Driver {
  public:
   explicit Driver(Output& output) : output_(output) {}
@@ -18,7 +20,7 @@ template<class Output> class Driver {
   bool set(bool on) {
     if (!ready_) return false;
     if (held_) {
-      if (!on) return true; // Keep LOW retained until a deliberate wake.
+      if (!on) return true; // Keep OFF retained until a deliberate wake.
       if (!output_.prepareOff() || !output_.releaseHold()) return fail();
       held_ = false;
     }
@@ -35,7 +37,7 @@ template<class Output> class Driver {
   bool on() const { return on_; }
  private:
   bool fail() {
-    output_.write(false); // Best effort; hardware pull-down is still required.
+    output_.write(false); // Best effort; gate-to-source pull-up is still required.
     ready_ = on_ = false;
     return false;
   }

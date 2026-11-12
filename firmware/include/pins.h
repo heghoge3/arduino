@@ -27,8 +27,8 @@ constexpr int PIN_MPU_INT = 4;
 constexpr int PIN_BUZZER = 5;
 
 // Владелец разрешил одну нижнюю площадку 12.11.2026: только ключ подсветки LCD.
-// Драйвер backlight.cpp: HIGH = включить внешний LED-ключ, LOW = выключить.
-// Внешняя подтяжка OFF обязательна при reset; LED от GPIO не питать.
+// Драйвер backlight.cpp: AO3401, LOW = включить LED, HIGH = выключить.
+// Подтяжка G→S (SYS_3V3) обязательна при reset; LED от GPIO не питать.
 // Физическая LED-цепь и ключ требуют проверки на полученном дисплее.
 constexpr int PIN_LCD_BACKLIGHT = 14;
 

@@ -1,9 +1,9 @@
 #pragma once
 
-// GPIO14 -> active-HIGH 3.3 V input of an external LED-only switch.
-// External OFF pull-down required during ROM boot/reset. LCD VCC stays powered.
+// GPIO14 -> AO3401 gate via resistor: LOW=ON, HIGH=OFF, source on SYS_3V3.
+// External gate-to-source pull-up required at boot/reset. LCD VCC stays powered.
 namespace backlight {
 bool begin();
 bool set(bool on);
-bool sleep(); // LOW retained by RTC IO, independent of GPIO7 HOLD.
+bool sleep(); // HIGH retained by RTC IO, independent of GPIO7 HOLD.
 }

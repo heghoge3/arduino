@@ -6,6 +6,8 @@ namespace otawire {
 constexpr uint8_t QUERY=0x30,BEGIN=0x31,DATA=0x32,FINISH=0x33,ABORT=0x34,REBOOT=0x35;
 constexpr size_t BODY=72,MANIFEST=136,CHUNK=224,STATUS=143;
 constexpr uint32_t LAYOUT=1,LIMIT=0x140000;
+// Revision 1 used the former active-HIGH backlight contract. AO3401 is active-LOW.
+constexpr uint8_t WIRING_REVISION=2;
 enum Result:uint8_t {OK=0,BAD=1,BUSY=2,SIGNATURE=3,COMPAT=4,IO=5,POWER=6,SESSION=7,OFFSET=8,HASH=9,TIMEOUT=10,CANCELLED=11};
 enum Phase:uint8_t {IDLE=0,RECEIVING=1,SELECTED=2,TRIAL=3,VALID=4,FAILED=5};
 inline uint32_t get32(const uint8_t* p){return uint32_t(p[0])|uint32_t(p[1])<<8|uint32_t(p[2])<<16|uint32_t(p[3])<<24;}
@@ -29,7 +31,7 @@ struct Manifest {
  const uint8_t* hash()const{return bytes+32;}
  bool parse(const uint8_t* p,size_t n){
   if(n!=MANIFEST)return false;memcpy(bytes,p,n);
-  return !memcmp(p,"VBO1",4)&&p[4]==1&&p[5]==1&&p[6]==1&&p[7]==1&&get32(p+8)==LAYOUT&&
+  return !memcmp(p,"VBO1",4)&&p[4]==1&&p[5]==1&&p[6]==WIRING_REVISION&&p[7]==1&&get32(p+8)==LAYOUT&&
     p[12]==2&&p[13]==2&&p[14]==1&&!p[15]&&!p[23]&&size()>0&&size()<=LIMIT&&
     release()==(uint32_t(p[20])<<16|uint32_t(p[21])<<8|p[22])&&get32(p+28)<=release();
  }

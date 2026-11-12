@@ -26,7 +26,7 @@ constexpr uint8_t buildFlags=1;
 constexpr uint8_t buildFlags=POWER_SLIDER_BENCH?2:0;
 #endif
 // Volatile prevents compiler folding/removing the product metadata from the image.
-static const volatile uint8_t buildMeta[24]={ 'V','B','M','E','T','A','1',0,1,1,uint8_t(POWER_PROFILE),2,
+static const volatile uint8_t buildMeta[24]={ 'V','B','M','E','T','A','1',0,1,WIRING_REVISION,uint8_t(POWER_PROFILE),2,
   1,0,0,0,uint8_t(release),uint8_t(release>>8),uint8_t(release>>16),uint8_t(release>>24),FW_MAJOR,FW_MINOR,FW_PATCH,buildFlags };
 Preferences prefs;
 Transfer transfer;
@@ -145,7 +145,9 @@ void earlyBoot(){
  }
 }
 void begin(){
- layout=checkLayout();bool ok=prefs.begin("ota-v2",false);commissioned=ok&&prefs.getBool("model1",false);
+ // Isolate OTA intent/commissioning/high-release from the incompatible wiring-1
+ // proposal. Other NVS namespaces and the old OTA records are left untouched.
+ layout=checkLayout();bool ok=prefs.begin("ota-v2-r2",false);commissioned=ok&&prefs.getBool("model1",false);
  bool warm=esp_sleep_get_wakeup_cause()!=ESP_SLEEP_WAKEUP_UNDEFINED;
  bool cached=warm&&!trial&&cache.magic==0x4f544131&&cache.address==esp_ota_get_running_partition()->address&&
   cache.release==release&&cache.crc==crc32(reinterpret_cast<uint8_t*>(&cache),sizeof(cache)-4);

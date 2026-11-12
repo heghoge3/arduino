@@ -6,7 +6,7 @@
 constexpr uint8_t FW_MAJOR = 0;
 constexpr uint8_t FW_MINOR = 1;
 #ifndef V2_FW_PATCH
-#define V2_FW_PATCH 31
+#define V2_FW_PATCH 32
 #endif
 constexpr uint8_t FW_PATCH = V2_FW_PATCH;
 

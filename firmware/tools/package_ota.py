@@ -17,7 +17,7 @@ def main():
   at=data.find(b'VBMETA1\0',at)
   if at<0:break
   m=data[at:at+24];at+=8
-  if len(m)==24 and m[8:12]==bytes([1,1,1,2]) and m[12:16]==struct.pack('<I',1):records.append(m)
+  if len(m)==24 and m[8:12]==bytes([1,2,1,2]) and m[12:16]==struct.pack('<I',1):records.append(m)
  if len(records)!=1 or records[0][23]!=0:raise SystemExit('Expected exactly one real V2 slider metadata block; refusing fake/bench')
  meta=records[0];release=struct.unpack_from('<I',meta,16)[0]
  if release!=meta[20]<<16|meta[21]<<8|meta[22]:raise SystemExit('Build version/release mismatch')
@@ -28,7 +28,7 @@ def main():
  values=lambda label:bytes(int(v) for v in re.search(label+r'\[\d+\]=\{([^}]+)',header)[1].split(','))
  point=key.public_key().public_bytes(serialization.Encoding.X962,serialization.PublicFormat.UncompressedPoint)
  if values('PUBLIC_KEY')!=point or values('ID')!=hashlib.sha256(pub).digest()[:8]:raise SystemExit('Firmware and APK OTA keys do not match')
- body=bytearray(72);body[:4]=b'VBO1';body[4:8]=bytes([1,1,1,1]);struct.pack_into('<I',body,8,1)
+ body=bytearray(72);body[:4]=b'VBO1';body[4:8]=bytes([1,1,2,1]);struct.pack_into('<I',body,8,1)
  body[12:16]=bytes([2,2,1,0]);struct.pack_into('<I',body,16,release);body[20:23]=meta[20:23]
  struct.pack_into('<II',body,24,len(data),0x0000011d) # minimum receiver 0.1.29
  body[32:64]=hashlib.sha256(data).digest();body[64:72]=hashlib.sha256(pub).digest()[:8]

@@ -341,7 +341,7 @@ void splash(const char* line2) {
 }
 
 void sleep() {
-  backlight::sleep(); // LOW first, before LCD power-save / HOLD release.
+  backlight::sleep(); // Gate HIGH first, before LCD power-save / HOLD release.
   buzzer(false);
   led(0, 0, 0);
   g_pattern = nullptr;

@@ -20,6 +20,17 @@ class OtaTest {
    assertTrue(runCatching{OtaBundle(m,image,key)}.isFailure)
   }
  }
+ @Test fun ao3401AssetRequiresMatchingWiringRevision(){
+  val folder=File("src/main/assets/firmware")
+  val b=OtaBundle(File(folder,"manifest.bin").readBytes(),File(folder,"app.bin").readBytes(),File(folder,"public.der").readBytes())
+  assertEquals(2,b.manifest[6].toInt())
+  val old=OtaWire.decode(vectors[3]).copy(keyId=b.manifest.copyOfRange(64,72))
+  assertFalse(old.compatible(b))
+  val ao=old.copy(metadata=old.metadata.copyOf().also{it[9]=2})
+  assertTrue(ao.compatible(b))
+  val previous=bundle()
+  assertFalse(ao.copy(keyId=previous.manifest.copyOfRange(64,72)).compatible(previous))
+ }
  @Test fun wireDataCrcOffsetAndBounds(){
   val data=OtaWire.data(42,123,byteArrayOf(1,2,3));assertEquals(42,OtaWire.u32(data,2));assertEquals(123,OtaWire.u32(data,6));assertEquals(0x55bc801d,OtaWire.u32(data,10))
   assertTrue(runCatching{OtaWire.data(1,0,ByteArray(225))}.isFailure)

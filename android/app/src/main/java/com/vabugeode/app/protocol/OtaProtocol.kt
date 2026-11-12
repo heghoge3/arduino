@@ -54,7 +54,7 @@ class OtaBundle(val manifest:ByteArray,val image:ByteArray,publicKey:ByteArray){
  val hash get()=manifest.copyOfRange(32,64)
  init {
   require(manifest.size==136&&manifest.copyOfRange(0,4).contentEquals("VBO1".toByteArray()))
-  require(manifest[4].toInt()==1&&manifest[5].toInt()==1&&manifest[6].toInt()==1&&manifest[7].toInt()==1&&OtaWire.u32(manifest,8)==1L)
+  require(manifest[4].toInt()==1&&manifest[5].toInt()==1&&manifest[6].toInt() in 1..2&&manifest[7].toInt()==1&&OtaWire.u32(manifest,8)==1L)
   require(manifest[12].toInt()==2&&manifest[13].toInt()==2&&manifest[14].toInt()==1&&manifest[15].toInt()==0&&manifest[23].toInt()==0)
   require(image.size in 1..0x140000&&OtaWire.u32(manifest,24)==image.size.toLong()&&hash.contentEquals(OtaWire.sha(image)))
   require(release==((manifest[20].toLong() and 255) shl 16 or ((manifest[21].toLong() and 255) shl 8) or (manifest[22].toLong() and 255)))
