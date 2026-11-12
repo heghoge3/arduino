@@ -1,0 +1,14 @@
+{
+  "type": "v2-ota-test-kit",
+  "sourceCommit": "3bdac5b7e181b886b16b40f09d0939041251856c",
+  "targetFirmware": "0.1.30",
+  "usbBase": "0.1.29",
+  "requiredApk": "0.10.7",
+  "otaKeyId": "a128f28662e56efc",
+  "imageSha256": "952306b003ed4f84eaaec34005e7adc0b9cb73ae31ec20f35ec6bd5eb202c795",
+  "hardwareAccepted": false,
+  "usbPreparationPerformed": false,
+  "archive": "vabugeode-v2-ota-bootstrap-0.1.29.zip",
+  "sha256": "a379954f232ea11ae765f4b1e8747af537afe60a704cd43917571a069513d4b2",
+  "bytes": 981632
+}
