@@ -1,0 +1,114 @@
+{
+  "dark": [
+    {
+      "foreground": "#fff0dc",
+      "background": "#1b120c",
+      "pair": "ink/bg",
+      "ratio": 16.47
+    },
+    {
+      "foreground": "#fff0dc",
+      "background": "#281b12",
+      "pair": "ink/surface",
+      "ratio": 14.93
+    },
+    {
+      "foreground": "#c9ad94",
+      "background": "#1b120c",
+      "pair": "muted/bg",
+      "ratio": 8.69
+    },
+    {
+      "foreground": "#c9ad94",
+      "background": "#281b12",
+      "pair": "muted/surface",
+      "ratio": 7.87
+    },
+    {
+      "foreground": "#c9ad94",
+      "background": "#352418",
+      "pair": "muted/raised",
+      "ratio": 6.98
+    },
+    {
+      "foreground": "#ffa14a",
+      "background": "#1b120c",
+      "pair": "accent/bg",
+      "ratio": 9.18
+    },
+    {
+      "foreground": "#ffa14a",
+      "background": "#281b12",
+      "pair": "accent/surface",
+      "ratio": 8.32
+    },
+    {
+      "foreground": "#241408",
+      "background": "#ffa14a",
+      "pair": "accent-ink/accent",
+      "ratio": 8.87
+    },
+    {
+      "foreground": "#ffca80",
+      "background": "#3e2914",
+      "pair": "warning/warning-bg",
+      "ratio": 9.15
+    }
+  ],
+  "light": [
+    {
+      "foreground": "#2d1b0e",
+      "background": "#f6e5d0",
+      "pair": "ink/bg",
+      "ratio": 13.37
+    },
+    {
+      "foreground": "#2d1b0e",
+      "background": "#fff5e8",
+      "pair": "ink/surface",
+      "ratio": 15.28
+    },
+    {
+      "foreground": "#70523b",
+      "background": "#f6e5d0",
+      "pair": "muted/bg",
+      "ratio": 5.76
+    },
+    {
+      "foreground": "#70523b",
+      "background": "#fff5e8",
+      "pair": "muted/surface",
+      "ratio": 6.58
+    },
+    {
+      "foreground": "#70523b",
+      "background": "#efdbc3",
+      "pair": "muted/raised",
+      "ratio": 5.27
+    },
+    {
+      "foreground": "#a7470d",
+      "background": "#f6e5d0",
+      "pair": "accent/bg",
+      "ratio": 4.8
+    },
+    {
+      "foreground": "#a7470d",
+      "background": "#fff5e8",
+      "pair": "accent/surface",
+      "ratio": 5.49
+    },
+    {
+      "foreground": "#fff6e8",
+      "background": "#a7470d",
+      "pair": "accent-ink/accent",
+      "ratio": 5.52
+    },
+    {
+      "foreground": "#72450a",
+      "background": "#ffe0ad",
+      "pair": "warning/warning-bg",
+      "ratio": 6.42
+    }
+  ]
+}

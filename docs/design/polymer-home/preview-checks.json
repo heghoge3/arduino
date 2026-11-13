@@ -1,0 +1,27 @@
+{
+  "mockupOnly": true,
+  "layoutChecks": 126,
+  "errors": [],
+  "layoutProblems": [],
+  "interactions": [
+    "short hold does not finish",
+    "drag away cancels hold",
+    "Escape cancels dialog",
+    "intentional keyboard hold finishes demo hike",
+    "first action changes local demo state",
+    "ready action changes local demo state",
+    "offline action changes local demo state",
+    "recovery action changes local demo state",
+    "offline does not assert live recording or finish"
+  ],
+  "screenshots": [
+    "1-summary-dark.png",
+    "1-summary-light.png",
+    "2-oscilloscope-dark.png",
+    "2-oscilloscope-light.png",
+    "3-expedition-dark.png",
+    "3-expedition-light.png",
+    "summary-ended.png",
+    "summary-offline.png"
+  ]
+}
