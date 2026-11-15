@@ -75,18 +75,6 @@ class ScreenshotTest {
     }
 
     @Test
-    @Config(sdk = [34], qualifiers = "w400dp-h850dp-xhdpi")
-    fun orangeBackgroundHome() {
-        compose.mainClock.autoAdvance = false
-        val vm = AppViewModel(RuntimeEnvironment.getApplication())
-        compose.setContent { VabuTheme { App(vm) } }
-        shot("orange_home")
-        // Preview existing readings layout; no commands to a device.
-        compose.runOnUiThread { vm.repo.lifecycle.value = null }
-        shot("orange_home_readings")
-    }
-
-    @Test
     fun screens() {
         compose.mainClock.autoAdvance = false
         compose.setContent { VabuTheme { App() } }
@@ -113,11 +101,15 @@ class ScreenshotTest {
         shot("9_hike_detail")
         compose.onNodeWithText("Гаджет").performClick()
         shot("4_device")
+        compose.onNodeWithText("Открыть").performClick()
+        repeat(30) {
+            Thread.sleep(100)
+            ShadowLooper.idleMainLooper()
+            compose.mainClock.advanceTimeBy(100)
+        }
+        shot("10_log")
+        compose.onNodeWithText("← Гаджет").performClick()
         compose.onNodeWithContentDescription("Настройки").performClick()
-        compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithText("Для разработчика").performClick()
-        shot("10_developer")
-        compose.onNodeWithText("Приложение").performClick()
         shot("5_settings")
     }
 

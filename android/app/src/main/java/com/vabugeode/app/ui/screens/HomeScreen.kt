@@ -120,15 +120,9 @@ fun HomeScreen(
             SectionLabel("Сохранённые показания")
         }
         StatusRow(st, start, live)
-        if(st.power.batteryKnown && st.power.percent<20) Text("Низкий заряд: ${st.power.percent}%. Зарядите прибор при возможности.",color=Palette.Bad)
         TempHero(st, track, sun)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile(Icons.AutoMirrored.Filled.DirectionsWalk, "Пройдено", Fmt.num(st.distanceKm, 1), "км", Palette.Geo, Modifier.weight(1f))
-            StatTile(Icons.Filled.BatteryChargingFull, "Заряд", if(st.power.batteryKnown) "${st.power.percent}" else "—", "%", if(st.power.batteryKnown && st.power.percent<20) Palette.Bad else Palette.Battery, Modifier.weight(1f))
-        }
         GpsCard(st)
         WeatherPanel(vm)
-
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val trend = st.env.pressureTrend3h
@@ -153,7 +147,22 @@ fun HomeScreen(
                 sub = "по барометру",
                 sub2 = st.gps.altGps?.let { "GPS ${Fmt.num(it, 0)} м" } ?: "GPS —",
             )
-
+            val pw = st.power
+            StatTile(
+                Icons.Filled.BatteryChargingFull, "Заряд", if (pw.batteryKnown) "${pw.percent}" else "—", if (pw.batteryKnown) "%" else "",
+                if (pw.batteryKnown && pw.percent < 20) Palette.Bad else Palette.Battery,
+                Modifier.weight(1f),
+                sub = "${Fmt.num(pw.voltage, 2)} В | ${Fmt.num(pw.currentMa, 0)} мА",
+                sub2 = if (pw.batteryKnown) "~${Fmt.num(pw.hoursLeft, 0)} ч осталось" else "Заряд неизвестен",
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatTile(
+                Icons.AutoMirrored.Filled.DirectionsWalk, "Пройдено", Fmt.num(st.distanceKm, 1), "км", Palette.Geo,
+                Modifier.weight(1f),
+                sub = "${st.steps} шагов",
+                sub2 = st.positionSource.let { "позиция: ${it.title.lowercase()}" },
+            )
             StatTile(
                 Icons.Filled.Speed, "Скорость", Fmt.num(if (st.mode == PowerMode.MOVING) st.gps.speedKmh else 0.0, 1), "км/ч", Palette.Cold,
                 Modifier.weight(1f),
@@ -162,11 +171,8 @@ fun HomeScreen(
             )
         }
 
-
-        androidx.compose.material3.TextButton(enabled=live && (lifecycle==null || lifeFresh),onClick={vm.repo.setRecording(!st.recording)}) {
-            Text(if(st.recording) "Приостановить маршрут" else "Продолжить маршрут")
-        }
-        Text("На паузе шаги и датчики записываются.",
+        Actions(st, onMark, onClap, enabled = live && (lifecycle==null || lifeFresh), onToggle = { vm.repo.setRecording(!st.recording) })
+        Text("Пауза маршрута не завершает поход: шаги и датчики продолжают записываться.",
             style = MaterialTheme.typography.bodySmall, color = Palette.TextDim)
         Spacer(Modifier.height(8.dp))
     }
@@ -233,8 +239,8 @@ private fun TempHero(st: DeviceStatus, track: List<TrackPoint>, sun: SunSchedule
                     else -> Triple("", Palette.TextDim, false)
                 }
                 Text(first.first, color = first.second, style = MaterialTheme.typography.titleMedium)
-                Text("", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
-                Text("", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
+                Text("в корпусе ${Fmt.num(st.env.tempRaw)}°", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
+                Text("поправка ${Fmt.signed(st.env.tempCorr - st.env.tempRaw)}°", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim, maxLines = 1)
             }
         }
         // Последние 6 часов

@@ -85,9 +85,9 @@ fun Logo(size: TextUnit = 30.sp, modifier: Modifier = Modifier) {
         }
     }
     val text = buildAnnotatedString {
-        withStyle(SpanStyle(color = Palette.Geo)) { append("ПО") }
-        withStyle(SpanStyle(color = Palette.Bg, background = Palette.Geo)) { append("ЛИ") }
-        withStyle(SpanStyle(color = Palette.Geo)) { append("МЕР") }
+        withStyle(SpanStyle(color = Palette.Geo)) { append("vabu") }
+        withStyle(SpanStyle(color = Palette.Bg, background = Palette.Geo)) { append("GEO") }
+        withStyle(SpanStyle(color = Palette.Geo)) { append("de") }
     }
     val jitter = when (glitch) { 1 -> 2.dp; 2 -> (-1.5).dp; 3 -> 1.dp; else -> 0.dp }
     Box(modifier) {

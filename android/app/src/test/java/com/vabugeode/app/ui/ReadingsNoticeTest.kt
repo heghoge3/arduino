@@ -70,7 +70,7 @@ class ReadingsNoticeTest {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
         }
         compose.onNodeWithText("Показать сохранённые показания").performClick()
-        compose.onNodeWithText("[ МЕТКА ]").assertDoesNotExist()
-        compose.onNodeWithText("Приостановить маршрут").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("[ МЕТКА ]").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("[ ПАУЗА ]").assertIsNotEnabled()
     }
 }

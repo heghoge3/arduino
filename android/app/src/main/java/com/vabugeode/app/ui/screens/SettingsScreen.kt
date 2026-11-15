@@ -48,11 +48,6 @@ import com.vabugeode.app.ui.theme.Palette
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
-    var group by rememberSaveable { mutableStateOf("Приложение") }
-    if(group=="Журнал") {
-        LogScreen(vm, contentPadding) {group="Для разработчика"}
-        return
-    }
     val blacklist by vm.repo.blacklist.collectAsStateWithLifecycle()
     var editIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var diameter by rememberSaveable { mutableStateOf("") }
@@ -97,13 +92,8 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
-        Row(Modifier.fillMaxWidth()) {
-            listOf("Приложение", "Карты", "Для разработчика").forEach { name ->
-                TextButton(onClick={group=name}) { Text(name, color=if(group==name) Palette.Geo else Palette.TextDim) }
-            }
-        }
         val source by vm.link.source.collectAsStateWithLifecycle()
-        if(group=="Для разработчика") {
+        if(source==Source.GADGET)OtaPanel(vm)
         Panel {
             SectionLabel("Источник данных")
             Spacer(Modifier.height(8.dp))
@@ -123,14 +113,6 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
                 style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
             )
         }
-        LogEntryPanel(vm) { group="Журнал" }
-        val diagnosticTrack by vm.repo.track.collectAsStateWithLifecycle()
-        val diagnosticStatus by vm.repo.status.collectAsStateWithLifecycle()
-        Panel {
-            SectionLabel("GPS и датчики")
-            Text("Непроверенных точек: ${diagnosticTrack.count {it.uncertain || it.spoof}}",color=Palette.TextDim)
-            diagnosticStatus?.let { Text("Температура внутри: ${Fmt.num(it.env.tempRaw)} °C",color=Palette.TextDim) }
-        }
         // Только то, что относится к выбранному источнику
         if (source == Source.GADGET) {
             LinkPanel(vm)
@@ -138,15 +120,13 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         } else {
             EmulatorPanel(vm)
         }
-        }
-        if(group=="Карты") OfflineMapsPanel()
-        if(group=="Для разработчика") {
+        OfflineMapsPanel()
 
         Panel {
             SectionLabel("Известные области аномалий GPS")
             Spacer(Modifier.height(4.dp))
             Text(
-                "Диагностические области GPS. В новой прошивке нахождение внутри не запрещает координаты.",
+                "Области вокруг ложных точек GPS. Позиции внутри круга помечаются как подозрительные. Диаметр — полная ширина круга.",
                 style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
             )
             Spacer(Modifier.height(6.dp))
@@ -168,16 +148,7 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             Text("Сохраняется на телефоне. Передаётся подключённому гаджету или при следующем подключении.", style = MaterialTheme.typography.labelSmall, color = Palette.TextFaint)
         }
 
-        }
-        if(group=="Приложение") {
-        val appearanceContext=androidx.compose.ui.platform.LocalContext.current
-        TextButton(onClick={Palette.light=!Palette.light;appearanceContext.getSharedPreferences("appearance",0).edit().putBoolean("light",Palette.light).apply()}) {
-            Text(if(Palette.light) "Тема: светлая → тёмная" else "Тема: тёмная → светлая")
-        }
-        if (source == Source.GADGET) {
-            LinkPanel(vm)
-            WatchPanel(vm) { guide = true }
-        }
+        if (source == Source.GADGET) CompassPanel(vm)
 
         if (source == Source.GADGET) Panel {
             SectionLabel("Запись")
@@ -194,7 +165,6 @@ fun SettingsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             Text("Шрифты: VT323, IBM Plex Mono (OFL)", style = MaterialTheme.typography.labelMedium, color = Palette.TextDim)
         }
         Spacer(Modifier.height(8.dp))
-        }
     }
 }
 

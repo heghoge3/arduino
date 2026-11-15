@@ -144,7 +144,7 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String)
                         }
                     }
                 }
-                Text("━ GPS   ┅ без GPS", color=Palette.TextDim, fontSize=11.sp)
+                MapLegend(track.count { it.spoof || it.uncertain })
                 if (canStart) TextButton(onClick={if(choosing) choosing=false else startDialog=true}) {
                     Text(if(choosing) "Нажмите стартовую точку на карте · отмена" else "Задать старт без GPS")
                 }
@@ -154,7 +154,7 @@ fun MapScreen(vm: AppViewModel, contentPadding: PaddingValues, onAdded: (String)
 
             }
         }
-        // Marks temporarily hidden by owner; stored marks retained.
+        MarksPanel(vm, marks, start, onAdded, Modifier.weight(1f).fillMaxWidth())
     }
 }
 
@@ -296,7 +296,7 @@ fun TrackMap(
                     contentColor = if (mode != BaseMap.SCHEME) Palette.Bg else Palette.Text,
                 ) { Icon(if (mode == BaseMap.HYBRID) Icons.Filled.Layers else Icons.Filled.Satellite, "Подложка: ${mode.title}") }
             }
-            if (false) {
+            if (track.any { it.spoofLat != null }) {
                 SmallFloatingActionButton(
                     onClick = { follow = false; fitSpoof(map, track, topPx) },
                     containerColor = Palette.BadBg, contentColor = Palette.Bad,
@@ -410,7 +410,7 @@ private fun updateLayers(s: Style, track: List<TrackPoint>, marks: List<Mark>) {
     val spoof = track.mapNotNull { p ->
         if (p.spoofLat != null && p.spoofLon != null) Feature.fromGeometry(Point.fromLngLat(p.spoofLon, p.spoofLat)) else null
     }
-    s.getSourceAs<GeoJsonSource>("spoof")?.setGeoJson(FeatureCollection.fromFeatures(emptyList<Feature>()))
+    s.getSourceAs<GeoJsonSource>("spoof")?.setGeoJson(FeatureCollection.fromFeatures(spoof))
 
     val mk = marks.mapNotNull { m ->
         if (m.lat == null || m.lon == null) return@mapNotNull null
