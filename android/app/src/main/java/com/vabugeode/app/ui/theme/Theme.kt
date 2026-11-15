@@ -16,14 +16,14 @@ import androidx.compose.ui.unit.sp
 import com.vabugeode.app.R
 
 /**
- * Стиль «Терминал · лёд»: тёмно-синий фон, холодный голубой текст,
+ * Стиль «Терминал · лёд»: тёмно-оранжевый фон, холодный голубой текст,
  * у каждого блока свой цвет по смыслу (температура тёплая, тревога красная, питание зелёное).
  * Имена полей прежние — экраны перекрашиваются без правок.
  */
 object Palette {
-    val Bg = Color(0xFF060A12)
-    val Surface = Color(0xFF09101B)      // фон блоков почти совпадает с фоном: блоки держат рамки
-    val SurfaceHigh = Color(0xFF0F1A2B)
+    val Bg = Color(0xFF1A0E08)
+    val Surface = Color(0xFF201209)      // фон блоков почти совпадает с фоном: блоки держат рамки
+    val SurfaceHigh = Color(0xFF2B190E)
     val Outline = Color(0xFF1E2D44)
     val Text = Color(0xFFD7EEFF)
     val TextDim = Color(0xFF8CA3BD)

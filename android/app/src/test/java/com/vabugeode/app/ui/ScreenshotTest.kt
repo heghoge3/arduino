@@ -75,6 +75,18 @@ class ScreenshotTest {
     }
 
     @Test
+    @Config(sdk = [34], qualifiers = "w400dp-h850dp-xhdpi")
+    fun orangeBackgroundHome() {
+        compose.mainClock.autoAdvance = false
+        val vm = AppViewModel(RuntimeEnvironment.getApplication())
+        compose.setContent { VabuTheme { App(vm) } }
+        shot("orange_home")
+        // Preview existing readings layout; no commands to a device.
+        compose.runOnUiThread { vm.repo.lifecycle.value = null }
+        shot("orange_home_readings")
+    }
+
+    @Test
     fun screens() {
         compose.mainClock.autoAdvance = false
         compose.setContent { VabuTheme { App() } }
