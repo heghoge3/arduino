@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vabugeode.app.data.ProtocolDeviceRepository
@@ -73,11 +76,28 @@ fun HikeControls(repo: ProtocolDeviceRepository) {
             text={ Text(if (chosen==HikeStateMsg.FINISH)
                 "Запись остановится, данные сохранятся. Следующий поход автоматически не начнётся."
                 else "Устройство проверит сохранение на SD и подтвердит начало записи.") },
-            confirmButton={ TextButton(enabled=enabled,onClick={
-                val expected=state
-                action=null
-                scope.launch { repo.changeHike(chosen,expected) }
-            }) { Text("Подтвердить") } },
+            confirmButton={
+                if(chosen==HikeStateMsg.FINISH) {
+                    Text("Удерживайте 1,5 с", color=if(enabled) Palette.Geo else Palette.TextDim,
+                        modifier=Modifier.padding(16.dp).pointerInput(enabled,state) {
+                            detectTapGestures(onPress={
+                                if(enabled) {
+                                    val expected=state
+                                    val job=scope.launch {
+                                        delay(1500)
+                                        action=null
+                                        repo.changeHike(chosen,expected)
+                                    }
+                                    try { tryAwaitRelease() } finally { job.cancel() }
+                                }
+                            })
+                        })
+                } else TextButton(enabled=enabled,onClick={
+                    val expected=state
+                    action=null
+                    scope.launch {repo.changeHike(chosen,expected)}
+                }) {Text("Подтвердить")}
+            },
             dismissButton={ TextButton(onClick={action=null}) { Text("Отмена") } },
         )
     }

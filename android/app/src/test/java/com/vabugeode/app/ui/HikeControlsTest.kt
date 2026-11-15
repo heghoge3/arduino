@@ -39,7 +39,12 @@ class HikeControlsTest {
             compose.onNodeWithText("Отмена").performClick()
             assertEquals(0,gadget.actions)
             compose.onNodeWithText("Завершить поход").performClick()
-            compose.onNodeWithText("Подтвердить").performClick()
+            compose.onNodeWithText("Удерживайте 1,5 с").performTouchInput { click() }
+            compose.runOnIdle { assertEquals(0,gadget.actions) }
+            compose.onNodeWithText("Удерживайте 1,5 с").performTouchInput { down(center) }
+            compose.runOnIdle { }
+            compose.mainClock.advanceTimeBy(1600)
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(1600,java.util.concurrent.TimeUnit.MILLISECONDS)
             compose.waitUntil(5000) { repo.lifecycle.value?.phase==HikeStateMsg.ENDED && !repo.hikeBusy.value }
             compose.onNodeWithText("Поход завершён").assertExists()
             compose.onNodeWithText("Начать поход").assertExists()

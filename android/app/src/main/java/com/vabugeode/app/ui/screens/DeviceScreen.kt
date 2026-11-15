@@ -77,11 +77,12 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(4.dp))
-        LogEntryPanel(vm) { logOpen = true }
+        OtaPanel(vm)
         LinkPanel(vm)
+        CompassPanel(vm)
         WherePanel(vm)
         if (i == null || st == null) {
-            ExchangeLog(vm)
+
             return@Column
         }
         Panel {
@@ -162,7 +163,7 @@ fun DeviceScreen(vm: AppViewModel, contentPadding: PaddingValues) {
             KeyValue("Свободно", "${Fmt.num(i.sdFreeMb / 1024.0)} из ${Fmt.num(i.sdTotalMb / 1024.0)} ГБ")
             KeyValue("Текущий файл", "/tracks/…csv", Palette.TextDim)
         }
-        ExchangeLog(vm)
+
         Spacer(Modifier.height(8.dp))
     }
 }

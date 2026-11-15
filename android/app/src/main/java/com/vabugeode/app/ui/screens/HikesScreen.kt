@@ -66,6 +66,7 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues, onAchievements:
     val currentStart by vm.repo.hikeStartMs.collectAsStateWithLifecycle()
     val achievements by vm.achievements.progress.collectAsStateWithLifecycle()
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    var search by rememberSaveable { mutableStateOf("") }
     val list = hikes ?: return Waiting(contentPadding, "Читаем базу походов")
     val open = openId?.let { id -> list.firstOrNull { it.id() == id } }
     if (open != null) {
@@ -89,6 +90,7 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues, onAchievements:
                 Text("${achievements.count{it.new}} новых · маршруты, шаги, сезоны и тайны",style=MaterialTheme.typography.labelSmall,color=Palette.TextDim)
             }
         }
+        item { androidx.compose.material3.OutlinedTextField(value=search,onValueChange={search=it},label={Text("Найти поход")},singleLine=true,modifier=Modifier.fillMaxWidth()) }
         item { SectionLabel("Сохранено в телефоне | ${list.size}") }
         item { HikeControls(vm.repo) }
         if (list.isEmpty()) item {
@@ -97,13 +99,17 @@ fun HikesScreen(vm: AppViewModel, contentPadding: PaddingValues, onAchievements:
                 style = MaterialTheme.typography.bodyMedium, color = Palette.TextDim,
             )
         }
-        items(list, key = { it.id() }) { h -> Column { HikeCard(h, vm.isCurrent(h)) { openId = h.id() };HikeStatisticsControl(vm,h) } }
+        val filtered=list.filter { search.isBlank() || it.title().contains(search,true) || dateOf(it.startMs).contains(search,true) }
+        filtered.groupBy {DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru")).format(Instant.ofEpochMilli(it.startMs).atZone(ZoneId.systemDefault()))}.forEach { (month,entries) ->
+            item {SectionLabel(month)}
+            items(entries,key={it.id()}) {h -> Column {HikeCard(h,vm.isCurrent(h)){openId=h.id()};HikeStatisticsControl(vm,h)}}
+        }
     }
 }
 
 @Composable
 private fun HikeCard(h: HikeSummary, current: Boolean, onClick: () -> Unit) {
-    val accent = if (h.spoofPoints > 0) Palette.Warn else Palette.Geo
+    val accent = if (false) Palette.Warn else Palette.Geo
     Panel(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         accent = if (current) Palette.Good else null,
@@ -126,12 +132,12 @@ private fun HikeCard(h: HikeSummary, current: Boolean, onClick: () -> Unit) {
                     style = MaterialTheme.typography.labelMedium, color = Palette.Text,
                 )
                 Text(
-                    "${Fmt.num(h.tempMin)}…${Fmt.num(h.tempMax)} °C | меток ${h.marks}",
+                    "${Fmt.num(h.tempMin)}…${Fmt.num(h.tempMax)} °C",
                     style = MaterialTheme.typography.labelMedium, color = Palette.TextDim,
                 )
             }
         }
-        if (h.spoofPoints > 0) {
+        if (false) {
             Text("⚠ подозрение на подмену: ${h.spoofPoints} точек", style = MaterialTheme.typography.labelMedium, color = accent)
         }
     }
@@ -181,12 +187,12 @@ private fun HikeDetail(vm: AppViewModel, h: HikeSummary, contentPadding: Padding
             KeyValue("Температура", "${Fmt.num(h.tempMin)} … ${Fmt.num(h.tempMax)} °C", Palette.Temp)
             KeyValue("Метки", "${h.marks}")
             KeyValue("Точек записано", "${h.points}")
-            if (h.spoofPoints > 0) KeyValue("Подозрение на подмену", "${h.spoofPoints} точек", Palette.Warn)
+            if (false) KeyValue("Подозрение на подмену", "${h.spoofPoints} точек", Palette.Warn)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TermButton("✎ Название", Palette.Geo) { rename = true }
-            TermButton("↗ CapCut", Palette.Sunset) { data?.let { shareMarks(context, it.second, h.startMs) } }
+
             if (!current && !protected) TermButton("✕ Удалить", Palette.Bad) { delete = true }
         }
         h.completedAtMs?.let { Text("Завершён: ${Fmt.dateTime(it)}",color=Palette.TextDim) }
