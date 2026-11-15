@@ -1,0 +1,19 @@
+digraph wiring { graph [rankdir=LR, bgcolor="white", fontname="DejaVu Sans", fontsize=16, labelloc=t, pad=0.35, nodesep=0.55, ranksep=0.85, size="16,10.5", ratio=compress]; node [shape=box, style="rounded", fontname="DejaVu Sans", fontsize=12, margin="0.18,0.12"]; edge [fontname="DejaVu Sans", fontsize=10, arrowsize=0.7];
+graph [label="V2 — Лист 3. Ключи, зарядные LED и незакрытые узлы\nМ: макет. Не назначать номера ножек по рисунку похожего корпуса."];
+sys [label="SYS_3V3"];
+qbl [label="Q_BL AO3401, P-MOS\nS → SYS_3V3\nD → отдельный плюс LED LCD\nG → RG_BL 10k → GPIO14\nRPU_BL 100k между G и S\nLOW на GPIO14 = свет ON"];
+led [label="LCD: штатная LED-цепь\nСохранить ограничитель тока\nLED− → штатный возврат/GND после проверки\nНайти и отделить постоянный плюс LED!\nТочки пайки на экземпляре неизвестны"];
+sys -> qbl [label="S"];
+qbl -> led [label="D → LED-питание"];
+lcd [label="Питание контроллера LCD остаётся постоянным:\nVCC=SYS_3V3; GND=GND_SYS; SDA8/SCL9\nНЕ коммутировать весь VCC вместо LED"];
+qgps [label="Q_GPS: верхний ключ P-MOS (М)\nS → SYS_3V3; D → GPS_PWR\nG управляется GPIO6, LOW=ON\nPull-up G→S обязателен для OFF при Hi-Z\nAO3401 — кандидат; номиналы не утверждены\nПроверить S/D/G реальной детали"];
+sys -> qgps [label="S (только если GPS допускает 3,3 В)"];
+gps [color="#b33121",label="GPS_PWR → GPS VCC\nНа карточке есть 5V: проверить вход/LDO\nЕсли от 3,3 В модуль не работает —\nэту ветвь НЕ разводить как окончательную\nПроверить UART HIGH и подпитку при OFF"];
+qgps -> gps [label="D"];
+tp [label="Зарядная плата TP4056\nСнять штатный LED CHRG\nСнять штатный LED STDBY\nШтатные резисторы СОХРАНИТЬ"];
+red [label="Внешний LED «Заряд»\nАнод → площадка анода CHRG LED\nКатод → площадка катода CHRG LED"];
+green [label="Внешний LED «Готово»\nАнод → площадка анода STDBY LED\nКатод → площадка катода STDBY LED"];
+tp -> red [label="2 провода; полярность прозвонить"];
+tp -> green [label="2 провода; полярность прозвонить"];
+note [shape=note,color="#b33121",label="LED1/LED2 не назначать CHRG/STDBY по номеру!\nНе параллелить внешние и штатные LED.\nLED зарядки не питаются от SYS_3V3.\nНет утверждённой цепи драйвера зуммера.\nНет подтверждённой развязки USB ESP32.\nНет измеренных посадок/порядка выводов.\nЗакрыть E01–E16 перед заказом PCB.\nЧертежи — электрические связи, не Gerber."];
+}

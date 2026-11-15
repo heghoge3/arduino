@@ -1,0 +1,27 @@
+digraph wiring { graph [rankdir=LR, bgcolor="white", fontname="DejaVu Sans", fontsize=16, labelloc=t, pad=0.35, nodesep=0.55, ranksep=0.85, size="16,10.5", ratio=compress]; node [shape=box, style="rounded", fontname="DejaVu Sans", fontsize=12, margin="0.18,0.12"]; edge [fontname="DejaVu Sans", fontsize=10, arrowsize=0.7];
+graph [label="V2 / 0.1.32 wiring2 — Лист 2. Сигналы всех модулей\nК: номера GPIO сверены с прошивкой. П: порядок площадок и уровни модулей проверить."];
+esp [label="ESP32-S3-Zero\nВсе GPIO — логика 3,3 В\nПитание 3V3 = SYS_3V3\nGND = GND_SYS"];
+bus [label="Общая I2C, 100 кГц\nSDA = GPIO8\nSCL = GPIO9\nPull-up только к SYS_3V3\nУчесть резисторы всех модулей"];
+esp -> bus [dir=both,label="8 SDA / 9 SCL"];
+lcd [label="LCD GM12864-59N / ST7567\nSDA → SDA8; SCL → SCL9\nVCC=SYS_3V3; GND=GND_SYS\n0x3E или 0x3F\nТолько 4 внешних контакта"];
+rtc [label="DS3231, 0x68\nSDA → SDA8; SCL → SCL9\nVCC=SYS_3V3; GND=GND_SYS\nNC не подключать; штатный резерв VBAT\nПроверить батарейку/зарядную цепь"];
+bme [label="BME280, 0x76/0x77\nSDI/SDA → SDA8; SCK/SCL → SCL9\nVCC=SYS_3V3; GND=GND_SYS\nCSB=HIGH для I2C (проверить strap)\nSDO=GND: 0x76; VDDIO: 0x77"];
+mpu [label="GY-521 / MPU6050, 0x69\nSDA → SDA8; SCL → SCL9\nVCC=SYS_3V3; GND=GND_SYS\nAD0=HIGH к подтверждённой VDDIO\nINT → GPIO4, HIGH; XDA/XCL не подключать"];
+mag [label="GY-271, точный чип проверить\nSDA → SDA8; SCL → SCL9\nVCC=SYS_3V3; GND=GND_SYS\nГотовый драйвер QMC5883P: 0x2C\n0x0D/0x1E не доказывают работу курса"];
+ina [label="INA219, 0x40\nSDA → SDA8; SCL → SCL9\nVCC=SYS_3V3; GND=GND_SYS\nVIN+/VIN− — лист 1, не питание VCC"];
+bus -> {lcd rtc bme mpu mag ina} [dir=both,label="SDA / SCL"];
+sd [label="MicroSD, SPI 4 МГц\nCS/SS → GPIO10\nDI/MOSI → GPIO11\nCLK/SCK → GPIO12\nDO/MISO → GPIO13\nVCC=SYS_3V3; GND=GND_SYS\nCD/DET не используется"];
+esp -> sd [dir=both,label="10 CS; 11 MOSI; 12 SCK; 13 MISO"];
+gps [label="GPS ATGM336H / AT6558\nTX модуля → GPIO44 (RX ESP)\nRX модуля ← GPIO43 (TX ESP)\nGND=GND_SYS; VCC=GPS_PWR (П!)\nUART 9600 8N1, 3,3 В\nАнтенна → только RF-разъём GPS"];
+esp -> gps [dir=both,label="UART 43 / 44"];
+btn [label="Две кнопки без фиксации\nA: GPIO1 ↔ контакт ↔ GND_SYS\nB: GPIO2 ↔ контакт ↔ GND_SYS\nINPUT_PULLUP, LOW = нажато\nПару контактов прозвонить"];
+esp -> btn [dir=back,label="1 / 2"];
+power [label="Ползунок / питание\nGPIO3 → S1B.COM; RSW 10k → SYS_3V3\nGPIO7 → A D2 → K EN_DCDC\nПолная силовая цепь — лист 1"];
+esp -> power [dir=both,label="3 SWITCH / 7 HOLD"];
+keys [label="Ключ GPS: GPIO6 (LOW=ON)\nКлюч LED LCD: GPIO14 (LOW=ON)\nСхемы и ограничения — лист 3"];
+esp -> keys [label="6 / 14"];
+buzz [color="#b33121",label="Пассивный зуммер\nGPIO5 → вход драйвера (TBD)\nПитание/ток/тип излучателя неизвестны\nПрямое подключение к GPIO не утверждено"];
+esp -> buzz [label="5 PWM"];
+service [label="Оставить сервисный доступ\nBOOT GPIO0; RESET; USB ESP32\nGPIO19 D− / GPIO20 D+ — штатный USB\nGPIO21 занят встроенным RGB\nСвободных удобных GPIO не подтверждено"];
+esp -> service [style=dashed,arrowhead=none,label="внутренние связи платы ESP"];
+}
