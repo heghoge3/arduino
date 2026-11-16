@@ -1,12 +1,13 @@
 // V2 demonstration enclosure. Dimensions are in mm.
-// Mounts and openings are provisional until the hardware is fitted.
-// Select assembled, open, layout, base or lid in OpenSCAD Customizer.
-view = "assembled"; // [assembled,open,layout,base,lid]
+// Rectangular perfboard with direct-soldered pins above the battery.
+// Mounts, pin clearance, cutouts and board stock size are provisional.
+// Use stack to inspect the perfboard, battery and sensor bay separately.
+view = "assembled"; // [assembled,open,layout,stack,base,lid]
 
 // Outer envelope chosen for this concept. It excludes the lug and controls.
 width = 72;
 length = 110;
-depth = 36;
+depth = 45;
 wall = 2.6;
 floor = 3;
 face = 2.8;
@@ -41,7 +42,9 @@ bme = [12, 15, 2]; // Rotated 90 degrees from the photo
 
 // Layout estimates. Replace these with measured envelopes, including leads.
 lcd_hole_pitch = [51, 39];
-carrier = [61, 45, 1.6];
+carrier = [61, 88, 1.6]; // Proposed rectangular perfboard, not a measured board.
+module_pin_gap = 2; // Space between perfboard and plug-in module PCB.
+solder_tail = 2; // Envelope below perfboard for solder and trimmed pins.
 mpu = [30, 25, 4]; // Provisional envelope with margin from owner.
 buzzer_diameter = 12;
 buzzer_height = 9.5;
@@ -61,19 +64,26 @@ lcd_y = length - 33;
 button_y = 41.5;
 button_offset = 16;
 slider_y = 44;
-slider_z = 15;
+slider_z = 11.5; // Slider body clears the bottom of the perfboard.
 usb_x = center + 13;
-usb_z = 24;
 led_y = 17;
 lid_screws = [[6.5, 6.5], [width-6.5, 6.5], [6.5, length-6.5], [width-6.5, length-6.5]];
-board_z = 5;
-module_z = board_z + carrier[2];
+board_z = 17;
+board_y = 55;
+battery_z = 4;
+board_top = board_z + carrier[2];
+module_z = board_top + module_pin_gap;
+usb_z = module_z + charger[2]/2;
+bme_bay_top = 15;
+bme_bay_cover = 1;
 lcd_back = depth - lcd[2];
 
 assert(width > lcd[0] + 2*wall, "LCD envelope exceeds case width");
 assert(button_offset*2 > button_flange, "Button flanges overlap");
 assert(button_y + button_flange/2 < lcd_y - lcd[1]/2, "Button row overlaps LCD envelope");
-assert(module_z + rtc[2] < lcd_back, "RTC envelope reaches the LCD");
+assert(module_z + max(rtc[2], gps[2]) < lcd_back, "Upper modules reach the LCD");
+assert(board_z - solder_tail > battery_z + battery[2], "Solder tails reach the battery");
+assert(bme_bay_top + bme_bay_cover < board_z, "Sensor bay reaches the perfboard");
 
 module rounded_plate(w, l, r, h) {
     hull() for (x = [r, w-r], y = [r, l-r])
@@ -109,18 +119,16 @@ module base() {
             }
             lug();
             for (p = lid_screws) bore(p[0],p[1],floor-eps,8,split_z-floor+eps);
-            // Closed partition in plan. Final membrane, wire feedthrough and seal follow measurements.
+            // Low sensor bay below the perfboard. Feedthrough and lid seal are provisional.
             for (y = [11,30])
-                translate([wall-eps,y,floor-eps]) cube([20-wall+2*eps,2.2,split_z-floor+eps]);
-            translate([20,11,floor-eps]) cube([2.2,21.2,split_z-floor+eps]);
-            // Carrier standoffs and two soft-pad zones under the battery.
-            for (x = [10,width-10], y = [57,95]) bore(x,y,floor-eps,5,board_z-floor+eps);
+                translate([wall-eps,y,floor-eps]) cube([20-wall+2*eps,2.2,bme_bay_top-floor+eps]);
+            translate([20,11,floor-eps]) cube([2.2,21.2,bme_bay_top-floor+eps]);
+            // Perfboard standoffs and two soft-pad zones under the battery.
+            for (p = [[10,35], [width-10,15], [10,95], [width-10,95]])
+                bore(p[0],p[1],floor-eps,5,board_z-floor+eps);
             for (y = [10,48]) translate([26,y,floor-eps]) cube([30,4,1+eps]);
-            // The converter bridge clears the battery; the USB module has its own ledge.
-            translate([22,30,floor-eps]) cube([2,4,12+eps]);
-            translate([59,30,floor-eps]) cube([2,4,12+eps]);
-            translate([22,30,14]) cube([39,4,1+eps]);
-            translate([40.5,wall-eps,21]) cube([17,5,1]);
+            // The charger is soldered to the perfboard but its front edge overhangs it.
+            translate([usb_x-charger[0]/2,wall-eps,module_z-1]) cube([charger[0],5,1]);
         }
         for (p = lid_screws) bore(p[0],p[1],split_z-5,4.2,5+eps);
         translate([usb_x-usb_cutout[0]/2,-eps,usb_z-usb_cutout[1]/2])
@@ -130,6 +138,7 @@ module base() {
             cube([wall+2*eps,slider_handle[0]+slider_travel+1,5]);
         for (y = [slider_y-slider_mount_pitch/2, slider_y+slider_mount_pitch/2])
             translate([width-wall-eps,y,slider_z]) rotate([0,90,0]) cylinder(d=2.2,h=wall+2*eps);
+        translate([20-eps,24,bme_bay_top-2]) cube([2.2+2*eps,4,2+eps]);
         for (y = [16,21,26])
             translate([-eps,y,9]) rotate([0,90,0]) cylinder(d=2.3,h=wall+2*eps);
     }
@@ -185,10 +194,17 @@ module side_hardware() {
     color("SlateGray") centered_box(usb_x,1.4,usb_z-1.6,[9,2.4,3.2]);
 }
 
-module inside() {
-    color("SlateGray") centered_box(41,29,4,battery);
-    color("Ivory") centered_box(62,52,7,[6,5,4]); // service access to battery JST
-    color("SeaGreen") centered_box(center,77,board_z,carrier);
+module sensor_and_battery() {
+    color("SlateGray") centered_box(41,29,battery_z,battery);
+    color("Teal") centered_box(13,21,6,bme);
+    color("DarkOrange",0.45)
+        translate([wall,11,bme_bay_top]) cube([22.2-wall,21.2,bme_bay_cover]);
+    color("Peru") centered_box(center,103,23,gps_antenna);
+}
+
+module populated_perfboard() {
+    color("Ivory") centered_box(62,47,board_top,[6,5,4]); // service JST above perfboard
+    color("SeaGreen") centered_box(center,board_y,board_z,carrier);
     color("RoyalBlue") {
         centered_box(15.5,86.5,module_z,esp);
         centered_box(37,90.5,module_z,gps);
@@ -196,25 +212,23 @@ module inside() {
         centered_box(15,64,module_z,sd);
         centered_box(37.5,66,module_z,ina);
         centered_box(57,77.5,module_z,compass);
-        centered_box(usb_x,wall+charger[1]/2,usb_z-2,charger);
-        centered_box(40,25,15,converter);
-        // Reserve a rigid mount above the battery. Its fasteners follow the real board.
-        centered_box(38,47.5,15,mpu);
+        centered_box(usb_x,wall+charger[1]/2,module_z,charger);
+        centered_box(22,21.5,module_z,converter);
+        centered_box(43,42.5,module_z,mpu);
     }
-    color("Teal") centered_box(13,21,6,bme);
-    color("Black") bore(13,40,10,buzzer_diameter,buzzer_height);
+    color("Black") bore(13,42,module_z,buzzer_diameter,buzzer_height);
     for (i = [0,1])
-        color("Silver") bore(13+(i-0.5)*buzzer_pin_pitch,40,10-buzzer_pin_lengths[i],
+        color("Silver") bore(13+(i-0.5)*buzzer_pin_pitch,42,module_z-buzzer_pin_lengths[i],
                              buzzer_pin_diameter,buzzer_pin_lengths[i]);
-    color("Peru") centered_box(center,103,7,gps_antenna);
 }
 
 if (view == "base") base();
 if (view == "lid") translate([0,0,-(lcd_back+1.6)]) lid();
-if (view == "assembled" || view == "open" || view == "layout") {
+if (view == "assembled" || view == "open" || view == "layout" || view == "stack") {
     color(case_color) base();
     side_hardware();
-    inside();
+    sensor_and_battery();
+    translate([0,0,view == "stack" ? 24 : 0]) populated_perfboard();
     if (view == "assembled") {
         color(case_color) lid();
         front_hardware();
