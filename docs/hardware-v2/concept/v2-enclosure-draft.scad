@@ -26,7 +26,7 @@ slider_handle = [5.5, 3.8, 5];
 slider_travel = 3.2;
 battery = [34, 50, 10];
 esp = [18, 24, 4]; // XY from listing, height from owner. USB plug excluded.
-rtc = [13.5, 13.6, 12]; // Z estimated
+rtc = [13.5, 13.6, 6]; // Width/length from seller, height with header removed.
 // Owner's 16.11 photo. Board envelopes exclude mounting hardware and wires.
 // Antenna assembly is 115 mm end to end, including cable; routing is TBD.
 gps_antenna = [18, 6, 7];
@@ -41,8 +41,12 @@ bme = [12, 15, 2]; // Rotated 90 degrees from the photo
 // Layout estimates. Replace these with measured envelopes, including leads.
 lcd_hole_pitch = [51, 39];
 carrier = [61, 45, 1.6];
-mpu = [14, 15, 4];
-buzzer = [12, 12, 6];
+mpu = [30, 25, 4]; // Provisional envelope with margin from owner.
+buzzer_diameter = 12;
+buzzer_height = 9.5;
+buzzer_pin_pitch = 7.6;
+buzzer_pin_diameter = 0.6;
+buzzer_pin_lengths = [5.5, 4]; // Nominal lengths from drawing.
 usb_cutout = [11, 4.8];
 led_diameter = 3;
 
@@ -53,7 +57,7 @@ case_color = "DarkOrange";
 split_z = depth - lid_depth;
 center = width / 2;
 lcd_y = length - 33;
-button_y = 40;
+button_y = 41.5;
 button_offset = 16;
 slider_y = 44;
 slider_z = 15;
@@ -181,7 +185,7 @@ module side_hardware() {
 
 module inside() {
     color("SlateGray") centered_box(41,29,4,battery);
-    color("Ivory") centered_box(60,52,7,[6,5,4]); // service access to battery JST
+    color("Ivory") centered_box(62,52,7,[6,5,4]); // service access to battery JST
     color("SeaGreen") centered_box(center,77,board_z,carrier);
     color("RoyalBlue") {
         centered_box(15.5,86.5,module_z,esp);
@@ -189,13 +193,17 @@ module inside() {
         centered_box(53,92.5,module_z,rtc);
         centered_box(15,64,module_z,sd);
         centered_box(37.5,66,module_z,ina);
-        centered_box(58,62,module_z,mpu);
         centered_box(57,77.5,module_z,compass);
         centered_box(usb_x,wall+charger[1]/2,usb_z-2,charger);
         centered_box(40,25,15,converter);
+        // Reserve a rigid mount above the battery. Its fasteners follow the real board.
+        centered_box(38,47.5,15,mpu);
     }
     color("Teal") centered_box(13,21,6,bme);
-    color("Black") centered_box(13,40,6,buzzer);
+    color("Black") bore(13,40,10,buzzer_diameter,buzzer_height);
+    for (i = [0,1])
+        color("Silver") bore(13+(i-0.5)*buzzer_pin_pitch,40,10-buzzer_pin_lengths[i],
+                             buzzer_pin_diameter,buzzer_pin_lengths[i]);
     color("Peru") centered_box(center,103,7,gps_antenna);
 }
 
