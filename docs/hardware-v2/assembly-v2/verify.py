@@ -54,7 +54,7 @@ for r in rs:union(r['from'],r['to'])
 for rail in ['pwr_left','pwr_right','gnd_left','gnd_right','sda_bus','scl_bus']:
  for k in list(u):
   if k.startswith(rail+'_'):union(k,rail+'_top')
-for mod in ['esp','lcd','rtc','bme','mpu','mag','ina','sd']:
+for mod in ['esp','rtc','bme','mpu','mag','ina','sd']:
  uniontest='3v3' if mod=='esp' else 'vcc'
  assert find(mod+'_'+uniontest)==find('dc_out'),mod
  assert find(mod+'_gnd')==find('tp_out-'),mod
@@ -62,11 +62,14 @@ for mod in ['esp','lcd','rtc','bme','mpu','mag','ina']:
  assert find(mod+'_sda')==find('esp_sda'),mod
  assert find(mod+'_scl')==find('esp_scl'),mod
 for a,b in [('bat-','tp_out-'),('esp_3v3','esp_gnd'),('esp_sda','esp_scl'),('esp_hold','tp_out+'),('tp_ck','tp_out-'),('tp_sk','tp_out-')]:assert find(a)!=find(b),(a,b)
+assert find('lcd_gnd')==find('tp_out-')
+assert find('lcd_vcc')==find('bl_d')
+assert find('lcd_vcc')!=find('dc_out')
 assert find('esp_rx')==find('gps_tx');assert find('esp_tx')==find('gps_rx')
-print('73 wires; 8 power/ground branches; 7 SDA/SCL ports; polarity/isolation assertions passed; 5-page PDF')
+print('73 wires; 7 direct power branches plus switched LCD; 7 SDA/SCL ports; polarity/isolation assertions passed; 5-page PDF')
 
 report=json.loads((D/'checks.json').read_text())
-report['networkAssertions']={'powerGroundBranches':8,'i2cParticipants':7,'separateBatteryMinusAndOutputMinus':True,'separateSupplyAndGround':True,'separateSdaAndScl':True,'separateLedCathodesAndGround':True,'crossedGpsUart':True}
+report['networkAssertions']={'directPowerBranches':7,'groundBranches':8,'lcdPowerFromMosfetDrainOnly':True,'i2cParticipants':7,'separateBatteryMinusAndOutputMinus':True,'separateSupplyAndGround':True,'separateSdaAndScl':True,'separateLedCathodesAndGround':True,'crossedGpsUart':True}
 (D/'checks.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 # Read the rendered SVG, not just the table: catch overlays that can look like a short.
 import re,xml.etree.ElementTree as ET

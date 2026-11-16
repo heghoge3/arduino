@@ -104,19 +104,23 @@ labels.append(txt(60,2410,'Нужны модель, напряжение и то
 for key,title,sub,y in [('lcd','LCD GM12864-59N','4 контакта; I2C 0x3E / 0x3F',720),('rtc','DS3231 · часы','I2C 0x68; VBAT — штатная батарейка',990),('bme','BME280','I2C 0x76 / 0x77; см. схему Г',1260),('mpu','GY-521 / MPU6050','! AD0=HIGH → адрес 0x69',1530),('mag','GY-271 · компас','! Точный чип ещё не подтверждён',1900)]:
  b=box(key,1530,y,430,300 if key=='mpu' else 250,title,sub)
  for suffix,dy,name,k,rail in [('vcc',70,'VCC','pwr','pwr_right'),('gnd',110,'GND','gnd','gnd_right'),('sda',150,'SDA / SDI' if key=='bme' else 'SDA','sda','sda_bus'),('scl',190,'SCL / SCK' if key=='bme' else 'SCL','scl','scl_bus')]:
-  port(key+'_'+suffix,b,'L',y+dy,name,k);wire(tap(rail,y+dy),key+'_'+suffix)
+  port(key+'_'+suffix,b,'L',y+dy,name,k)
+  if key=='lcd' and suffix=='vcc':
+   P['bl_d']=(1960,2440,'D AO3401 · LCD_VCC_SW','pwr')
+   wire('bl_d','lcd_vcc',[(1990,2440),(1990,2500),(1490,2500),(1490,y+dy)],blocked=True)
+  else:wire(tap(rail,y+dy),key+'_'+suffix,blocked=key=='lcd' and suffix in ['sda','scl'])
  if key=='mpu':
   port('mpu_int',b,'L',1790,'INT · активный HIGH','io');wire('esp_int','mpu_int',[(1270,1790)])
- labels.append(txt(1550,y+229,{'lcd':'LED-подсветка: отдельно, схема В','rtc':'NC/SQW/32K к ESP не подключать','bme':'CSB и SDO: режим I2C, схема Г','mpu':'AD0 к VDDIO, не к 5 В; схема Г','mag':'SDA/SCL не менять местами'}[key],15,'#805316'))
+ labels.append(txt(1550,y+229,{'lcd':'VCC от ключа; SDA/SCL при OFF проверить','rtc':'NC/SQW/32K к ESP не подключать','bme':'CSB и SDO: режим I2C, схема Г','mpu':'AD0 к VDDIO, не к 5 В; схема Г','mag':'SDA/SCL не менять местами'}[key],15,'#805316'))
 wire('esp_sw','p1_state',[(1105,2030),(1105,425)])
 wire('esp_hold','p1_hold',[(1130,2130),(1130,235)])
-b=box('bl',1530,2290,430,180,'Ключ подсветки · схема В','! LED+ внутри LCD ещё не найден')
+b=box('bl',1530,2290,430,180,'Ключ всего LCD · схема В','! Нужны адаптация ПО и проверка I2C')
 for id,y,name,k in [('s',2360,'S · SYS_3V3','pwr'),('g',2410,'Через 10k к G · GPIO14','io')]:port('bl_'+id,b,'L',y,name,k)
 wire(tap('pwr_right',2360),'bl_s');wire('esp_bl','bl_g',[(1285,2260),(1285,2410)])
-labels.append(txt(1550,2450,'D → LED+; точки пайки уточнить!',16,C['stop']))
+port('bl_d',b,'R',2440,'D → VCC всего LCD','pwr')
 # Continuous rails have connection dots only at real taps. Branches cross without dots.
 svgstyle='''<style>text{font-family:DejaVu Sans,Arial,sans-serif}.wire{cursor:pointer;outline:none}.wire:focus path:nth-child(2){stroke-width:6}.dim{opacity:.08}.wire.active path:nth-child(2){stroke-width:7}</style>'''
-svg=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2040 2660" role="img" aria-label="V2: общая монтажная схема, каждый провод отдельно">{svgstyle}<rect width="2040" height="2660" fill="#f6f8fb"/>'+txt(40,35,'V2 · КАЖДЫЙ ПРОВОД ОТДЕЛЬНО · s3 0.1.32 / wiring2',25)+txt(40,62,'Это расположение символов, НЕ физический порядок выводов. Красный пунктир: СТОП, сначала проверка.',17,C['stop'])+''.join(boxes)+''.join(wires)+''.join(f'<circle cx="{x}" cy="{y}" r="5" fill="{col}" stroke="white" stroke-width="1"/>' for x,y,col in junctions)+''.join(labels)+txt(40,2640,'Точка = соединение. Пересечение без точки = НЕ соединение. W001… — номера проводов, не номера ножек.',18)+'</svg>'
+svg=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2040 2660" role="img" aria-label="V2: общая монтажная схема, каждый провод отдельно">{svgstyle}<rect width="2040" height="2660" fill="#f6f8fb"/>'+txt(40,35,'V2 · ЦЕЛЕВАЯ СХЕМА · КЛЮЧ ВСЕГО LCD (ПО ЕЩЁ НЕ АДАПТИРОВАНО)',25)+txt(40,62,'Это расположение символов, НЕ физический порядок выводов. Красный пунктир: СТОП, сначала проверка.',17,C['stop'])+''.join(boxes)+''.join(wires)+''.join(f'<circle cx="{x}" cy="{y}" r="5" fill="{col}" stroke="white" stroke-width="1"/>' for x,y,col in junctions)+''.join(labels)+txt(40,2640,'Точка = соединение. Пересечение без точки = НЕ соединение. W001… — номера проводов, не номера ножек.',18)+'</svg>'
 (D/'all-wires.svg').write_text(svg)
 (D/'wires.json').write_text(json.dumps(records,ensure_ascii=False,indent=2))
 with (D/'wires.csv').open('w',newline='') as f:
@@ -147,8 +151,8 @@ switch=detail('А · ПОЛЗУНОК: обе группы отдельно, к�
 ''')
 # Identical port treatment, distinct nominal values; no guessed breakout pin numbers.
 def mosfet(gps=False):
- title='Б · КЛЮЧ GPS: LOW включает питание' if gps else 'В · ПОДСВЕТКА LCD: LOW включает только LED'
- note='GPS должен допускать питание 3,3 В. До проверки E13 ветвь НЕ паять.' if gps else 'Нужно найти и отделить плюс LED. VCC контроллера LCD НЕ разрывать.'
+ title='Б · КЛЮЧ GPS: LOW включает питание' if gps else 'В · ПИТАНИЕ ВСЕГО LCD: LOW включает модуль'
+ note='GPS должен допускать питание 3,3 В. До проверки E13 ветвь НЕ паять.' if gps else 'Ключ разрывает VCC всего модуля. Работа SDA/SCL при OFF ещё не подтверждена.'
  resistor='RPU: номинал уточнить' if gps else 'RPU 100 кОм'
  rg='''<path class="s" d="M60 340H450"/>''' if gps else '''<path class="s" d="M60 340H160M260 340H450"/><rect class="r" x="160" y="323" width="100" height="34"/><text x="150" y="400">RG 10 кОм</text>'''
  return detail(title,1100,850,f'''
@@ -157,11 +161,11 @@ def mosfet(gps=False):
 <rect class="r" x="450" y="250" width="200" height="180"/><text x="475" y="295">AO3401</text><text x="565" y="275">S · исток</text><text x="465" y="330">G · затвор</text><text x="565" y="415">D · сток</text>
 <rect class="r" x="345" y="220" width="30" height="70"/><text x="80" y="245">{resistor}</text><path class="s" d="M360 290V340"/>{rg}<circle cx="360" cy="340" r="6" fill="#b04b80"/>
 <text x="30" y="315">GPIO{6 if gps else 14}</text>
-<path class="p" d="M550 430V530"/><text x="575" y="485">{'GPS_PWR' if gps else 'Отдельный плюс LED'}</text>
+<path class="p" d="M550 430V530"/><text x="575" y="485">{'GPS_PWR' if gps else 'LCD_VCC_SW'}</text>
 <rect class="r" x="400" y="530" width="380" height="180"/>
-<text x="425" y="570">{'GPS: VCC' if gps else 'Штатная LED-цепь дисплея'}</text>
-<text x="425" y="610">{'3,3 В только после проверки!' if gps else 'Ограничитель тока сохранить!'}</text>
-<text x="425" y="660">{'GPS: GND' if gps else 'LED−: штатный возврат, проверить'}</text>
+<text x="425" y="570">{'GPS: VCC' if gps else 'Весь LCD: контакт VCC'}</text>
+<text x="425" y="610">{'3,3 В только после проверки!' if gps else 'Контроллер и подсветка вместе'}</text>
+<text x="425" y="660">{'GPS: GND' if gps else 'LCD: контакт GND'}</text>
 <path class="g" d="M550 710V770H800"/><text x="815" y="778">GND</text>
 <text x="30" y="815">{'В V1 между G и S было 10 кОм; для V2 значение пока не утверждено.' if gps else 'Pull-up стоит между G и S, со стороны затвора ПОСЛЕ RG.'}</text>
 <text x="690" y="210" class="warn">Не перепутать S и D!</text>
@@ -197,9 +201,9 @@ rows=''.join(f'<tr id="row-{r["id"]}" data-wire="{r["id"]}"><td><button data-pic
 legend=''.join(f'<span class="pill" style="color:{C[k]}">{t}</span>' for k,t in [('bat','Батарея / до 4,2 В'),('pwr','Только +3,3 В'),('gnd','Минус / GND'),('sda','SDA'),('scl','SCL'),('spi','SD / SPI'),('gps','GPS / UART'),('io','Кнопки / сигналы'),('hold','EN / HOLD'),('led','Катод LED: не GND')])
 page='''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>V2 · Монтаж по одному проводу</title><style>'''+style+'''</style><main>
 <h1>V2 · Монтаж по одному проводу</h1><p>Каждый плюс, минус и сигнал нарисован отдельной линией. Нажмите провод или его номер в таблице — остальные станут бледными, а здесь появятся оба конца.</p>
-<p>Основа: <a href="../electrical-baseline.md">действующая электрическая база</a>, прошивка s3 0.1.32 / wiring2. Эта страница заменяет неудобные блок-схемы 15.11 как инструкцию чтения соединений. Не физическое размещение деталей и не готовая PCB.</p>
-<div class="danger"><b>Исправление r2: OUT+ TP4056 — батарея, не выход 5 В.</b> Коричневые линии до 4,2 В и красные линии 3,3 В разделены. P1A и P1B — разные группы, между их плюсами нет перемычки. 5 В подаются только на штатный USB-C зарядника.</div><div class="danger"><b>⛔ Стоп перед пайкой.</b> Расположение контактов на рисунке условное: ищите написанное имя на своём модуле. Пунктир — соединение, которое ещё нельзя паять без проверки. Неизвестные точки LED LCD/TP4056 и драйвер пищалки не выдуманы.</div>
-<nav><a href="#overview">Общая схема</a><a href="#power">А · Ползунок</a><a href="#gps">Б · Ключ GPS</a><a href="#lcd">В · Подсветка</a><a href="#straps">Г · Адреса/кнопки</a><a href="#wires">Все провода</a><a href="all-wires.svg" download>Скачать SVG</a><a href="wires.csv" download>Список CSV</a></nav>
+<p>Основа: <a href="../electrical-baseline.md">действующая электрическая база</a>. Выбранная цель: отключать весь VCC LCD. Прошивка s3 0.1.32 / wiring2 пока поддерживает только прежнюю LED-ветвь! Эта страница заменяет неудобные блок-схемы 15.11 как инструкцию чтения соединений. Не физическое размещение деталей и не готовая PCB.</p>
+<div class="danger"><b>Исправление r2: OUT+ TP4056 — батарея, не выход 5 В.</b> Коричневые линии до 4,2 В и красные линии 3,3 В разделены. P1A и P1B — разные группы, между их плюсами нет перемычки. 5 В подаются только на штатный USB-C зарядника.</div><div class="danger"><b>⛔ Стоп перед пайкой.</b> Расположение контактов на рисунке условное: ищите написанное имя на своём модуле. Пунктир — соединение, которое ещё нельзя паять без проверки. LCD VCC идёт от стока ключа. Совместимость I2C при отключённом VCC, площадки LED зарядника и драйвер пищалки ещё не подтверждены.</div>
+<nav><a href="#overview">Общая схема</a><a href="#power">А · Ползунок</a><a href="#gps">Б · Ключ GPS</a><a href="#lcd">В · Питание LCD</a><a href="#straps">Г · Адреса/кнопки</a><a href="#wires">Все провода</a><a href="all-wires.svg" download>Скачать SVG</a><a href="wires.csv" download>Список CSV</a></nav>
 <div>'''+legend+'''</div><h2 id="overview">Одна общая схема</h2>
 <div class="tools"><button id="minus" aria-label="Уменьшить схему">−</button><button id="plus" aria-label="Увеличить схему">+</button><button id="fit">Вписать по ширине</button><button id="reset">Показать все провода</button><label>Провод <input id="find" placeholder="W028" size="7"></label><div id="selection" role="status" aria-live="polite">Выберите провод. Точка = соединение; пересечение без точки = не соединять.</div></div>
 <div class="canvas" id="drawing">'''+svg+'''</div>
@@ -207,7 +211,7 @@ page='''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewpor
 <h2 id="power">А · Питание с ползунком — крупно</h2><p>Основная V2 включается ползунком. Кнопки A/B — только для интерфейса. Старой схемы включения A+B здесь нет. На рисунке обе группы в ON; OFF переключает обе одновременно.</p><div class="detail">'''+switch+'''</div>
 <div class="danger"><b>⛔ Обе полоски D1/D2 смотрят к EN преобразователя.</b> GPIO7 не соединять с батарейным EN без D2. EN преобразователя — не RESET ESP32. При ON ветвь D1 держит питание при перезагрузке OTA; при OFF программа сохраняет SD через HOLD. Работу этого узла ещё нужно проверить на макете.</div>
 <h2 id="gps">Б · Ключ GPS — крупно</h2><div class="detail">'''+mosfet(True)+'''</div><p>Сначала подтвердить питание купленного GPS от 3,3 В. Если его входу нужны 5 В, не собирать нарисованную ветвь. Схема G/S/D не устанавливает номера контактов вашего переходника. GPS TX идёт в RX ESP32 (GPIO44), GPS RX — в TX ESP32 (GPIO43).</p>
-<h2 id="lcd">В · Подсветка LCD — крупно</h2><div class="detail">'''+mosfet()+'''</div><div class="danger"><b>⛔ Не подключать сток ключа ко всему VCC дисплея.</b> У LCD только четыре внешних контакта, штатного LED+ на колодке нет. Нужно найти внутреннюю LED-цепь и её ограничитель, затем отделить постоянное питание LED. Пока площадки неизвестны, это узел для проверки, а не инструкция резать конкретную дорожку.</div>
+<h2 id="lcd">В · Выбранный вариант: питание всего LCD</h2><div class="detail">'''+mosfet()+'''</div><div class="danger"><b>Выбор владельца: без вмешательства во внутренние дорожки LCD.</b> SYS_3V3 → S AO3401; D → штатный VCC дисплея; G через 10 кОм к GPIO14; 100 кОм между G и S. GND дисплея остаётся общим. SDA/SCL — общая шина с датчиками: допускаемость сигналов при VCC=0 ещё нужно подтвердить. Прошивка 0.1.32 не готова к такому монтажу: она выключает ключ до I2C-поиска дисплея и не выполняет повторный power-on init. Пунктир означает «не вводить в эксплуатацию до адаптации ПО и проверки I2C». Если потребуется изоляция SDA/SCL, это отдельная пока не выбранная цепь.</div>
 <h2 id="straps">Г · Адреса и кнопки</h2><div class="detail">'''+strap+'''</div>
 <h2>LED зарядки: проверка перед переносом</h2><ol><li>Без питания найти LED цепи CHRG и STDBY на конкретной плате. Не назначать их по названиям LED1/LED2.</li><li>Зафиксировать анод и катод каждой площадки. На внешнем LED короткая ножка/плоская грань часто означает катод, но проверить тестером.</li><li>Снять штатный LED, сохранить его резистор. Анод внешнего — к площадке анода, катод — к площадке катода. По два отдельных провода.</li><li>Не оставлять два LED параллельно. Катод возвращается на управляющую площадку зарядника, НЕ на общую землю. Проверить заряд и завершение при OFF прибора, а не просто наличие USB.</li></ol>
 <h2>Перед включением</h2><ol><li>Без батареи и USB проверить отсутствие короткого замыкания питания и правильность полярностей. Прозвонить два независимых контакта ползунка.</li><li>Проверить DC/DC отдельно: 3,3 В, затем EN от каждой ветви. Не снимать перемычку с модуля по чужому фото.</li><li>Подключать модули по очереди, проверяя питание и I2C. У MPU адрес 0x69; у RTC 0x68.</li><li>На тестовой SD проверить OFF посреди записи и следующий ON, затем reset при ON и OTA. Ошибка SD может оставить питание включённым.</li><li>USB ESP32 не считать безопасно развязанным от внешних 3,3 В: сначала проверить E11 в базе. Размеры и посадки модулей ещё нужно измерить.</li></ol>

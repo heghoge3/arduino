@@ -1185,15 +1185,31 @@
   },
   {
     "id": "W049",
-    "from": "pwr_right_790",
-    "fromLabel": "+3,3 В / SYS_3V3",
+    "from": "bl_d",
+    "fromLabel": "D AO3401 · LCD_VCC_SW",
     "to": "lcd_vcc",
     "toLabel": "VCC",
     "kind": "pwr",
-    "blocked": false,
+    "blocked": true,
     "points": [
       [
-        1330,
+        1960,
+        2440
+      ],
+      [
+        1990,
+        2440
+      ],
+      [
+        1990,
+        2500
+      ],
+      [
+        1490,
+        2500
+      ],
+      [
+        1490,
         790
       ],
       [
@@ -1201,7 +1217,7 @@
         790
       ]
     ],
-    "fromModule": "Общая шина +3,3 В / SYS_3V3",
+    "fromModule": "Ключ подсветки",
     "toModule": "Дисплей LCD"
   },
   {
@@ -1232,7 +1248,7 @@
     "to": "lcd_sda",
     "toLabel": "SDA",
     "kind": "sda",
-    "blocked": false,
+    "blocked": true,
     "points": [
       [
         1410,
@@ -1253,7 +1269,7 @@
     "to": "lcd_scl",
     "toLabel": "SCL",
     "kind": "scl",
-    "blocked": false,
+    "blocked": true,
     "points": [
       [
         1450,

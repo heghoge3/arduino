@@ -9,7 +9,9 @@
   "javascriptErrors": [],
   "pdf": "Chromium vector print; A1; 5 drawings",
   "networkAssertions": {
-    "powerGroundBranches": 8,
+    "directPowerBranches": 7,
+    "groundBranches": 8,
+    "lcdPowerFromMosfetDrainOnly": true,
     "i2cParticipants": 7,
     "separateBatteryMinusAndOutputMinus": true,
     "separateSupplyAndGround": true,
