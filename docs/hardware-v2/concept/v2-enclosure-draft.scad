@@ -1,8 +1,8 @@
-// V2 demonstration enclosure. Dimensions are in mm.
+// V2 enclosure with a flat, face-down printable lid. Dimensions are in mm.
 // Rectangular perfboard with direct-soldered pins above the battery.
 // Mounts, pin clearance, cutouts and board stock size are provisional.
 // Use stack to inspect the perfboard, battery and sensor bay separately.
-view = "assembled"; // [assembled,open,layout,stack,base,lid,clip_test]
+view = "assembled"; // [assembled,open,layout,stack,base,lid,print_set,clip_test]
 
 // Trial side openings for the photo-estimated 6–7 mm carabiner stock.
 integrated_clip = true;
@@ -187,12 +187,10 @@ module lid() {
                 translate([wall,wall,-eps])
                     rounded_plate(width-2*wall,length-2*wall,corner-wall,lid_depth-face+3*eps);
             }
-            // Front guard around the LCD. Only the perimeter contacts a flat surface.
-            centered_box(center,lcd_y,depth-eps,[54,31,1.3+eps]);
             for (x = [-1,1], y = [-1,1])
                 bore(center+x*lcd_hole_pitch[0]/2,lcd_y+y*lcd_hole_pitch[1]/2,lcd_back+1.6,5.2,depth-face-lcd_back-1.6+eps);
         }
-        centered_box(center,lcd_y,depth-face-eps,[lcd_active[0]+0.8,lcd_active[1]+0.8,face+1.3+2*eps]);
+        centered_box(center,lcd_y,depth-face-eps,[lcd_active[0]+0.8,lcd_active[1]+0.8,face+2*eps]);
         for (side = [-1,1]) {
             bore(center+side*button_offset,button_y,depth-face-eps,button_thread+0.4,face+2*eps);
             bore(center+side*4,led_y,depth-face-eps,led_diameter+0.25,face+2*eps);
@@ -258,7 +256,16 @@ module populated_perfboard() {
 
 if (view == "clip_test") clip_test();
 if (view == "base") base();
-if (view == "lid") translate([0,0,-(lcd_back+1.6)]) lid();
+// Keep the full flat outer face of the lid on the printer bed.
+module lid_on_bed() {
+    translate([0,length,depth]) rotate([180,0,0]) lid();
+}
+
+if (view == "lid") lid_on_bed();
+if (view == "print_set") {
+    base();
+    translate([width+10,0,0]) lid_on_bed();
+}
 if (view == "assembled" || view == "open" || view == "layout" || view == "stack") {
     color(case_color) base();
     side_hardware();
