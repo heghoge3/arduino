@@ -1,4 +1,4 @@
-// V2 enclosure concept, 12.11.2026. All dimensions in mm.
+// V2 enclosure concept, updated 16.11.2026. All dimensions in mm.
 // Select assembled, open, layout, base or lid in OpenSCAD Customizer.
 view = "assembled"; // [assembled,open,layout,base,lid]
 
@@ -25,21 +25,23 @@ slider_depth = 12;
 slider_handle = [5.5, 3.8, 5];
 slider_travel = 3.2;
 battery = [34, 50, 10];
-gps_antenna = [20, 6, 3]; // Z estimated
-converter = [26.6, 18.2, 6]; // Z estimated
 esp = [18, 23.5, 5.5]; // Z estimated
 rtc = [13.5, 13.6, 12]; // Z estimated
-gps = [16, 13.5, 5]; // Z estimated, larger outline from seller
+// Owner's 16.11 photo. Board envelopes exclude mounting hardware and wires.
+// Keep the seller's antenna footprint until the antenna body is measured in three axes.
+gps_antenna = [20, 6, 7]; // Z provisional, from the "height" annotation
+gps = [13, 15, 6];
+converter = [26, 16, 4]; // Rotated 90 degrees from the photo
+charger = [17, 27, 4];
+sd = [18, 18, 3];
+ina = [25, 21, 3];
+compass = [13, 15, 3];
+bme = [12, 15, 2]; // Rotated 90 degrees from the photo
 
 // Layout estimates. Replace these with measured envelopes, including leads.
 lcd_hole_pitch = [51, 39];
-carrier = [56, 45, 1.6];
-charger = [17, 20, 5];
-sd = [17, 18, 4];
-ina = [15, 17, 4.5];
+carrier = [61, 45, 1.6];
 mpu = [14, 15, 4];
-compass = [14, 12, 4];
-bme = [11, 13, 5];
 buzzer = [12, 12, 6];
 usb_cutout = [11, 4.8];
 led_diameter = 3;
@@ -102,8 +104,9 @@ module base() {
             lug();
             for (p = lid_screws) bore(p[0],p[1],floor-eps,8,split_z-floor+eps);
             // Closed partition in plan. Final membrane, wire feedthrough and seal follow measurements.
-            translate([wall-eps,21,floor-eps]) cube([20-wall+eps,2.2,split_z-floor+eps]);
-            translate([20,wall-eps,floor-eps]) cube([2.2,23.2-wall+eps,split_z-floor+eps]);
+            for (y = [11,30])
+                translate([wall-eps,y,floor-eps]) cube([20-wall+2*eps,2.2,split_z-floor+eps]);
+            translate([20,11,floor-eps]) cube([2.2,21.2,split_z-floor+eps]);
             // Carrier standoffs and two soft-pad zones under the battery.
             for (x = [10,width-10], y = [57,95]) bore(x,y,floor-eps,5,board_z-floor+eps);
             for (y = [10,48]) translate([26,y,floor-eps]) cube([30,4,1+eps]);
@@ -121,7 +124,7 @@ module base() {
             cube([wall+2*eps,slider_handle[0]+slider_travel+1,5]);
         for (y = [slider_y-slider_mount_pitch/2, slider_y+slider_mount_pitch/2])
             translate([width-wall-eps,y,slider_z]) rotate([0,90,0]) cylinder(d=2.2,h=wall+2*eps);
-        for (y = [9,13,17])
+        for (y = [16,21,26])
             translate([-eps,y,9]) rotate([0,90,0]) cylinder(d=2.3,h=wall+2*eps);
     }
 }
@@ -181,17 +184,17 @@ module inside() {
     color("Ivory") centered_box(60,52,7,[6,5,4]); // service access to battery JST
     color("SeaGreen") centered_box(center,77,board_z,carrier);
     color("RoyalBlue") {
-        centered_box(19,85,module_z,esp);
+        centered_box(15.5,86.5,module_z,esp);
         centered_box(37,90.5,module_z,gps);
-        centered_box(53,91.5,module_z,rtc);
-        centered_box(18,64,module_z,sd);
-        centered_box(36,63,module_z,ina);
-        centered_box(55,63,module_z,mpu);
-        centered_box(55,78.5,module_z,compass);
+        centered_box(53,92.5,module_z,rtc);
+        centered_box(15,64,module_z,sd);
+        centered_box(37.5,66,module_z,ina);
+        centered_box(58,62,module_z,mpu);
+        centered_box(57,77.5,module_z,compass);
         centered_box(usb_x,wall+charger[1]/2,usb_z-2,charger);
         centered_box(40,25,15,converter);
     }
-    color("Teal") centered_box(14,14,6,bme);
+    color("Teal") centered_box(13,21,6,bme);
     color("Black") centered_box(13,40,6,buzzer);
     color("Peru") centered_box(center,103,7,gps_antenna);
 }
