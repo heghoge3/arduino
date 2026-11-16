@@ -1,12 +1,12 @@
 from pathlib import Path
 import json,html,csv
 D=Path(__file__).resolve().parent
-C={'pwr':'#b83026','gnd':'#344054','sda':'#087e80','scl':'#355cbb','spi':'#7445ad','gps':'#25803e','io':'#b04b80','hold':'#b66b05','stop':'#bd2d29','led':'#986400'}
+C={'pwr':'#b83026','gnd':'#344054','sda':'#087e80','scl':'#355cbb','spi':'#7445ad','gps':'#25803e','io':'#b04b80','hold':'#b66b05','stop':'#bd2d29','led':'#986400','bat':'#a05308'}
 SIDE={};P={};boxes=[];labels=[];wires=[];junctions=[];records=[]
 def txt(x,y,s,size=18,fill='#1c293a',anchor='start'):
  return f'<text x="{x}" y="{y}" font-size="{size}" fill="{fill}" text-anchor="{anchor}">{html.escape(s)}</text>'
 def box(id,x,y,w,h,title,sub=''):
- boxes.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="9" fill="#fff" stroke="#7890a5" stroke-width="2"/>')
+ boxes.append(f'<rect data-module="{id}" x="{x}" y="{y}" width="{w}" height="{h}" rx="9" fill="#fff" stroke="#7890a5" stroke-width="2"/>')
  labels.append(txt(x+18,y+30,title,22));labels.append(txt(x+18,y+53,sub,14,'#5d6b7a'))
  return x,y,w,h
 def port(id,b,side,y,name,kind):
@@ -26,7 +26,7 @@ def wire(a,b,via=[],kind=None,blocked=False):
   labels.append(txt(x+(-12 if SIDE[a]=='L' else 12),y-12,n,13,color,'end' if SIDE[a]=='L' else 'start'))
  elif abs(x-xx)<1:
   labels.append(f'<text x="{x-9}" y="{(y+yy)/2}" font-size="13" fill="{color}" transform="rotate(-90 {x-9} {(y+yy)/2})">{n}</text>')
- records.append({'id':n,'from':a,'fromLabel':an,'to':b,'toLabel':bn,'kind':k,'blocked':blocked})
+ records.append({'id':n,'from':a,'fromLabel':an,'to':b,'toLabel':bn,'kind':k,'blocked':blocked,'points':pts})
 def tap(rail,y):
  x=rails[rail][0];key=f'{rail}_{y}'
  if key not in P:point(key,x,y,rails[rail][1],rail.split('_')[0])
@@ -38,38 +38,44 @@ for k,(x,name) in rails.items():
  point(k+'_top',x,start,name,k.split('_')[0]);point(k+'_bottom',x,2540,name,k.split('_')[0]);wire(k+'_top',k+'_bottom')
  labels.append(f'<text x="{x-8}" y="2630" font-size="14" fill="{C[k.split(chr(95))[0]]}" transform="rotate(-90 {x-8} 2630)">{html.escape(name)}</text>')
 b=box('bat',40,100,250,170,'Аккумулятор LiPo','1 ячейка; полярность проверить')
-port('bat+',b,'R',175,'CELL+ / плюс','pwr');port('bat-',b,'R',225,'CELL− / минус','gnd')
-b=box('tp',390,100,300,360,'TP4056 + защита','USB-C зарядки на самой плате')
-for id,side,y,name,k in [('b+','L',175,'B+','pwr'),('b-','L',225,'B−','gnd'),('out+','R',175,'OUT+','pwr'),('out-','R',225,'OUT−','gnd'),('ca','R',295,'LED CHRG: анод*','pwr'),('ck','R',335,'LED CHRG: катод*','led'),('sa','R',385,'LED STDBY: анод*','pwr'),('sk','R',425,'LED STDBY: катод*','led')]:port('tp_'+id,b,side,y,name,k)
+port('bat+',b,'R',175,'CELL+ · до 4,2 В','bat');port('bat-',b,'R',225,'CELL− / минус','gnd')
+b=box('tp',390,100,300,360,'TP4056 + защита','USB: вход 5 В; OUT+: батарея')
+for id,side,y,name,k in [('b+','L',175,'B+','bat'),('b-','L',225,'B−','gnd'),('out+','R',175,'OUT+ · до 4,2 В','bat'),('out-','R',225,'OUT−','gnd'),('ca','L',295,'LED CHRG: анод*','pwr'),('ck','L',335,'LED CHRG: катод*','led'),('sa','L',385,'LED STDBY: анод*','pwr'),('sk','L',425,'LED STDBY: катод*','led')]:port('tp_'+id,b,side,y,name,k)
 wire('bat+','tp_b+');wire('bat-','tp_b-')
 b=box('ina',790,100,300,360,'INA219','VIN± — силовые; VCC — логика')
-for id,side,y,name,k in [('in+','L',175,'VIN+','pwr'),('in-','R',175,'VIN−','pwr'),('vcc','L',295,'VCC','pwr'),('gnd','L',335,'GND','gnd'),('sda','L',385,'SDA','sda'),('scl','L',425,'SCL','scl')]:port('ina_'+id,b,side,y,name,k)
+for id,side,y,name,k in [('in+','L',175,'VIN+ · силовой вход','bat'),('in-','R',175,'VIN− · после шунта','bat'),('vcc','L',295,'VCC','pwr'),('gnd','L',335,'GND','gnd'),('sda','L',385,'SDA','sda'),('scl','L',425,'SCL','scl')]:port('ina_'+id,b,side,y,name,k)
 wire('tp_out+','ina_in+')
 b=box('dc',1690,100,280,300,'XL / TPS63020','Выход настроить на 3,3 В')
-for id,side,y,name,k in [('vin','L',180,'VIN','pwr'),('gnd','L',230,'GND','gnd'),('en','L',350,'EN преобразователя','hold'),('out','R',180,'OUT 3,3 В','pwr')]:port('dc_'+id,b,side,y,name,k)
+for id,side,y,name,k in [('vin','L',180,'VIN · от батареи','bat'),('gnd','L',230,'GND','gnd'),('en','L',350,'EN преобразователя','hold'),('out','R',180,'OUT 3,3 В','pwr')]:port('dc_'+id,b,side,y,name,k)
 wire('ina_in-','dc_vin',[(1130,175),(1130,70),(1640,70),(1640,180)])
 wire('dc_out','pwr_right_top',[(1990,180),(1990,590)])
 wire('pwr_right_top','pwr_left_top')
 wire('tp_out-','gnd_left_top',[(710,225),(710,630)])
 wire('gnd_left_top','gnd_right_top')
 wire(tap('gnd_right',630),'dc_gnd',[(1630,630),(1630,230)])
-b=box('p1',1200,100,380,390,'P1 · Узел ползунка','Подробно: схема А ниже')
-for id,side,y,name,k in [('bat','L',175,'От OUT+ зарядника','pwr'),('gnd','L',235,'GND / OUT−','gnd'),('sys','L',295,'+3,3 В','pwr'),('state','L',355,'К GPIO3','io'),('hold','L',415,'От GPIO7','hold'),('en','R',350,'К EN преобразователя','hold')]:port('p1_'+id,b,side,y,name,k)
-wire('tp_out+','p1_bat',[(730,175),(730,80),(1160,80),(1160,175)])
-wire('p1_en','dc_en')
-wire('p1_gnd',tap('gnd_right',630),[(1170,235),(1170,630)])
-wire('p1_sys',tap('pwr_right',590),[(1140,295),(1140,590)])
+p1a=box('p1a',1200,100,380,180,'P1A · S1A + диоды','Только разрешение EN; не питание 3,3 В')
+p1b=box('p1b',1200,310,380,180,'P1B · S1B + резисторы','Отдельная группа, только логика 3,3 В')
+port('p1_bat',p1a,'R',175,'S1A.COM · плюс АКБ','bat')
+port('p1_hold',p1a,'L',235,'GPIO7 → D2','hold')
+port('p1_en',p1a,'R',195,'Катоды D1/D2 → EN','hold')
+port('p1_sys',p1b,'L',385,'RSW/RB · +3,3 В','pwr')
+port('p1_state',p1b,'L',425,'S1B.COM → GPIO3','io')
+port('p1_gnd',p1b,'L',465,'S1B.OFF / резисторы → GND','gnd')
+wire('tp_out+','p1_bat',[(730,175),(730,500),(1605,500),(1605,175)])
+wire('p1_en','dc_en',[(1660,195),(1660,350)])
+wire('p1_gnd',tap('gnd_right',630),[(1180,465),(1180,630)])
+wire('p1_sys',tap('pwr_right',590),[(1155,385),(1155,590)])
 wire('ina_vcc',tap('pwr_left',590),[(750,295),(750,590)])
 wire('ina_gnd',tap('gnd_left',630),[(760,335),(760,630)])
-wire('ina_sda','sda_bus_top',[(770,385),(770,510),(1410,510)])
-wire('ina_scl','scl_bus_top',[(780,425),(780,550),(1450,550)])
+wire('ina_sda','sda_bus_top',[(770,385),(770,535),(1410,535)])
+wire('ina_scl','scl_bus_top',[(780,425),(780,565),(1450,565)])
 # Status LED wires: unknown pads shown as prohibited-to-solder pending identification.
 b=box('ch',40,420,250,160,'LED «Заряд»','Вместо штатного LED CHRG')
 port('ch_a',b,'R',495,'Анод +','pwr');port('ch_k',b,'R',550,'Катод K · не GND','led')
-wire('tp_ca','ch_a',[(715,295),(715,495)],blocked=True);wire('tp_ck','ch_k',[(725,335),(725,550)],blocked=True)
+wire('tp_ca','ch_a',[(350,295),(350,495)],blocked=True);wire('tp_ck','ch_k',[(370,335),(370,550)],blocked=True)
 b=box('ready',40,650,350,160,'LED «Готово»','Вместо штатного LED STDBY')
 port('rd_a',b,'R',720,'Анод +','pwr');port('rd_k',b,'R',775,'Катод K · не GND','led')
-wire('tp_sa','rd_a',[(735,385),(735,650),(530,650),(530,720)],blocked=True);wire('tp_sk','rd_k',[(745,425),(745,680),(550,680),(550,775)],blocked=True)
+wire('tp_sa','rd_a',[(330,385),(330,615),(410,615),(410,720)],blocked=True);wire('tp_sk','rd_k',[(310,425),(310,595),(430,595),(430,775)],blocked=True)
 # Central MCU: schematic terminals, never claim physical placement of pads.
 esp=box('esp',650,700,380,1770,'ESP32-S3-Zero','Условный вид; GPIO ≠ № ножки')
 for id,side,y,name,k in [('3v3','R',790,'3V3','pwr'),('gnd','R',840,'GND','gnd'),('sda','R',900,'GPIO8 · SDA','sda'),('scl','R',950,'GPIO9 · SCL','scl'),('cs','L',1010,'GPIO10 · CS','spi'),('mosi','L',1050,'GPIO11 · MOSI','spi'),('sck','L',1090,'GPIO12 · SCK','spi'),('miso','L',1130,'GPIO13 · MISO','spi'),('rx','L',1420,'GPIO44 · RX','gps'),('tx','L',1460,'GPIO43 · TX','gps'),('gps','L',1730,'GPIO6 · GPS ON=LOW','gps'),('a','L',1970,'GPIO1 · кнопка A','io'),('b','L',2130,'GPIO2 · кнопка B','io'),('buzz','L',2370,'GPIO5 · PWM','io'),('int','R',1790,'GPIO4 · MPU INT','io'),('sw','R',2030,'GPIO3 · положение','io'),('hold','R',2130,'GPIO7 · HOLD','hold'),('bl','R',2260,'GPIO14 · LED ON=LOW','io')]:port('esp_'+id,esp,side,y,name,k)
@@ -102,8 +108,8 @@ for key,title,sub,y in [('lcd','LCD GM12864-59N','4 контакта; I2C 0x3E /
  if key=='mpu':
   port('mpu_int',b,'L',1790,'INT · активный HIGH','io');wire('esp_int','mpu_int',[(1270,1790)])
  labels.append(txt(1550,y+229,{'lcd':'LED-подсветка: отдельно, схема В','rtc':'NC/SQW/32K к ESP не подключать','bme':'CSB и SDO: режим I2C, схема Г','mpu':'AD0 к VDDIO, не к 5 В; схема Г','mag':'SDA/SCL не менять местами'}[key],15,'#805316'))
-wire('esp_sw','p1_state',[(1145,2030),(1145,355)])
-wire('esp_hold','p1_hold',[(1105,2130),(1105,415)])
+wire('esp_sw','p1_state',[(1105,2030),(1105,425)])
+wire('esp_hold','p1_hold',[(1130,2130),(1130,235)])
 b=box('bl',1530,2290,430,180,'Ключ подсветки · схема В','! LED+ внутри LCD ещё не найден')
 for id,y,name,k in [('s',2360,'S · SYS_3V3','pwr'),('g',2410,'Через 10k к G · GPIO14','io')]:port('bl_'+id,b,'L',y,name,k)
 wire(tap('pwr_right',2360),'bl_s');wire('esp_bl','bl_g',[(1285,2260),(1285,2410)])
@@ -114,16 +120,16 @@ svg=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2040 2660" role="img"
 (D/'all-wires.svg').write_text(svg)
 (D/'wires.json').write_text(json.dumps(records,ensure_ascii=False,indent=2))
 with (D/'wires.csv').open('w',newline='') as f:
- w=csv.writer(f);w.writerow(['Провод','Откуда','Контакт','Куда','Контакт','Статус'])
+ w=csv.writer(f,lineterminator="\n");w.writerow(['Провод','Откуда','Контакт','Куда','Контакт','Статус'])
  for r in records:w.writerow([r['id'],r['from'],r['fromLabel'],r['to'],r['toLabel'],'СТОП: проверить' if r['blocked'] else 'По электрической базе; экземпляр проверить'])
 # Detailed supplementary circuits are literal SVG, never shared-wire block arrows.
 def detail(title,w,h,body):
  return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" role="img" aria-label="{title}"><style>text{{font-family:DejaVu Sans,Arial,sans-serif;font-size:18px}}.p{{stroke:#b83026}}.g{{stroke:#344054}}.h{{stroke:#b66b05}}.s{{stroke:#b04b80}}.p,.g,.h,.s{{fill:none;stroke-width:4;stroke-linejoin:round}}.r{{fill:white;stroke:#1c293a;stroke-width:2}}.t{{fill:#1c293a}}.warn{{fill:#bd2d29}}</style><rect width="100%" height="100%" fill="#fff"/>'+txt(30,35,title,25)+body+'</svg>'
 switch=detail('А · ПОЛЗУНОК: обе группы отдельно, каждый элемент виден',1100,1000,'''
 <text x="30" y="70" class="warn">МАКЕТ. COM/ON/OFF на реальном ползунке найти прозвонкой!</text>
-<text x="30" y="115">TP4056 OUT+</text><text x="30" y="140">(плюс батареи)</text><path class="p" d="M60 150H250"/>
+<text x="30" y="115">TP4056 OUT+</text><text x="30" y="140">(плюс батареи)</text><path class="bat" d="M60 150H250"/>
 <rect class="r" x="230" y="100" width="230" height="170"/><text x="255" y="125">S1A · группа 1</text>
-<path class="p" d="M250 150L430 160M430 160H510"/><circle cx="250" cy="150" r="6" fill="#b83026"/><circle cx="430" cy="160" r="6" fill="#b83026"/>
+<path class="bat" d="M250 150L430 160M430 160H510"/><circle cx="250" cy="150" r="6" fill="#b83026"/><circle cx="430" cy="160" r="6" fill="#b83026"/>
 <text x="250" y="185">COM</text><text x="385" y="145">ON</text><circle cx="430" cy="225" r="6" fill="white" stroke="#1c293a" stroke-width="2"/><text x="260" y="260" style="font-size:15px">OFF: не подключать</text>
 <path class="h" d="M510 160H550M583 160H860V380H1000"/><path d="M550 143L583 160L550 177Z" fill="white" stroke="#b66b05" stroke-width="3"/><path class="h" d="M583 138V182"/>
 <text x="515" y="105">D1 · 1N4148</text><text x="520" y="210">A</text><text x="580" y="210">K = полоска</text>
@@ -188,11 +194,11 @@ for r in records:
  r['fromModule']=human(r['from']);r['toModule']=human(r['to'])
 (D/'wires.json').write_text(json.dumps(records,ensure_ascii=False,indent=2))
 rows=''.join(f'<tr id="row-{r["id"]}" data-wire="{r["id"]}"><td><button data-pick="{r["id"]}">{r["id"]}</button></td><td>{html.escape(r["fromLabel"])}<br>{html.escape(r["fromModule"])}</td><td>{html.escape(r["toLabel"])}<br>{html.escape(r["toModule"])}</td><td>{"⛔ Сначала проверить" if r["blocked"] else "По базе; площадку сверить"}</td></tr>' for r in records)
-legend=''.join(f'<span class="pill" style="color:{C[k]}">{t}</span>' for k,t in [('pwr','Плюс питания'),('gnd','Минус / GND'),('sda','SDA'),('scl','SCL'),('spi','SD / SPI'),('gps','GPS / UART'),('io','Кнопки / сигналы'),('hold','EN / HOLD'),('led','Катод LED: не GND')])
+legend=''.join(f'<span class="pill" style="color:{C[k]}">{t}</span>' for k,t in [('bat','Батарея / до 4,2 В'),('pwr','Только +3,3 В'),('gnd','Минус / GND'),('sda','SDA'),('scl','SCL'),('spi','SD / SPI'),('gps','GPS / UART'),('io','Кнопки / сигналы'),('hold','EN / HOLD'),('led','Катод LED: не GND')])
 page='''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>V2 · Монтаж по одному проводу</title><style>'''+style+'''</style><main>
 <h1>V2 · Монтаж по одному проводу</h1><p>Каждый плюс, минус и сигнал нарисован отдельной линией. Нажмите провод или его номер в таблице — остальные станут бледными, а здесь появятся оба конца.</p>
 <p>Основа: <a href="../electrical-baseline.md">действующая электрическая база</a>, прошивка s3 0.1.32 / wiring2. Эта страница заменяет неудобные блок-схемы 15.11 как инструкцию чтения соединений. Не физическое размещение деталей и не готовая PCB.</p>
-<div class="danger"><b>⛔ Стоп перед пайкой.</b> Расположение контактов на рисунке условное: ищите написанное имя на своём модуле. Пунктир — соединение, которое ещё нельзя паять без проверки. Неизвестные точки LED LCD/TP4056 и драйвер пищалки не выдуманы.</div>
+<div class="danger"><b>Исправление r2: OUT+ TP4056 — батарея, не выход 5 В.</b> Коричневые линии до 4,2 В и красные линии 3,3 В разделены. P1A и P1B — разные группы, между их плюсами нет перемычки. 5 В подаются только на штатный USB-C зарядника.</div><div class="danger"><b>⛔ Стоп перед пайкой.</b> Расположение контактов на рисунке условное: ищите написанное имя на своём модуле. Пунктир — соединение, которое ещё нельзя паять без проверки. Неизвестные точки LED LCD/TP4056 и драйвер пищалки не выдуманы.</div>
 <nav><a href="#overview">Общая схема</a><a href="#power">А · Ползунок</a><a href="#gps">Б · Ключ GPS</a><a href="#lcd">В · Подсветка</a><a href="#straps">Г · Адреса/кнопки</a><a href="#wires">Все провода</a><a href="all-wires.svg" download>Скачать SVG</a><a href="wires.csv" download>Список CSV</a></nav>
 <div>'''+legend+'''</div><h2 id="overview">Одна общая схема</h2>
 <div class="tools"><button id="minus" aria-label="Уменьшить схему">−</button><button id="plus" aria-label="Увеличить схему">+</button><button id="fit">Вписать по ширине</button><button id="reset">Показать все провода</button><label>Провод <input id="find" placeholder="W028" size="7"></label><div id="selection" role="status" aria-live="polite">Выберите провод. Точка = соединение; пересечение без точки = не соединять.</div></div>
@@ -211,5 +217,5 @@ page='''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewpor
 print('Built',len(records),'separate wire paths;',len(P),'terminals/taps')
 # Human-facing wire list uses module names, not internal drawing identifiers.
 with (D/'wires.csv').open('w',newline='') as f:
- w=csv.writer(f);w.writerow(['Провод','Модуль откуда','Контакт откуда','Модуль куда','Контакт куда','Статус'])
+ w=csv.writer(f,lineterminator="\n");w.writerow(['Провод','Модуль откуда','Контакт откуда','Модуль куда','Контакт куда','Статус'])
  for r in records:w.writerow([r['id'],r['fromModule'],r['fromLabel'],r['toModule'],r['toLabel'],'СТОП: сначала проверить' if r['blocked'] else 'Сверить площадку по маркировке'])

@@ -7,6 +7,16 @@
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        450,
+        590
+      ],
+      [
+        450,
+        2540
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -18,6 +28,16 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        490,
+        630
+      ],
+      [
+        490,
+        2540
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -29,6 +49,16 @@
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1330,
+        590
+      ],
+      [
+        1330,
+        2540
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -40,6 +70,16 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1370,
+        630
+      ],
+      [
+        1370,
+        2540
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -51,6 +91,16 @@
     "toLabel": "SDA / GPIO8",
     "kind": "sda",
     "blocked": false,
+    "points": [
+      [
+        1410,
+        650
+      ],
+      [
+        1410,
+        2540
+      ]
+    ],
     "fromModule": "Общая шина SDA / GPIO8",
     "toModule": "Общая шина SDA / GPIO8"
   },
@@ -62,17 +112,37 @@
     "toLabel": "SCL / GPIO9",
     "kind": "scl",
     "blocked": false,
+    "points": [
+      [
+        1450,
+        670
+      ],
+      [
+        1450,
+        2540
+      ]
+    ],
     "fromModule": "Общая шина SCL / GPIO9",
     "toModule": "Общая шина SCL / GPIO9"
   },
   {
     "id": "W007",
     "from": "bat+",
-    "fromLabel": "CELL+ / плюс",
+    "fromLabel": "CELL+ · до 4,2 В",
     "to": "tp_b+",
     "toLabel": "B+",
-    "kind": "pwr",
+    "kind": "bat",
     "blocked": false,
+    "points": [
+      [
+        290,
+        175
+      ],
+      [
+        390,
+        175
+      ]
+    ],
     "fromModule": "bat+",
     "toModule": "TP4056"
   },
@@ -84,28 +154,74 @@
     "toLabel": "B−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        290,
+        225
+      ],
+      [
+        390,
+        225
+      ]
+    ],
     "fromModule": "bat-",
     "toModule": "TP4056"
   },
   {
     "id": "W009",
     "from": "tp_out+",
-    "fromLabel": "OUT+",
+    "fromLabel": "OUT+ · до 4,2 В",
     "to": "ina_in+",
-    "toLabel": "VIN+",
-    "kind": "pwr",
+    "toLabel": "VIN+ · силовой вход",
+    "kind": "bat",
     "blocked": false,
+    "points": [
+      [
+        690,
+        175
+      ],
+      [
+        790,
+        175
+      ]
+    ],
     "fromModule": "TP4056",
     "toModule": "INA219"
   },
   {
     "id": "W010",
     "from": "ina_in-",
-    "fromLabel": "VIN−",
+    "fromLabel": "VIN− · после шунта",
     "to": "dc_vin",
-    "toLabel": "VIN",
-    "kind": "pwr",
+    "toLabel": "VIN · от батареи",
+    "kind": "bat",
     "blocked": false,
+    "points": [
+      [
+        1090,
+        175
+      ],
+      [
+        1130,
+        175
+      ],
+      [
+        1130,
+        70
+      ],
+      [
+        1640,
+        70
+      ],
+      [
+        1640,
+        180
+      ],
+      [
+        1690,
+        180
+      ]
+    ],
     "fromModule": "INA219",
     "toModule": "Преобразователь"
   },
@@ -117,6 +233,24 @@
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1970,
+        180
+      ],
+      [
+        1990,
+        180
+      ],
+      [
+        1990,
+        590
+      ],
+      [
+        1330,
+        590
+      ]
+    ],
     "fromModule": "Преобразователь",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -128,6 +262,16 @@
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1330,
+        590
+      ],
+      [
+        450,
+        590
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -139,6 +283,24 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        690,
+        225
+      ],
+      [
+        710,
+        225
+      ],
+      [
+        710,
+        630
+      ],
+      [
+        490,
+        630
+      ]
+    ],
     "fromModule": "TP4056",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -150,6 +312,16 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        490,
+        630
+      ],
+      [
+        1370,
+        630
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -161,50 +333,148 @@
     "toLabel": "GND",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1370,
+        630
+      ],
+      [
+        1630,
+        630
+      ],
+      [
+        1630,
+        230
+      ],
+      [
+        1690,
+        230
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "Преобразователь"
   },
   {
     "id": "W016",
     "from": "tp_out+",
-    "fromLabel": "OUT+",
+    "fromLabel": "OUT+ · до 4,2 В",
     "to": "p1_bat",
-    "toLabel": "От OUT+ зарядника",
-    "kind": "pwr",
+    "toLabel": "S1A.COM · плюс АКБ",
+    "kind": "bat",
     "blocked": false,
+    "points": [
+      [
+        690,
+        175
+      ],
+      [
+        730,
+        175
+      ],
+      [
+        730,
+        500
+      ],
+      [
+        1605,
+        500
+      ],
+      [
+        1605,
+        175
+      ],
+      [
+        1580,
+        175
+      ]
+    ],
     "fromModule": "TP4056",
     "toModule": "Узел ползунка P1"
   },
   {
     "id": "W017",
     "from": "p1_en",
-    "fromLabel": "К EN преобразователя",
+    "fromLabel": "Катоды D1/D2 → EN",
     "to": "dc_en",
     "toLabel": "EN преобразователя",
     "kind": "hold",
     "blocked": false,
+    "points": [
+      [
+        1580,
+        195
+      ],
+      [
+        1660,
+        195
+      ],
+      [
+        1660,
+        350
+      ],
+      [
+        1690,
+        350
+      ]
+    ],
     "fromModule": "Узел ползунка P1",
     "toModule": "Преобразователь"
   },
   {
     "id": "W018",
     "from": "p1_gnd",
-    "fromLabel": "GND / OUT−",
+    "fromLabel": "S1B.OFF / резисторы → GND",
     "to": "gnd_right_630",
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1200,
+        465
+      ],
+      [
+        1180,
+        465
+      ],
+      [
+        1180,
+        630
+      ],
+      [
+        1370,
+        630
+      ]
+    ],
     "fromModule": "Узел ползунка P1",
     "toModule": "Общая шина GND / OUT−"
   },
   {
     "id": "W019",
     "from": "p1_sys",
-    "fromLabel": "+3,3 В",
+    "fromLabel": "RSW/RB · +3,3 В",
     "to": "pwr_right_590",
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1200,
+        385
+      ],
+      [
+        1155,
+        385
+      ],
+      [
+        1155,
+        590
+      ],
+      [
+        1330,
+        590
+      ]
+    ],
     "fromModule": "Узел ползунка P1",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -216,6 +486,24 @@
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        790,
+        295
+      ],
+      [
+        750,
+        295
+      ],
+      [
+        750,
+        590
+      ],
+      [
+        450,
+        590
+      ]
+    ],
     "fromModule": "INA219",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -227,6 +515,24 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        790,
+        335
+      ],
+      [
+        760,
+        335
+      ],
+      [
+        760,
+        630
+      ],
+      [
+        490,
+        630
+      ]
+    ],
     "fromModule": "INA219",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -238,6 +544,28 @@
     "toLabel": "SDA / GPIO8",
     "kind": "sda",
     "blocked": false,
+    "points": [
+      [
+        790,
+        385
+      ],
+      [
+        770,
+        385
+      ],
+      [
+        770,
+        535
+      ],
+      [
+        1410,
+        535
+      ],
+      [
+        1410,
+        650
+      ]
+    ],
     "fromModule": "INA219",
     "toModule": "Общая шина SDA / GPIO8"
   },
@@ -249,6 +577,28 @@
     "toLabel": "SCL / GPIO9",
     "kind": "scl",
     "blocked": false,
+    "points": [
+      [
+        790,
+        425
+      ],
+      [
+        780,
+        425
+      ],
+      [
+        780,
+        565
+      ],
+      [
+        1450,
+        565
+      ],
+      [
+        1450,
+        670
+      ]
+    ],
     "fromModule": "INA219",
     "toModule": "Общая шина SCL / GPIO9"
   },
@@ -260,6 +610,24 @@
     "toLabel": "Анод +",
     "kind": "pwr",
     "blocked": true,
+    "points": [
+      [
+        390,
+        295
+      ],
+      [
+        350,
+        295
+      ],
+      [
+        350,
+        495
+      ],
+      [
+        290,
+        495
+      ]
+    ],
     "fromModule": "TP4056",
     "toModule": "LED Заряд"
   },
@@ -271,6 +639,24 @@
     "toLabel": "Катод K · не GND",
     "kind": "led",
     "blocked": true,
+    "points": [
+      [
+        390,
+        335
+      ],
+      [
+        370,
+        335
+      ],
+      [
+        370,
+        550
+      ],
+      [
+        290,
+        550
+      ]
+    ],
     "fromModule": "TP4056",
     "toModule": "LED Заряд"
   },
@@ -282,6 +668,32 @@
     "toLabel": "Анод +",
     "kind": "pwr",
     "blocked": true,
+    "points": [
+      [
+        390,
+        385
+      ],
+      [
+        330,
+        385
+      ],
+      [
+        330,
+        615
+      ],
+      [
+        410,
+        615
+      ],
+      [
+        410,
+        720
+      ],
+      [
+        390,
+        720
+      ]
+    ],
     "fromModule": "TP4056",
     "toModule": "LED Готово"
   },
@@ -293,6 +705,32 @@
     "toLabel": "Катод K · не GND",
     "kind": "led",
     "blocked": true,
+    "points": [
+      [
+        390,
+        425
+      ],
+      [
+        310,
+        425
+      ],
+      [
+        310,
+        595
+      ],
+      [
+        430,
+        595
+      ],
+      [
+        430,
+        775
+      ],
+      [
+        390,
+        775
+      ]
+    ],
     "fromModule": "TP4056",
     "toModule": "LED Готово"
   },
@@ -304,6 +742,16 @@
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1030,
+        790
+      ],
+      [
+        1330,
+        790
+      ]
+    ],
     "fromModule": "ESP32",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -315,6 +763,16 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1030,
+        840
+      ],
+      [
+        1370,
+        840
+      ]
+    ],
     "fromModule": "ESP32",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -326,6 +784,16 @@
     "toLabel": "SDA / GPIO8",
     "kind": "sda",
     "blocked": false,
+    "points": [
+      [
+        1030,
+        900
+      ],
+      [
+        1410,
+        900
+      ]
+    ],
     "fromModule": "ESP32",
     "toModule": "Общая шина SDA / GPIO8"
   },
@@ -337,6 +805,16 @@
     "toLabel": "SCL / GPIO9",
     "kind": "scl",
     "blocked": false,
+    "points": [
+      [
+        1030,
+        950
+      ],
+      [
+        1450,
+        950
+      ]
+    ],
     "fromModule": "ESP32",
     "toModule": "Общая шина SCL / GPIO9"
   },
@@ -348,6 +826,16 @@
     "toLabel": "GPIO10 · CS",
     "kind": "spi",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1010
+      ],
+      [
+        650,
+        1010
+      ]
+    ],
     "fromModule": "SD-модуль",
     "toModule": "ESP32"
   },
@@ -359,6 +847,16 @@
     "toLabel": "GPIO11 · MOSI",
     "kind": "spi",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1050
+      ],
+      [
+        650,
+        1050
+      ]
+    ],
     "fromModule": "SD-модуль",
     "toModule": "ESP32"
   },
@@ -370,6 +868,16 @@
     "toLabel": "GPIO12 · SCK",
     "kind": "spi",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1090
+      ],
+      [
+        650,
+        1090
+      ]
+    ],
     "fromModule": "SD-модуль",
     "toModule": "ESP32"
   },
@@ -381,6 +889,16 @@
     "toLabel": "GPIO13 · MISO",
     "kind": "spi",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1130
+      ],
+      [
+        650,
+        1130
+      ]
+    ],
     "fromModule": "SD-модуль",
     "toModule": "ESP32"
   },
@@ -392,6 +910,16 @@
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        390,
+        930
+      ],
+      [
+        450,
+        930
+      ]
+    ],
     "fromModule": "SD-модуль",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -403,6 +931,16 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        390,
+        970
+      ],
+      [
+        490,
+        970
+      ]
+    ],
     "fromModule": "SD-модуль",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -414,6 +952,16 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1380
+      ],
+      [
+        490,
+        1380
+      ]
+    ],
     "fromModule": "GPS-модуль",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -425,6 +973,16 @@
     "toLabel": "GPIO44 · RX",
     "kind": "gps",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1420
+      ],
+      [
+        650,
+        1420
+      ]
+    ],
     "fromModule": "GPS-модуль",
     "toModule": "ESP32"
   },
@@ -436,6 +994,16 @@
     "toLabel": "GPIO43 · TX",
     "kind": "gps",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1460
+      ],
+      [
+        650,
+        1460
+      ]
+    ],
     "fromModule": "GPS-модуль",
     "toModule": "ESP32"
   },
@@ -447,6 +1015,16 @@
     "toLabel": "+3,3 В / SYS_3V3",
     "kind": "pwr",
     "blocked": true,
+    "points": [
+      [
+        390,
+        1640
+      ],
+      [
+        450,
+        1640
+      ]
+    ],
     "fromModule": "Ключ GPS",
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
@@ -458,6 +1036,24 @@
     "toLabel": "VCC · питание от ключа",
     "kind": "pwr",
     "blocked": true,
+    "points": [
+      [
+        390,
+        1680
+      ],
+      [
+        525,
+        1680
+      ],
+      [
+        525,
+        1340
+      ],
+      [
+        390,
+        1340
+      ]
+    ],
     "fromModule": "Ключ GPS",
     "toModule": "GPS-модуль"
   },
@@ -469,6 +1065,16 @@
     "toLabel": "GPIO6 · GPS ON=LOW",
     "kind": "gps",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1730
+      ],
+      [
+        650,
+        1730
+      ]
+    ],
     "fromModule": "Ключ GPS",
     "toModule": "ESP32"
   },
@@ -480,6 +1086,16 @@
     "toLabel": "GPIO1 · кнопка A",
     "kind": "io",
     "blocked": false,
+    "points": [
+      [
+        390,
+        1970
+      ],
+      [
+        650,
+        1970
+      ]
+    ],
     "fromModule": "Кнопка A",
     "toModule": "ESP32"
   },
@@ -491,6 +1107,16 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        390,
+        2010
+      ],
+      [
+        490,
+        2010
+      ]
+    ],
     "fromModule": "Кнопка A",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -502,6 +1128,16 @@
     "toLabel": "GPIO2 · кнопка B",
     "kind": "io",
     "blocked": false,
+    "points": [
+      [
+        390,
+        2130
+      ],
+      [
+        650,
+        2130
+      ]
+    ],
     "fromModule": "Кнопка B",
     "toModule": "ESP32"
   },
@@ -513,6 +1149,16 @@
     "toLabel": "GND / OUT−",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        390,
+        2170
+      ],
+      [
+        490,
+        2170
+      ]
+    ],
     "fromModule": "Кнопка B",
     "toModule": "Общая шина GND / OUT−"
   },
@@ -524,6 +1170,16 @@
     "toLabel": "GPIO5 · PWM",
     "kind": "io",
     "blocked": true,
+    "points": [
+      [
+        390,
+        2370
+      ],
+      [
+        650,
+        2370
+      ]
+    ],
     "fromModule": "Будущий драйвер пищалки",
     "toModule": "ESP32"
   },
@@ -535,6 +1191,16 @@
     "toLabel": "VCC",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1330,
+        790
+      ],
+      [
+        1530,
+        790
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "Дисплей LCD"
   },
@@ -546,6 +1212,16 @@
     "toLabel": "GND",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1370,
+        830
+      ],
+      [
+        1530,
+        830
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "Дисплей LCD"
   },
@@ -557,6 +1233,16 @@
     "toLabel": "SDA",
     "kind": "sda",
     "blocked": false,
+    "points": [
+      [
+        1410,
+        870
+      ],
+      [
+        1530,
+        870
+      ]
+    ],
     "fromModule": "Общая шина SDA / GPIO8",
     "toModule": "Дисплей LCD"
   },
@@ -568,6 +1254,16 @@
     "toLabel": "SCL",
     "kind": "scl",
     "blocked": false,
+    "points": [
+      [
+        1450,
+        910
+      ],
+      [
+        1530,
+        910
+      ]
+    ],
     "fromModule": "Общая шина SCL / GPIO9",
     "toModule": "Дисплей LCD"
   },
@@ -579,6 +1275,16 @@
     "toLabel": "VCC",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1330,
+        1060
+      ],
+      [
+        1530,
+        1060
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "Часы DS3231"
   },
@@ -590,6 +1296,16 @@
     "toLabel": "GND",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1370,
+        1100
+      ],
+      [
+        1530,
+        1100
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "Часы DS3231"
   },
@@ -601,6 +1317,16 @@
     "toLabel": "SDA",
     "kind": "sda",
     "blocked": false,
+    "points": [
+      [
+        1410,
+        1140
+      ],
+      [
+        1530,
+        1140
+      ]
+    ],
     "fromModule": "Общая шина SDA / GPIO8",
     "toModule": "Часы DS3231"
   },
@@ -612,6 +1338,16 @@
     "toLabel": "SCL",
     "kind": "scl",
     "blocked": false,
+    "points": [
+      [
+        1450,
+        1180
+      ],
+      [
+        1530,
+        1180
+      ]
+    ],
     "fromModule": "Общая шина SCL / GPIO9",
     "toModule": "Часы DS3231"
   },
@@ -623,6 +1359,16 @@
     "toLabel": "VCC",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1330,
+        1330
+      ],
+      [
+        1530,
+        1330
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "BME280"
   },
@@ -634,6 +1380,16 @@
     "toLabel": "GND",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1370,
+        1370
+      ],
+      [
+        1530,
+        1370
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "BME280"
   },
@@ -645,6 +1401,16 @@
     "toLabel": "SDA / SDI",
     "kind": "sda",
     "blocked": false,
+    "points": [
+      [
+        1410,
+        1410
+      ],
+      [
+        1530,
+        1410
+      ]
+    ],
     "fromModule": "Общая шина SDA / GPIO8",
     "toModule": "BME280"
   },
@@ -656,6 +1422,16 @@
     "toLabel": "SCL / SCK",
     "kind": "scl",
     "blocked": false,
+    "points": [
+      [
+        1450,
+        1450
+      ],
+      [
+        1530,
+        1450
+      ]
+    ],
     "fromModule": "Общая шина SCL / GPIO9",
     "toModule": "BME280"
   },
@@ -667,6 +1443,16 @@
     "toLabel": "VCC",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1330,
+        1600
+      ],
+      [
+        1530,
+        1600
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "MPU6050"
   },
@@ -678,6 +1464,16 @@
     "toLabel": "GND",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1370,
+        1640
+      ],
+      [
+        1530,
+        1640
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "MPU6050"
   },
@@ -689,6 +1485,16 @@
     "toLabel": "SDA",
     "kind": "sda",
     "blocked": false,
+    "points": [
+      [
+        1410,
+        1680
+      ],
+      [
+        1530,
+        1680
+      ]
+    ],
     "fromModule": "Общая шина SDA / GPIO8",
     "toModule": "MPU6050"
   },
@@ -700,6 +1506,16 @@
     "toLabel": "SCL",
     "kind": "scl",
     "blocked": false,
+    "points": [
+      [
+        1450,
+        1720
+      ],
+      [
+        1530,
+        1720
+      ]
+    ],
     "fromModule": "Общая шина SCL / GPIO9",
     "toModule": "MPU6050"
   },
@@ -711,6 +1527,20 @@
     "toLabel": "INT · активный HIGH",
     "kind": "io",
     "blocked": false,
+    "points": [
+      [
+        1030,
+        1790
+      ],
+      [
+        1270,
+        1790
+      ],
+      [
+        1530,
+        1790
+      ]
+    ],
     "fromModule": "ESP32",
     "toModule": "MPU6050"
   },
@@ -722,6 +1552,16 @@
     "toLabel": "VCC",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1330,
+        1970
+      ],
+      [
+        1530,
+        1970
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "Компас"
   },
@@ -733,6 +1573,16 @@
     "toLabel": "GND",
     "kind": "gnd",
     "blocked": false,
+    "points": [
+      [
+        1370,
+        2010
+      ],
+      [
+        1530,
+        2010
+      ]
+    ],
     "fromModule": "Общая шина GND / OUT−",
     "toModule": "Компас"
   },
@@ -744,6 +1594,16 @@
     "toLabel": "SDA",
     "kind": "sda",
     "blocked": false,
+    "points": [
+      [
+        1410,
+        2050
+      ],
+      [
+        1530,
+        2050
+      ]
+    ],
     "fromModule": "Общая шина SDA / GPIO8",
     "toModule": "Компас"
   },
@@ -755,6 +1615,16 @@
     "toLabel": "SCL",
     "kind": "scl",
     "blocked": false,
+    "points": [
+      [
+        1450,
+        2090
+      ],
+      [
+        1530,
+        2090
+      ]
+    ],
     "fromModule": "Общая шина SCL / GPIO9",
     "toModule": "Компас"
   },
@@ -763,9 +1633,27 @@
     "from": "esp_sw",
     "fromLabel": "GPIO3 · положение",
     "to": "p1_state",
-    "toLabel": "К GPIO3",
+    "toLabel": "S1B.COM → GPIO3",
     "kind": "io",
     "blocked": false,
+    "points": [
+      [
+        1030,
+        2030
+      ],
+      [
+        1105,
+        2030
+      ],
+      [
+        1105,
+        425
+      ],
+      [
+        1200,
+        425
+      ]
+    ],
     "fromModule": "ESP32",
     "toModule": "Узел ползунка P1"
   },
@@ -774,9 +1662,27 @@
     "from": "esp_hold",
     "fromLabel": "GPIO7 · HOLD",
     "to": "p1_hold",
-    "toLabel": "От GPIO7",
+    "toLabel": "GPIO7 → D2",
     "kind": "hold",
     "blocked": false,
+    "points": [
+      [
+        1030,
+        2130
+      ],
+      [
+        1130,
+        2130
+      ],
+      [
+        1130,
+        235
+      ],
+      [
+        1200,
+        235
+      ]
+    ],
     "fromModule": "ESP32",
     "toModule": "Узел ползунка P1"
   },
@@ -788,6 +1694,16 @@
     "toLabel": "S · SYS_3V3",
     "kind": "pwr",
     "blocked": false,
+    "points": [
+      [
+        1330,
+        2360
+      ],
+      [
+        1530,
+        2360
+      ]
+    ],
     "fromModule": "Общая шина +3,3 В / SYS_3V3",
     "toModule": "Ключ подсветки"
   },
@@ -799,6 +1715,24 @@
     "toLabel": "Через 10k к G · GPIO14",
     "kind": "io",
     "blocked": false,
+    "points": [
+      [
+        1030,
+        2260
+      ],
+      [
+        1285,
+        2260
+      ],
+      [
+        1285,
+        2410
+      ],
+      [
+        1530,
+        2410
+      ]
+    ],
     "fromModule": "ESP32",
     "toModule": "Ключ подсветки"
   }

@@ -68,3 +68,49 @@ print('73 wires; 8 power/ground branches; 7 SDA/SCL ports; polarity/isolation as
 report=json.loads((D/'checks.json').read_text())
 report['networkAssertions']={'powerGroundBranches':8,'i2cParticipants':7,'separateBatteryMinusAndOutputMinus':True,'separateSupplyAndGround':True,'separateSdaAndScl':True,'separateLedCathodesAndGround':True,'crossedGpsUart':True}
 (D/'checks.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+# Read the rendered SVG, not just the table: catch overlays that can look like a short.
+import re,xml.etree.ElementTree as ET
+ns={'s':'http://www.w3.org/2000/svg'};svg=ET.parse(D/'all-wires.svg')
+segments=[];terminals={}
+for g in svg.findall('.//s:g[@data-id]',ns):
+ r=next(x for x in rs if x['id']==g.attrib['data-id'])
+ pts=[tuple(map(float,p)) for p in re.findall(r'([\d.]+),([\d.]+)',g.find('s:path',ns).attrib['d'])]
+ assert pts==[tuple(p) for p in r['points']],r['id']
+ terminals[r['from']]=pts[0];terminals[r['to']]=pts[-1]
+ for a,b in zip(pts,pts[1:]):
+  assert a[0]==b[0] or a[1]==b[1],(r['id'],a,b)
+  segments.append((r['id'],find(r['from']),a,b))
+overlaps=[];near=[];touches=[]
+for i,(ida,na,a,b) in enumerate(segments):
+ for idb,nb,c,d in segments[i+1:]:
+  if na==nb:continue
+  for axis in [0,1]:
+   other=1-axis
+   if a[axis]==b[axis] and c[axis]==d[axis]:
+    length=min(max(a[other],b[other]),max(c[other],d[other]))-max(min(a[other],b[other]),min(c[other],d[other]))
+    distance=abs(a[axis]-c[axis])
+    if length>0 and distance==0:overlaps.append([ida,idb,length])
+    if length>0 and 0<distance<8:near.append([ida,idb,distance])
+ for name,pt in terminals.items():
+  if find(name)==na:continue
+  if (a[0]==b[0]==pt[0] and min(a[1],b[1])<=pt[1]<=max(a[1],b[1])) or (a[1]==b[1]==pt[1] and min(a[0],b[0])<=pt[0]<=max(a[0],b[0])):touches.append([ida,name])
+assert not overlaps,overlaps
+assert not near,near
+assert not touches,touches
+for a,b in [('tp_out+','esp_3v3'),('tp_out+','p1_sys'),('dc_vin','esp_3v3'),('p1_bat','p1_sys'),('p1_bat','esp_sw')]:assert find(a)!=find(b),(a,b)
+assert find('tp_out+')==find('ina_in+')==find('p1_bat')
+assert find('ina_in-')==find('dc_vin')
+report['geometryAudit']={'differentNetCollinearOverlaps':overlaps,'differentNetParallelDistanceBelow8':near,'wiresTouchingForeignTerminals':touches,'renderedSvgMatchesWireRecords':True,'batterySeparatedFrom3v3AndSwitchLogic':True}
+(D/'checks.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+print('Rendered SVG audit: no different-net overlaps, no parallel clearance below 8 units, no foreign terminal touches; battery isolated from 3.3V')
+
+bodyHits=[]
+for rect in svg.findall('.//s:rect[@data-module]',ns):
+ x,y,width,height=[float(rect.attrib[k]) for k in ['x','y','width','height']]
+ for wire,net,a,b in segments:
+  if a[0]==b[0] and x<a[0]<x+width and min(max(a[1],b[1]),y+height)>max(min(a[1],b[1]),y):bodyHits.append([wire,rect.attrib['data-module']])
+  if a[1]==b[1] and y<a[1]<y+height and min(max(a[0],b[0]),x+width)>max(min(a[0],b[0]),x):bodyHits.append([wire,rect.attrib['data-module']])
+assert not bodyHits,bodyHits
+report['geometryAudit']['wiresThroughModuleBodies']=bodyHits
+(D/'checks.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+print('No wire passes through a module body')

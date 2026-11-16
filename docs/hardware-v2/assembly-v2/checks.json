@@ -16,5 +16,13 @@
     "separateSdaAndScl": true,
     "separateLedCathodesAndGround": true,
     "crossedGpsUart": true
+  },
+  "geometryAudit": {
+    "differentNetCollinearOverlaps": [],
+    "differentNetParallelDistanceBelow8": [],
+    "wiresTouchingForeignTerminals": [],
+    "renderedSvgMatchesWireRecords": true,
+    "batterySeparatedFrom3v3AndSwitchLogic": true,
+    "wiresThroughModuleBodies": []
   }
 }
