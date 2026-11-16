@@ -2,9 +2,15 @@
 // Rectangular perfboard with direct-soldered pins above the battery.
 // Mounts, pin clearance, cutouts and board stock size are provisional.
 // Use stack to inspect the perfboard, battery and sensor bay separately.
-view = "assembled"; // [assembled,open,layout,stack,base,lid]
+view = "assembled"; // [assembled,open,layout,stack,base,lid,clip_test]
 
-// Outer envelope chosen for this concept. It excludes the lug and controls.
+// Trial side openings for the photo-estimated 6–7 mm carabiner stock.
+integrated_clip = true;
+clip_pocket = [21, 20];
+clip_opening_height = 9;
+clip_post_diameter = 10;
+
+// Outer envelope chosen for this concept. It excludes projecting controls.
 width = 72;
 length = 110;
 depth = 45;
@@ -76,6 +82,9 @@ module_z = board_top + module_pin_gap;
 usb_z = module_z + charger[2]/2;
 bme_bay_top = 15;
 bme_bay_cover = 1;
+bme_shift = integrated_clip ? 12 : 0;
+clip_roof = floor + clip_opening_height + wall;
+clip_post = lid_screws[0];
 lcd_back = depth - lcd[2];
 
 assert(width > lcd[0] + 2*wall, "LCD envelope exceeds case width");
@@ -84,6 +93,8 @@ assert(button_y + button_flange/2 < lcd_y - lcd[1]/2, "Button row overlaps LCD e
 assert(module_z + max(rtc[2], gps[2]) < lcd_back, "Upper modules reach the LCD");
 assert(board_z - solder_tail > battery_z + battery[2], "Solder tails reach the battery");
 assert(bme_bay_top + bme_bay_cover < board_z, "Sensor bay reaches the perfboard");
+assert(!integrated_clip || clip_roof < board_z - solder_tail, "Clip pocket roof reaches solder tails");
+assert(!integrated_clip || clip_pocket[1] + wall < 11 + bme_shift, "Clip wall reaches sensor bay");
 
 module rounded_plate(w, l, r, h) {
     hull() for (x = [r, w-r], y = [r, l-r])
@@ -109,6 +120,27 @@ module lug() {
     }
 }
 
+module clip_pocket_body() {
+    intersection() {
+        rounded_plate(width,length,corner,clip_roof);
+        cube([clip_pocket[0]+wall,clip_pocket[1]+wall,clip_roof]);
+    }
+}
+
+module clip_pocket_cut() {
+    difference() {
+        translate([-eps,-eps,floor]) cube([clip_pocket[0]+eps,clip_pocket[1]+eps,clip_opening_height]);
+        bore(clip_post[0],clip_post[1],floor-eps,clip_post_diameter,clip_opening_height+2*eps);
+    }
+}
+
+module clip_test() {
+    intersection() {
+        base();
+        cube([clip_pocket[0]+wall+3,clip_pocket[1]+wall+3,clip_roof]);
+    }
+}
+
 module base() {
     difference() {
         union() {
@@ -117,19 +149,21 @@ module base() {
                 translate([wall,wall,floor])
                     rounded_plate(width-2*wall,length-2*wall,corner-wall,split_z-floor+eps);
             }
-            lug();
+            if (integrated_clip) clip_pocket_body();
+            else lug();
             for (p = lid_screws) bore(p[0],p[1],floor-eps,8,split_z-floor+eps);
             // Low sensor bay below the perfboard. Feedthrough and lid seal are provisional.
-            for (y = [11,30])
+            for (y = [11+bme_shift,30+bme_shift])
                 translate([wall-eps,y,floor-eps]) cube([20-wall+2*eps,2.2,bme_bay_top-floor+eps]);
-            translate([20,11,floor-eps]) cube([2.2,21.2,bme_bay_top-floor+eps]);
+            translate([20,11+bme_shift,floor-eps]) cube([2.2,21.2,bme_bay_top-floor+eps]);
             // Perfboard standoffs and two soft-pad zones under the battery.
-            for (p = [[10,35], [width-10,15], [10,95], [width-10,95]])
+            for (p = [[10,integrated_clip ? 51 : 35], [width-10,15], [10,95], [width-10,95]])
                 bore(p[0],p[1],floor-eps,5,board_z-floor+eps);
             for (y = [10,48]) translate([26,y,floor-eps]) cube([30,4,1+eps]);
             // The charger is soldered to the perfboard but its front edge overhangs it.
             translate([usb_x-charger[0]/2,wall-eps,module_z-1]) cube([charger[0],5,1]);
         }
+        if (integrated_clip) clip_pocket_cut();
         for (p = lid_screws) bore(p[0],p[1],split_z-5,4.2,5+eps);
         translate([usb_x-usb_cutout[0]/2,-eps,usb_z-usb_cutout[1]/2])
             cube([usb_cutout[0],wall+2*eps,usb_cutout[1]]);
@@ -138,8 +172,8 @@ module base() {
             cube([wall+2*eps,slider_handle[0]+slider_travel+1,5]);
         for (y = [slider_y-slider_mount_pitch/2, slider_y+slider_mount_pitch/2])
             translate([width-wall-eps,y,slider_z]) rotate([0,90,0]) cylinder(d=2.2,h=wall+2*eps);
-        translate([20-eps,24,bme_bay_top-2]) cube([2.2+2*eps,4,2+eps]);
-        for (y = [16,21,26])
+        translate([20-eps,24+bme_shift,bme_bay_top-2]) cube([2.2+2*eps,4,2+eps]);
+        for (y = [16+bme_shift,21+bme_shift,26+bme_shift])
             translate([-eps,y,9]) rotate([0,90,0]) cylinder(d=2.3,h=wall+2*eps);
     }
 }
@@ -196,9 +230,9 @@ module side_hardware() {
 
 module sensor_and_battery() {
     color("SlateGray") centered_box(41,29,battery_z,battery);
-    color("Teal") centered_box(13,21,6,bme);
+    color("Teal") centered_box(13,21+bme_shift,6,bme);
     color("DarkOrange",0.45)
-        translate([wall,11,bme_bay_top]) cube([22.2-wall,21.2,bme_bay_cover]);
+        translate([wall,11+bme_shift,bme_bay_top]) cube([22.2-wall,21.2,bme_bay_cover]);
     color("Peru") centered_box(center,103,23,gps_antenna);
 }
 
@@ -216,12 +250,13 @@ module populated_perfboard() {
         centered_box(22,21.5,module_z,converter);
         centered_box(43,42.5,module_z,mpu);
     }
-    color("Black") bore(13,42,module_z,buzzer_diameter,buzzer_height);
+    color("Black") bore(13,45.5,module_z,buzzer_diameter,buzzer_height);
     for (i = [0,1])
-        color("Silver") bore(13+(i-0.5)*buzzer_pin_pitch,42,module_z-buzzer_pin_lengths[i],
+        color("Silver") bore(13+(i-0.5)*buzzer_pin_pitch,45.5,module_z-buzzer_pin_lengths[i],
                              buzzer_pin_diameter,buzzer_pin_lengths[i]);
 }
 
+if (view == "clip_test") clip_test();
 if (view == "base") base();
 if (view == "lid") translate([0,0,-(lcd_back+1.6)]) lid();
 if (view == "assembled" || view == "open" || view == "layout" || view == "stack") {
