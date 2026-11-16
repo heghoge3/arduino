@@ -31,7 +31,7 @@ USB ESP32 и SD доступны после открытия. Программн
 | [components.md](components.md) | Состав устройства и состояние проверки модулей |
 | [measurements.md](measurements.md) | Порядок замеров и статус геометрии |
 | [button-power-selection.md](button-power-selection.md) | История Gesture/A+B, прежний дозаказ через EN; не основной ползунок |
-| [charging-indication.md](charging-indication.md) | Два внешних LED зарядки; предложенное подключение, прежняя схема в истории |
+| [charging-indication.md](charging-indication.md) | Один двухцветный светодиод над USB-C и проверки подключения |
 | [power-review/README.md](power-review/README.md) | Проверка и симуляция запасного отдельного ключа, ограничения |
 | [journal.md](journal.md) | История решений и изменений |
 | [prototype-review.md](prototype-review.md) | Наблюдения по пяти фото альфа-прототипа |
