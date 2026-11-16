@@ -1726,7 +1726,7 @@ void setup() {
   Serial.begin(115200);
   g_bootMs = millis();
   dlog::begin();
-  if(!backlightOk)LOGW(M_PWR,"LCD backlight GPIO init failed; control disabled");
+  if(!backlightOk)LOGW(M_PWR,"LCD supply GPIO init failed; control disabled");
   if(POWER_SLIDER_BENCH)LOGW(M_PWR,"SLIDER_BENCH: USB only, virtual switch; no physical GPIO or OTA receiver");
 
   esp_sleep_wakeup_cause_t wake = esp_sleep_get_wakeup_cause();
@@ -1740,6 +1740,12 @@ void setup() {
 
   loadSettings();
   applySettings();
+  // Cold start / button wake needs a powered LCD before ANY shared-bus probe.
+  // Timer, motion and OFF-switch wake leave it unpowered: no night-time flashes.
+  const uint64_t displayWakeMask = (1ULL<<PIN_BTN_A) | (1ULL<<PIN_BTN_B);
+  const bool displayWake = cold || (wake==ESP_SLEEP_WAKEUP_EXT1 &&
+      (esp_sleep_get_ext1_wakeup_status() & displayWakeMask));
+  if(displayWake && backlight::set(true)) delay(LCD_POWER_SETTLE_MS);
   Wire.begin(PIN_SDA,PIN_SCL,100000);
   Wire.setTimeOut(50);
   bool rtcOk = clockx::begin(cold);

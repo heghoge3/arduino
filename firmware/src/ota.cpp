@@ -147,7 +147,7 @@ void earlyBoot(){
 void begin(){
  // Isolate OTA intent/commissioning/high-release from the incompatible wiring-1
  // proposal. Other NVS namespaces and the old OTA records are left untouched.
- layout=checkLayout();bool ok=prefs.begin("ota-v2-r2",false);commissioned=ok&&prefs.getBool("model1",false);
+ layout=checkLayout();bool ok=prefs.begin("ota-v2-r3",false);commissioned=ok&&prefs.getBool("model1",false);
  bool warm=esp_sleep_get_wakeup_cause()!=ESP_SLEEP_WAKEUP_UNDEFINED;
  bool cached=warm&&!trial&&cache.magic==0x4f544131&&cache.address==esp_ota_get_running_partition()->address&&
   cache.release==release&&cache.crc==crc32(reinterpret_cast<uint8_t*>(&cache),sizeof(cache)-4);

@@ -69,6 +69,7 @@ void setTemperatureOffset(int16_t hundredths);
 float seaLevel();
 
 bool i2cProbe(uint8_t addr);
+bool probeDisplay(); // Only probes while the LCD supply is logically ON.
 uint8_t displayAddress(); // 0 when absent or ambiguous (both 0x3E and 0x3F respond)
 
 // Процент заряда по напряжению Li-ion (в покое)

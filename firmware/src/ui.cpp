@@ -6,6 +6,7 @@
 
 #include "app.h"
 #include "backlight.h"
+#include "lcd_power.h"
 #include "clock.h"
 #include "config.h"
 #include "pins.h"
@@ -20,6 +21,21 @@ namespace {
 
 // Candidate ST7567 init profile; verify orientation/contrast/offset on GM12864-59N.
 U8G2_ST7567_JLX12864_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE);
+struct LcdBackend {
+  bool powered() { return backlight::on(); }
+  bool powerOn() { return backlight::set(true); }
+  void powerOff() { backlight::set(false); }
+  void settle() { delay(LCD_POWER_SETTLE_MS); }
+  uint8_t probe() { return sensors::probeDisplay() ? sensors::displayAddress() : 0; }
+  bool initialize(uint8_t address) {
+    oled.setI2CAddress(address<<1);
+    oled.setBusClock(100000);
+    if (!oled.begin()) return false;
+    oled.enableUTF8Print();
+    return true;
+  }
+} lcdBackend;
+lcdpower::Controller<LcdBackend> displayPower(lcdBackend);
 bool g_displayOk = false;
 bool g_screenOn = false;
 screeninput::Controls g_controls(SCREEN_ON_MS, BTN_DEBOUNCE_MS, BTN_LONG_MS);
@@ -206,20 +222,17 @@ void begin(bool coldBoot, int wakePin) {
   ledcAttachPin(PIN_BUZZER, 0);
 #endif
   led(0, 0, 0);  // встроенный WS2812 гасим сразу: он и выключенный ест ток — проверить замером
-  g_displayOk = sensors::presence().display;
-  if (g_displayOk) {
-    oled.setI2CAddress(sensors::displayAddress()<<1);
-    oled.setBusClock(100000);
-    oled.begin();
-    oled.enableUTF8Print();
-    oled.setPowerSave(1);
-  }
-  g_controls.begin(millis(), g_displayOk, wakePin == PIN_BTN_A ? Button::A_SHORT :
+  // Display is expected on V2 even if a boot-time probe was deliberately
+  // skipped (timer/motion wake), or a previous power-on attempt failed.
+  g_displayOk = false;
+  g_controls.begin(millis(), true, wakePin == PIN_BTN_A ? Button::A_SHORT :
                    (wakePin == PIN_BTN_B ? Button::B_SHORT : Button::NONE));
+  if (coldBoot) g_controls.show(millis());
   g_screenOn = g_controls.active();
   g_page=H.phase==hike::ACTIVE ? 0 : 4;
   g_menuRevision=H.revision;
-  if (g_screenOn) { oled.setPowerSave(0); draw(); }
+  if (g_screenOn) draw();
+  else displayPower.off();
   (void)coldBoot;
 }
 
@@ -232,8 +245,7 @@ Button poll(bool actionsBlocked) {
                                        digitalRead(PIN_BTN_B) == LOW, millis(), actionsBlocked);
   if (g_screenOn != g_controls.active()) {
     g_screenOn = g_controls.active();
-    if (!g_screenOn) backlight::set(false);
-    if (g_displayOk) oled.setPowerSave(g_screenOn ? 0 : 1);
+    if (!g_screenOn) displayPower.off();
     g_hikeMenu.reset(); g_shutdown=false; g_hikeError=false;
     if (g_screenOn) { g_page = H.phase==hike::ACTIVE ? 0 : 4; draw(); }
   }
@@ -290,10 +302,8 @@ void play(Sound s) {
 bool busy() { return g_pattern != nullptr; }
 
 void screenOn() {
-  if (!g_displayOk) return;
   if (!g_screenOn) {
     g_page = H.phase==hike::ACTIVE ? 0 : 4;
-    oled.setPowerSave(0);
   }
   g_screenOn = true;
   g_controls.show(millis());
@@ -313,7 +323,9 @@ void nextPage() {
 bool screenActive() { return g_screenOn; }
 
 void draw() {
-  if (!g_displayOk || !g_screenOn) return;
+  if (!g_screenOn) return;
+  g_displayOk = displayPower.ensureOn();
+  if (!g_displayOk) return;
   oled.clearBuffer();
   switch (g_page) {
     case 0: drawPage1(); break;
@@ -323,12 +335,12 @@ void draw() {
     default: drawHike(); break;
   }
   oled.sendBuffer();
-  backlight::set(true); // Light only after the initialized LCD has a frame.
+  // Supply was enabled and controller initialized before the first LCD command.
 }
 
 void splash(const char* line2) {
+  g_displayOk = displayPower.ensureOn();
   if (!g_displayOk) return;
-  oled.setPowerSave(0);
   oled.clearBuffer();
   oled.setFont(u8g2_font_10x20_t_cyrillic);
   oled.drawUTF8(14, 28, "vabuGEOde");
@@ -337,15 +349,14 @@ void splash(const char* line2) {
   oled.sendBuffer();
   g_screenOn = true;
   g_controls.show(millis());
-  backlight::set(true);
 }
 
 void sleep() {
-  backlight::sleep(); // Gate HIGH first, before LCD power-save / HOLD release.
+  displayPower.off(); // No I2C calls to LCD after the supply is removed.
+  backlight::sleep(); // Retain HIGH through deep sleep/reset.
   buzzer(false);
   led(0, 0, 0);
   g_pattern = nullptr;
-  if (g_displayOk) oled.setPowerSave(1);
   g_screenOn = false;
   g_controls.hide();
 }

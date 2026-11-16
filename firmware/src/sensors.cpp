@@ -8,6 +8,7 @@
 #include <math.h>
 
 #include "clock.h"
+#include "backlight.h"
 #include "dlog.h"
 #include "config.h"
 #include "pins.h"
@@ -19,8 +20,11 @@ namespace {
 
 constexpr uint8_t ADDR_INA = 0x40;
 constexpr uint8_t ADDR_MPU = 0x69; // V2: AD0 must be HIGH; 0x68 belongs exclusively to DS3231.
-uint8_t g_displayAddress=0;
+// Last known discovery survives timer/motion deep sleep. OFF is not evidence of
+// absence; a visible-screen request always performs a fresh powered probe.
+RTC_DATA_ATTR uint8_t g_displayAddress=0;
 bool detectDisplay() {
+  if (!backlight::on()) return g_displayAddress!=0; // No probe of an unpowered LCD.
   const bool a=i2cProbe(0x3E),b=i2cProbe(0x3F);
   g_displayAddress=(a!=b)?(a?0x3E:0x3F):0;
   return g_displayAddress!=0;
@@ -111,8 +115,10 @@ float fakeTemp() {
 }  // namespace
 
 uint8_t displayAddress() { return g_displayAddress; }
+bool probeDisplay() { g_pres.display=detectDisplay(); return g_pres.display; }
 
 bool i2cProbe(uint8_t addr) {
+  if ((addr==0x3e || addr==0x3f) && !backlight::on()) return false;
   Wire.beginTransmission(addr);
   return Wire.endTransmission() == 0;
 }

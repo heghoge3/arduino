@@ -2,9 +2,9 @@
 
 namespace lcdbacklight {
 
-// AO3401 high-side LED switch: gate LOW = ON, gate HIGH = OFF (3.3 V source).
+// AO3401 high-side LCD supply switch: gate LOW = ON, gate HIGH = OFF (3.3 V source).
 constexpr bool levelFor(bool on) { return !on; }
-// Output accepts logical ON/OFF, never LED power itself.
+// Output accepts logical ON/OFF, never LCD power itself.
 // prepareOff must preload HIGH before enabling output, including while RTC-held.
 template<class Output> class Driver {
  public:

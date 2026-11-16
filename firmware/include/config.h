@@ -6,7 +6,7 @@
 constexpr uint8_t FW_MAJOR = 0;
 constexpr uint8_t FW_MINOR = 1;
 #ifndef V2_FW_PATCH
-#define V2_FW_PATCH 32
+#define V2_FW_PATCH 33
 #endif
 constexpr uint8_t FW_PATCH = V2_FW_PATCH;
 
@@ -23,6 +23,9 @@ constexpr uint32_t BTN_DEBOUNCE_MS = 30;
 
 // Экран: любая кнопка будит; гаснет после бездействия. Запись продолжается.
 constexpr uint32_t SCREEN_ON_MS = 15000;
+// Conservative prototype interval, NOT a measured/published guarantee for the
+// purchased board. Verify rail ramp, POR and first I2C transaction on V2.
+constexpr uint32_t LCD_POWER_SETTLE_MS = 50;
 
 // Запись (по умолчанию; часть меняется командами с телефона и хранится в NVS)
 constexpr uint16_t DEF_LOG_MOVING_S = 10;

@@ -20,6 +20,7 @@ struct Output {
 lcdbacklight::Driver<Output> driver(output);
 }
 bool begin() { return driver.begin(); }
+bool on() { return driver.on(); }
 bool set(bool on) { return driver.set(on); }
 bool sleep() { return driver.sleep(); }
 }

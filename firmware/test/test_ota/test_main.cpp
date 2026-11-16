@@ -67,7 +67,7 @@ void timer_wrap_and_stale_session_cannot_commit(){
  TEST_ASSERT_EQUAL(SESSION,t.finish(5,f));TEST_ASSERT_FALSE(f.selected);
 }
 void other_backlight_wiring_rejected_before_erasing(){
- for(uint8_t revision : {uint8_t(1),uint8_t(3)}){
+ for(uint8_t revision : {uint8_t(1),uint8_t(2)}){
   Transfer t;Flash f;auto m=candidate();m.bytes[6]=revision;
   TEST_ASSERT_EQUAL(BAD,t.begin(10,m.bytes,MANIFEST,0x11d,0x11d,true,1,f));
   TEST_ASSERT_EQUAL(0,f.starts);TEST_ASSERT_FALSE(f.selected);
