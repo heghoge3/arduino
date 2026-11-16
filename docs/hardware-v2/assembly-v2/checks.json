@@ -1,0 +1,20 @@
+{
+  "wirePaths": 73,
+  "highlight": true,
+  "reset": true,
+  "viewportWidths": [
+    390,
+    1440
+  ],
+  "javascriptErrors": [],
+  "pdf": "Chromium vector print; A1; 5 drawings",
+  "networkAssertions": {
+    "powerGroundBranches": 8,
+    "i2cParticipants": 7,
+    "separateBatteryMinusAndOutputMinus": true,
+    "separateSupplyAndGround": true,
+    "separateSdaAndScl": true,
+    "separateLedCathodesAndGround": true,
+    "crossedGpsUart": true
+  }
+}

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 880" role="img" aria-label="Г · I2C: адреса, кнопки и недопустимые соединения"><style>text{font-family:DejaVu Sans,Arial,sans-serif;font-size:18px}.p{stroke:#b83026}.g{stroke:#344054}.h{stroke:#b66b05}.s{stroke:#b04b80}.p,.g,.h,.s{fill:none;stroke-width:4;stroke-linejoin:round}.r{fill:white;stroke:#1c293a;stroke-width:2}.t{fill:#1c293a}.warn{fill:#bd2d29}</style><rect width="100%" height="100%" fill="#fff"/><text x="30" y="35" font-size="25" fill="#1c293a" text-anchor="start">Г · I2C: адреса, кнопки и недопустимые соединения</text>
+<text x="35" y="95">DS3231 занимает адрес 0x68. MPU6050 должен быть 0x69!</text>
+<text x="35" y="145">Проверенная логическая VDDIO модуля MPU</text><path class="p" d="M60 180H650"/><text x="680" y="186">MPU: AD0</text>
+<text x="35" y="225" class="warn">Сначала проверить штатный резистор AD0 к земле. Не замкнуть питание.</text>
+<text x="35" y="295">BME280: CSB → подтверждённая VDDIO для I2C.</text>
+<path class="p" d="M60 330H650"/><text x="680" y="336">BME: CSB</text>
+<text x="35" y="390">BME SDO → GND для 0x76 ИЛИ VDDIO для 0x77. Выбрать ОДНО.</text>
+<text x="35" y="435">Не добавлять перемычку поверх неизвестной заводской обвязки.</text>
+<text x="35" y="505">Кнопка A: GPIO1 ─── контакт / контакт ─── GND</text>
+<text x="35" y="545">Кнопка B: GPIO2 ─── контакт / контакт ─── GND</text>
+<text x="35" y="585">Нажато = LOW. Входы подтянуты программой. К батарее НЕ подключать.</text>
+<text x="35" y="665" class="warn">GND нагрузки = TP4056 OUT−. Не соединять OUT− с B− перемычкой.</text>
+<text x="35" y="710" class="warn">5V USB ESP32 не соединять с OUT+, LiPo или SYS_3V3.</text>
+<text x="35" y="755">Плюс и минус никогда не являются одним проводом.</text>
+<text x="35" y="805">Общий цвет — тип сигнала. Соединение есть только по точке/одинаковому имени сети.</text>
+</svg>

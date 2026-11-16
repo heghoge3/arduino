@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1000" role="img" aria-label="А · ПОЛЗУНОК: обе группы отдельно, каждый элемент виден"><style>text{font-family:DejaVu Sans,Arial,sans-serif;font-size:18px}.p{stroke:#b83026}.g{stroke:#344054}.h{stroke:#b66b05}.s{stroke:#b04b80}.p,.g,.h,.s{fill:none;stroke-width:4;stroke-linejoin:round}.r{fill:white;stroke:#1c293a;stroke-width:2}.t{fill:#1c293a}.warn{fill:#bd2d29}</style><rect width="100%" height="100%" fill="#fff"/><text x="30" y="35" font-size="25" fill="#1c293a" text-anchor="start">А · ПОЛЗУНОК: обе группы отдельно, каждый элемент виден</text>
+<text x="30" y="70" class="warn">МАКЕТ. COM/ON/OFF на реальном ползунке найти прозвонкой!</text>
+<text x="30" y="115">TP4056 OUT+</text><text x="30" y="140">(плюс батареи)</text><path class="p" d="M60 150H250"/>
+<rect class="r" x="230" y="100" width="230" height="170"/><text x="255" y="125">S1A · группа 1</text>
+<path class="p" d="M250 150L430 160M430 160H510"/><circle cx="250" cy="150" r="6" fill="#b83026"/><circle cx="430" cy="160" r="6" fill="#b83026"/>
+<text x="250" y="185">COM</text><text x="385" y="145">ON</text><circle cx="430" cy="225" r="6" fill="white" stroke="#1c293a" stroke-width="2"/><text x="260" y="260" style="font-size:15px">OFF: не подключать</text>
+<path class="h" d="M510 160H550M583 160H860V380H1000"/><path d="M550 143L583 160L550 177Z" fill="white" stroke="#b66b05" stroke-width="3"/><path class="h" d="M583 138V182"/>
+<text x="515" y="105">D1 · 1N4148</text><text x="520" y="210">A</text><text x="580" y="210">K = полоска</text>
+<text x="30" y="330">ESP32 GPIO7 · HOLD</text><path class="h" d="M60 380H550M583 380H860"/><path d="M550 363L583 380L550 397Z" fill="white" stroke="#b66b05" stroke-width="3"/><path class="h" d="M583 358V402"/>
+<text x="515" y="325">D2 · 1N4148</text><text x="520" y="430">A</text><text x="580" y="430">K = полоска</text>
+<circle cx="860" cy="380" r="7" fill="#b66b05"/><text x="900" y="355">EN DC/DC</text>
+<path class="h" d="M860 380V470"/><rect class="r" x="843" y="470" width="34" height="70"/><text x="900" y="500">REN 100 кОм</text><path class="g" d="M860 540V580H950"/><text x="955" y="586">GND</text>
+<text x="30" y="610">SYS_3V3 · +3,3 В</text><path class="p" d="M60 650H170"/><rect class="r" x="170" y="633" width="110" height="34"/><text x="155" y="705">RSW 10 кОм</text>
+<path class="s" d="M280 650H460V800M460 650H770"/><circle cx="460" cy="650" r="6" fill="#b04b80"/><text x="560" y="635">ESP32 GPIO3</text>
+<rect class="r" x="430" y="745" width="300" height="175"/><text x="450" y="775">S1B · группа 2</text><path class="s" d="M460 800L690 810"/><circle cx="460" cy="800" r="6" fill="#b04b80"/><text x="475" y="835">COM</text>
+<circle cx="690" cy="810" r="6" fill="white" stroke="#1c293a" stroke-width="2"/><text x="475" y="865">ON: не подключать</text>
+<circle cx="690" cy="895" r="6" fill="#344054"/><path class="g" d="M690 895H790V950H950"/><text x="540" y="910">OFF</text><text x="960" y="957">GND</text>
+<text x="30" y="965">Один ползунок переключает S1A и S1B вместе. Группы электрически НЕ соединять.</text>
+<path class="p" d="M900 660V735"/><text x="850" y="640">SYS_3V3</text><rect class="r" x="883" y="735" width="34" height="70"/><text x="935" y="770">RB 100 кОм</text><path class="g" d="M900 805V850H1010"/><text x="1010" y="857">GND</text>
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 850" role="img" aria-label="Б · КЛЮЧ GPS: LOW включает питание"><style>text{font-family:DejaVu Sans,Arial,sans-serif;font-size:18px}.p{stroke:#b83026}.g{stroke:#344054}.h{stroke:#b66b05}.s{stroke:#b04b80}.p,.g,.h,.s{fill:none;stroke-width:4;stroke-linejoin:round}.r{fill:white;stroke:#1c293a;stroke-width:2}.t{fill:#1c293a}.warn{fill:#bd2d29}</style><rect width="100%" height="100%" fill="#fff"/><text x="30" y="35" font-size="25" fill="#1c293a" text-anchor="start">Б · КЛЮЧ GPS: LOW включает питание</text>
+<text x="30" y="75" class="warn">GPS должен допускать питание 3,3 В. До проверки E13 ветвь НЕ паять.</text>
+<text x="465" y="115">SYS_3V3 · +3,3 В</text><path class="p" d="M550 130V250M550 170H360V220"/><circle cx="550" cy="170" r="6" fill="#b83026"/>
+<rect class="r" x="450" y="250" width="200" height="180"/><text x="475" y="295">AO3401</text><text x="565" y="275">S · исток</text><text x="465" y="330">G · затвор</text><text x="565" y="415">D · сток</text>
+<rect class="r" x="345" y="220" width="30" height="70"/><text x="80" y="245">RPU: номинал уточнить</text><path class="s" d="M360 290V340"/><path class="s" d="M60 340H450"/><circle cx="360" cy="340" r="6" fill="#b04b80"/>
+<text x="30" y="315">GPIO6</text>
+<path class="p" d="M550 430V530"/><text x="575" y="485">GPS_PWR</text>
+<rect class="r" x="400" y="530" width="380" height="180"/>
+<text x="425" y="570">GPS: VCC</text>
+<text x="425" y="610">3,3 В только после проверки!</text>
+<text x="425" y="660">GPS: GND</text>
+<path class="g" d="M550 710V770H800"/><text x="815" y="778">GND</text>
+<text x="30" y="815">В V1 между G и S было 10 кОм; для V2 значение пока не утверждено.</text>
+<text x="690" y="210" class="warn">Не перепутать S и D!</text>
+<text x="690" y="245">Ножки переходника</text><text x="690" y="275">определить прозвонкой.</text>
+</svg>
