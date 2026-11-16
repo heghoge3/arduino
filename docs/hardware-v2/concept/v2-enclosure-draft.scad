@@ -25,7 +25,7 @@ slider_depth = 12;
 slider_handle = [5.5, 3.8, 5];
 slider_travel = 3.2;
 battery = [34, 50, 10];
-esp = [18, 23.5, 5.5]; // Z estimated
+esp = [18, 24, 4]; // XY from listing, height from owner. USB plug excluded.
 rtc = [13.5, 13.6, 12]; // Z estimated
 // Owner's 16.11 photo. Board envelopes exclude mounting hardware and wires.
 // Antenna assembly is 115 mm end to end, including cable; routing is TBD.
