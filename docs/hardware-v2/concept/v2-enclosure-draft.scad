@@ -1,4 +1,5 @@
-// V2 enclosure concept, updated 16.11.2026. All dimensions in mm.
+// V2 demonstration enclosure. Dimensions are in mm.
+// Mounts and openings are provisional until the hardware is fitted.
 // Select assembled, open, layout, base or lid in OpenSCAD Customizer.
 view = "assembled"; // [assembled,open,layout,base,lid]
 
@@ -90,7 +91,8 @@ module bore(x, y, z, d, h) {
 module lug() {
     difference() {
         hull() {
-            translate([center-13,length-5,0]) cube([26,7,9]);
+            // Anchor to the rear wall while keeping the antenna cavity clear.
+            translate([center-13,length-wall-eps,0]) cube([26,wall+2+eps,9]);
             bore(center,length+8,0,23,9);
         }
         bore(center,length+8,-eps,13,9+2*eps);
@@ -117,7 +119,7 @@ module base() {
             // The converter bridge clears the battery; the USB module has its own ledge.
             translate([22,30,floor-eps]) cube([2,4,12+eps]);
             translate([59,30,floor-eps]) cube([2,4,12+eps]);
-            translate([22,30,14]) cube([39,4,1]);
+            translate([22,30,14]) cube([39,4,1+eps]);
             translate([40.5,wall-eps,21]) cube([17,5,1]);
         }
         for (p = lid_screws) bore(p[0],p[1],split_z-5,4.2,5+eps);
@@ -208,7 +210,7 @@ module inside() {
 }
 
 if (view == "base") base();
-if (view == "lid") translate([0,0,-split_z]) lid();
+if (view == "lid") translate([0,0,-(lcd_back+1.6)]) lid();
 if (view == "assembled" || view == "open" || view == "layout") {
     color(case_color) base();
     side_hardware();
@@ -218,7 +220,7 @@ if (view == "assembled" || view == "open" || view == "layout") {
         front_hardware();
     }
     if (view == "open") translate([width+14,0,0]) {
-        color(case_color,0.62) lid();
+        color(case_color) lid();
         front_hardware();
     }
 }
