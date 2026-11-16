@@ -58,7 +58,9 @@ buzzer_pin_pitch = 7.6;
 buzzer_pin_diameter = 0.6;
 buzzer_pin_lengths = [5.5, 4]; // Nominal lengths from drawing.
 usb_cutout = [11, 4.8];
-led_diameter = 3;
+charge_led_diameter = 3; // Trial LED body; confirm against the actual part.
+charge_led_hole_clearance = 0.25;
+charge_led_above_usb = 7.5;
 
 /* [Hidden] */
 $fn = 48;
@@ -72,7 +74,6 @@ button_offset = 16;
 slider_y = 44;
 slider_z = 11.5; // Slider body clears the bottom of the perfboard.
 usb_x = center + 13;
-led_y = 17;
 lid_screws = [[6.5, 6.5], [width-6.5, 6.5], [6.5, length-6.5], [width-6.5, length-6.5]];
 board_z = 17;
 board_y = 55;
@@ -80,6 +81,8 @@ battery_z = 4;
 board_top = board_z + carrier[2];
 module_z = board_top + module_pin_gap;
 usb_z = module_z + charger[2]/2;
+charge_led_z = usb_z + charge_led_above_usb;
+charge_led_hole = charge_led_diameter + charge_led_hole_clearance;
 bme_bay_top = 15;
 bme_bay_cover = 1;
 bme_shift = integrated_clip ? 12 : 0;
@@ -94,6 +97,8 @@ assert(module_z + max(rtc[2], gps[2]) < lcd_back, "Upper modules reach the LCD")
 assert(board_z - solder_tail > battery_z + battery[2], "Solder tails reach the battery");
 assert(bme_bay_top + bme_bay_cover < board_z, "Sensor bay reaches the perfboard");
 assert(!integrated_clip || clip_roof < board_z - solder_tail, "Clip pocket roof reaches solder tails");
+assert(charge_led_z - charge_led_hole/2 > usb_z + usb_cutout[1]/2 + wall, "Charge LED is too close to USB-C");
+assert(charge_led_z + charge_led_hole/2 < split_z - wall, "Charge LED reaches the lid seam");
 assert(!integrated_clip || clip_pocket[1] + wall < 11 + bme_shift, "Clip wall reaches sensor bay");
 
 module rounded_plate(w, l, r, h) {
@@ -167,6 +172,8 @@ module base() {
         for (p = lid_screws) bore(p[0],p[1],split_z-5,4.2,5+eps);
         translate([usb_x-usb_cutout[0]/2,-eps,usb_z-usb_cutout[1]/2])
             cube([usb_cutout[0],wall+2*eps,usb_cutout[1]]);
+        translate([usb_x,wall+eps,charge_led_z]) rotate([90,0,0])
+            cylinder(d=charge_led_hole,h=wall+2*eps);
         // Slider travel slot and two panel mounting pilots along the right wall.
         translate([width-wall-eps,slider_y-(slider_handle[0]+slider_travel+1)/2,slider_z-2.5])
             cube([wall+2*eps,slider_handle[0]+slider_travel+1,5]);
@@ -191,10 +198,8 @@ module lid() {
                 bore(center+x*lcd_hole_pitch[0]/2,lcd_y+y*lcd_hole_pitch[1]/2,lcd_back+1.6,5.2,depth-face-lcd_back-1.6+eps);
         }
         centered_box(center,lcd_y,depth-face-eps,[lcd_active[0]+0.8,lcd_active[1]+0.8,face+2*eps]);
-        for (side = [-1,1]) {
+        for (side = [-1,1])
             bore(center+side*button_offset,button_y,depth-face-eps,button_thread+0.4,face+2*eps);
-            bore(center+side*4,led_y,depth-face-eps,led_diameter+0.25,face+2*eps);
-        }
         for (p = lid_screws) {
             bore(p[0],p[1],depth-face-eps,3.3,face+2*eps);
             bore(p[0],p[1],depth-1.2,5.8,1.2+eps);
@@ -214,7 +219,6 @@ module front_hardware() {
     for (side = [-1,1]) {
         color("Silver") bore(center+side*button_offset,button_y,depth-button_depth,button_thread-0.1,button_depth);
         color("Silver") bore(center+side*button_offset,button_y,depth,button_flange,1.6);
-        color(side<0 ? "FireBrick" : "ForestGreen") bore(center+side*4,led_y,depth-1,led_diameter,2.3);
     }
 }
 
@@ -224,6 +228,8 @@ module side_hardware() {
     color("Black") translate([width-wall,slider_y-slider_handle[0]/2,slider_z-slider_handle[1]/2])
         cube([wall+slider_handle[2],slider_handle[0],slider_handle[1]]);
     color("SlateGray") centered_box(usb_x,1.4,usb_z-1.6,[9,2.4,3.2]);
+    color("FireBrick") translate([usb_x,wall,charge_led_z]) rotate([90,0,0])
+        cylinder(d=charge_led_diameter,h=wall+0.9);
 }
 
 module sensor_and_battery() {
