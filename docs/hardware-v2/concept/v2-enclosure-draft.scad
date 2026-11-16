@@ -28,8 +28,8 @@ battery = [34, 50, 10];
 esp = [18, 23.5, 5.5]; // Z estimated
 rtc = [13.5, 13.6, 12]; // Z estimated
 // Owner's 16.11 photo. Board envelopes exclude mounting hardware and wires.
-// Keep the seller's antenna footprint until the antenna body is measured in three axes.
-gps_antenna = [20, 6, 7]; // Z provisional, from the "height" annotation
+// Antenna assembly is 115 mm end to end, including cable; routing is TBD.
+gps_antenna = [18, 6, 7];
 gps = [13, 15, 6];
 converter = [26, 16, 4]; // Rotated 90 degrees from the photo
 charger = [17, 27, 4];
