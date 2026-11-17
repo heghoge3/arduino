@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 850" role="img" aria-label="Е · Утверждённый драйвер пассивного зуммера"><style>text{font-family:DejaVu Sans,Arial,sans-serif;font-size:18px}.p{stroke:#b83026}.g{stroke:#344054}.h{stroke:#b66b05}.s{stroke:#b04b80}.p,.g,.h,.s{fill:none;stroke-width:4;stroke-linejoin:round}.r{fill:white;stroke:#1c293a;stroke-width:2}.t{fill:#1c293a}.warn{fill:#bd2d29}</style><rect width="100%" height="100%" fill="#fff"/><text x="30" y="35" font-size="25" fill="#1c293a" text-anchor="start">Е · Утверждённый драйвер пассивного зуммера</text>
+<text x="30" y="75">Diotec 2N2222A: E=1, B=2, C=3. Физическая ориентация — по паспорту Diotec.</text>
+<text x="30" y="115">SYS_3V3</text><path class="p" d="M150 100H900"/>
+<path class="p" d="M500 100V145"/><rect class="r" x="480" y="145" width="40" height="80"/>
+<text x="540" y="165">Зуммер 12085 / 42R</text><text x="455" y="140">+</text>
+<text x="455" y="245">−</text><path class="h" d="M500 225V380"/>
+<path class="h" d="M500 300H800V235"/>
+<path class="h" d="M780 235L800 195L820 235Z M780 190H820"/>
+<path class="p" d="M800 190V100"/>
+<text x="835" y="210">D3 · 1N4148</text><text x="835" y="245">Полоска к +3,3 В</text>
+<text x="30" y="425">GPIO5 · PWM</text><path class="s" d="M40 450H220"/>
+<rect class="r" x="220" y="435" width="70" height="30"/>
+<text x="195" y="405">R7 220 Ом</text><text x="200" y="490">0,25 Вт</text><path class="s" d="M290 450H440"/>
+<path class="g" d="M440 410V490 M440 425L500 380 M440 475L500 525V650"/>
+<path class="g" d="M468 487L481 510L457 502"/>
+<text x="405" y="395">B2</text><text x="525" y="375">C3</text><text x="525" y="550">E1</text>
+<text x="570" y="440">Q3 · Diotec 2N2222A</text><text x="570" y="475">TO-92 Formed Leads</text>
+<path class="s" d="M360 450V530"/><rect class="r" x="345" y="530" width="30" height="65"/>
+<path class="g" d="M360 595V650 M150 650H900"/>
+<text x="155" y="565">R8 100 кОм</text><text x="155" y="600">0,25 Вт</text><text x="30" y="655">GND_SYS</text>
+<circle cx="500" cy="100" r="5"/><circle cx="800" cy="100" r="5"/>
+<circle cx="500" cy="300" r="5"/><circle cx="360" cy="450" r="5"/>
+<circle cx="360" cy="650" r="5"/><circle cx="500" cy="650" r="5"/>
+<text x="30" y="710" class="warn">Диод: катод (полоска) к плюсу, анод к C3 / минусу зуммера.</text>
+<text x="30" y="750">Схема утверждена владельцем. Электрическая приёмка ещё не выполнена.</text>
+<text x="30" y="790">До фиксации PCB проверить ток, громкость, нагрев, выбросы и тишину при reset.</text>
+<text x="30" y="830">GPIO5 питает только базу через R7. Не подключать к нему зуммер напрямую.</text>
+</svg>

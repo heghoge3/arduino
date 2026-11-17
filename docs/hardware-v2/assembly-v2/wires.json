@@ -1119,15 +1119,44 @@
   },
   {
     "id": "W047",
-    "from": "buzz_in",
-    "fromLabel": "Вход будущего драйвера",
-    "to": "esp_buzz",
-    "toLabel": "GPIO5 · PWM",
-    "kind": "io",
-    "blocked": true,
+    "from": "buzz_vcc",
+    "fromLabel": "Питание · SYS_3V3",
+    "to": "pwr_left_2370",
+    "toLabel": "+3,3 В / SYS_3V3",
+    "kind": "pwr",
+    "blocked": false,
     "points": [
       [
         390,
+        2370
+      ],
+      [
+        450,
+        2370
+      ]
+    ],
+    "fromModule": "Зуммер и утверждённый драйвер",
+    "toModule": "Общая шина +3,3 В / SYS_3V3"
+  },
+  {
+    "id": "W048",
+    "from": "buzz_in",
+    "fromLabel": "R7 220 Ом → B2 Q3",
+    "to": "esp_buzz",
+    "toLabel": "GPIO5 · PWM",
+    "kind": "io",
+    "blocked": false,
+    "points": [
+      [
+        390,
+        2410
+      ],
+      [
+        560,
+        2410
+      ],
+      [
+        560,
         2370
       ],
       [
@@ -1135,11 +1164,32 @@
         2370
       ]
     ],
-    "fromModule": "Будущий драйвер пищалки",
+    "fromModule": "Зуммер и утверждённый драйвер",
     "toModule": "ESP32"
   },
   {
-    "id": "W048",
+    "id": "W049",
+    "from": "buzz_gnd",
+    "fromLabel": "Земля · E1 Q3",
+    "to": "gnd_left_2450",
+    "toLabel": "GND / OUT−",
+    "kind": "gnd",
+    "blocked": false,
+    "points": [
+      [
+        390,
+        2450
+      ],
+      [
+        490,
+        2450
+      ]
+    ],
+    "fromModule": "Зуммер и утверждённый драйвер",
+    "toModule": "Общая шина GND / OUT−"
+  },
+  {
+    "id": "W050",
     "from": "bl_d",
     "fromLabel": "D AO3401 · LCD_VCC_SW",
     "to": "lcd_vcc",
@@ -1176,7 +1226,7 @@
     "toModule": "Дисплей LCD"
   },
   {
-    "id": "W049",
+    "id": "W051",
     "from": "gnd_right_830",
     "fromLabel": "GND / OUT−",
     "to": "lcd_gnd",
@@ -1197,7 +1247,7 @@
     "toModule": "Дисплей LCD"
   },
   {
-    "id": "W050",
+    "id": "W052",
     "from": "sda_bus_870",
     "fromLabel": "SDA / GPIO8",
     "to": "lcd_sda",
@@ -1218,7 +1268,7 @@
     "toModule": "Дисплей LCD"
   },
   {
-    "id": "W051",
+    "id": "W053",
     "from": "scl_bus_910",
     "fromLabel": "SCL / GPIO9",
     "to": "lcd_scl",
@@ -1239,7 +1289,7 @@
     "toModule": "Дисплей LCD"
   },
   {
-    "id": "W052",
+    "id": "W054",
     "from": "pwr_right_1060",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "rtc_vcc",
@@ -1260,7 +1310,7 @@
     "toModule": "Часы DS3231"
   },
   {
-    "id": "W053",
+    "id": "W055",
     "from": "gnd_right_1100",
     "fromLabel": "GND / OUT−",
     "to": "rtc_gnd",
@@ -1281,7 +1331,7 @@
     "toModule": "Часы DS3231"
   },
   {
-    "id": "W054",
+    "id": "W056",
     "from": "sda_bus_1140",
     "fromLabel": "SDA / GPIO8",
     "to": "rtc_sda",
@@ -1302,7 +1352,7 @@
     "toModule": "Часы DS3231"
   },
   {
-    "id": "W055",
+    "id": "W057",
     "from": "scl_bus_1180",
     "fromLabel": "SCL / GPIO9",
     "to": "rtc_scl",
@@ -1323,7 +1373,7 @@
     "toModule": "Часы DS3231"
   },
   {
-    "id": "W056",
+    "id": "W058",
     "from": "pwr_right_1330",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "bme_vcc",
@@ -1344,7 +1394,7 @@
     "toModule": "BME280"
   },
   {
-    "id": "W057",
+    "id": "W059",
     "from": "gnd_right_1370",
     "fromLabel": "GND / OUT−",
     "to": "bme_gnd",
@@ -1365,7 +1415,7 @@
     "toModule": "BME280"
   },
   {
-    "id": "W058",
+    "id": "W060",
     "from": "sda_bus_1410",
     "fromLabel": "SDA / GPIO8",
     "to": "bme_sda",
@@ -1386,7 +1436,7 @@
     "toModule": "BME280"
   },
   {
-    "id": "W059",
+    "id": "W061",
     "from": "scl_bus_1450",
     "fromLabel": "SCL / GPIO9",
     "to": "bme_scl",
@@ -1407,7 +1457,7 @@
     "toModule": "BME280"
   },
   {
-    "id": "W060",
+    "id": "W062",
     "from": "pwr_right_1600",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "mpu_vcc",
@@ -1428,7 +1478,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W061",
+    "id": "W063",
     "from": "gnd_right_1640",
     "fromLabel": "GND / OUT−",
     "to": "mpu_gnd",
@@ -1449,7 +1499,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W062",
+    "id": "W064",
     "from": "sda_bus_1680",
     "fromLabel": "SDA / GPIO8",
     "to": "mpu_sda",
@@ -1470,7 +1520,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W063",
+    "id": "W065",
     "from": "scl_bus_1720",
     "fromLabel": "SCL / GPIO9",
     "to": "mpu_scl",
@@ -1491,7 +1541,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W064",
+    "id": "W066",
     "from": "esp_int",
     "fromLabel": "GPIO4 · MPU INT",
     "to": "mpu_int",
@@ -1516,7 +1566,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W065",
+    "id": "W067",
     "from": "pwr_right_1970",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "mag_vcc",
@@ -1537,7 +1587,7 @@
     "toModule": "Компас"
   },
   {
-    "id": "W066",
+    "id": "W068",
     "from": "gnd_right_2010",
     "fromLabel": "GND / OUT−",
     "to": "mag_gnd",
@@ -1558,7 +1608,7 @@
     "toModule": "Компас"
   },
   {
-    "id": "W067",
+    "id": "W069",
     "from": "sda_bus_2050",
     "fromLabel": "SDA / GPIO8",
     "to": "mag_sda",
@@ -1579,7 +1629,7 @@
     "toModule": "Компас"
   },
   {
-    "id": "W068",
+    "id": "W070",
     "from": "scl_bus_2090",
     "fromLabel": "SCL / GPIO9",
     "to": "mag_scl",
@@ -1600,7 +1650,7 @@
     "toModule": "Компас"
   },
   {
-    "id": "W069",
+    "id": "W071",
     "from": "esp_sw",
     "fromLabel": "GPIO3 · положение",
     "to": "p1_state",
@@ -1629,7 +1679,7 @@
     "toModule": "Узел ползунка P1"
   },
   {
-    "id": "W070",
+    "id": "W072",
     "from": "esp_hold",
     "fromLabel": "GPIO7 · HOLD",
     "to": "p1_hold",
@@ -1658,7 +1708,7 @@
     "toModule": "Узел ползунка P1"
   },
   {
-    "id": "W071",
+    "id": "W073",
     "from": "pwr_right_2360",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "bl_s",
@@ -1679,7 +1729,7 @@
     "toModule": "Ключ подсветки"
   },
   {
-    "id": "W072",
+    "id": "W074",
     "from": "esp_bl",
     "fromLabel": "GPIO14 · LED ON=LOW",
     "to": "bl_g",

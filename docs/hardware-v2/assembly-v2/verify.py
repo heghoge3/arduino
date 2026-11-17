@@ -8,14 +8,14 @@ with sync_playwright() as w:
  page=b.new_page(viewport={'width':1440,'height':1000},device_scale_factor=1)
  errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
  page.set_content((p/'index.html').read_text())
- assert page.locator('.wire').count()==72
+ assert page.locator('.wire').count()==74
  page.locator('#find').fill('W020')
  assert page.locator('.wire.active').count()==1 and 'W020' in page.locator('#selection').inner_text()
- assert page.locator('.wire.dim').count()==71
+ assert page.locator('.wire.dim').count()==73
  page.locator('#reset').click();assert page.locator('.wire.dim').count()==0
  page.locator('#fit').click();page.locator('#drawing').screenshot(path=str(p/'overview-preview.png'))
  # Render full vector drawings to standalone PDF via browser, independent of webpage scrolling.
- for name in ['all-wires','power-detail','gps-detail','lcd-detail','straps-detail','led-detail']:
+ for name in ['all-wires','power-detail','gps-detail','lcd-detail','straps-detail','led-detail','buzzer-detail']:
   svg=(p/(name+'.svg')).read_text()
   q=b.new_page();q.set_content('<style>@page{size:A1 portrait;margin:8mm}body{margin:0}svg{width:100%;height:auto}</style>'+svg)
   q.pdf(path=str(p/(name+'.pdf')),prefer_css_page_size=True,print_background=True)
@@ -24,7 +24,7 @@ with sync_playwright() as w:
   page.set_viewport_size({'width':width,'height':1000})
   assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
  assert not errors,errors
- (p/'checks.json').write_text(json.dumps({'wirePaths':72,'highlight':True,'reset':True,'viewportWidths':[390,1440],'javascriptErrors':errors,'pdf':'Chromium vector print; A1; 6 drawings'},ensure_ascii=False,indent=2))
+ (p/'checks.json').write_text(json.dumps({'wirePaths':74,'highlight':True,'reset':True,'viewportWidths':[390,1440],'javascriptErrors':errors,'pdf':'Chromium vector print; A1; 7 drawings'},ensure_ascii=False,indent=2))
  b.close()
 
 from pathlib import Path
@@ -35,12 +35,12 @@ D=Path(__file__).resolve().parent
 with sync_playwright() as w:
  b=w.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox'])
  p=b.new_page(viewport={'width':1400,'height':1100})
- for name in ['all-wires','power-detail','lcd-detail']:
+ for name in ['all-wires','power-detail','lcd-detail','buzzer-detail','led-detail']:
   p.set_content('<style>body{margin:0}svg{width:1400px;height:auto;display:block}</style>'+(D/(name+'.svg')).read_text())
   p.locator('svg').screenshot(path=str(D/(name+'.png')))
  b.close()
 w=PdfWriter()
-for name in ['all-wires','power-detail','gps-detail','lcd-detail','straps-detail','led-detail']:
+for name in ['all-wires','power-detail','gps-detail','lcd-detail','straps-detail','led-detail','buzzer-detail']:
  r=PdfReader(D/(name+'.pdf'));assert len(r.pages)==1,(name,len(r.pages));w.append(r)
 w.write(str(D/'v2-assembly.pdf'))
 # Validate the physical wire network, treating taps on a single drawn rail as connected.
@@ -62,6 +62,11 @@ for mod in ['esp','lcd','rtc','bme','mpu','mag','ina']:
  assert find(mod+'_sda')==find('esp_sda'),mod
  assert find(mod+'_scl')==find('esp_scl'),mod
 for a,b in [('bat-','tp_out-'),('esp_3v3','esp_gnd'),('esp_sda','esp_scl'),('esp_hold','tp_out+'),('tp_ck','tp_out-'),('tp_sk','tp_out-')]:assert find(a)!=find(b),(a,b)
+assert find('buzz_vcc')==find('dc_out')
+assert find('buzz_gnd')==find('tp_out-')
+assert find('buzz_in')==find('esp_buzz')
+assert find('buzz_in')!=find('buzz_vcc')
+assert find('buzz_in')!=find('buzz_gnd')
 assert find('ch_a')==find('tp_ca')
 assert find('ch_k')==find('tp_ck')
 assert find('rd_k')==find('tp_sk')
@@ -71,10 +76,10 @@ assert find('lcd_gnd')==find('tp_out-')
 assert find('lcd_vcc')==find('bl_d')
 assert find('lcd_vcc')!=find('dc_out')
 assert find('esp_rx')==find('gps_tx');assert find('esp_tx')==find('gps_rx')
-print('72 wires; 7 direct power branches plus switched LCD; 7 SDA/SCL ports; polarity/isolation assertions passed; 6-page PDF')
+print('74 wires; 8 direct power branches plus switched LCD; 7 SDA/SCL ports; polarity/isolation assertions passed; 7-page PDF')
 
 report=json.loads((D/'checks.json').read_text())
-report['networkAssertions']={'directPowerBranches':7,'groundBranches':8,'lcdPowerFromMosfetDrainOnly':True,'i2cParticipants':7,'separateBatteryMinusAndOutputMinus':True,'separateSupplyAndGround':True,'separateSdaAndScl':True,'separateLedCathodesAndGround':True,'crossedGpsUart':True}
+report['networkAssertions']={'directPowerBranches':8,'groundBranches':9,'lcdPowerFromMosfetDrainOnly':True,'i2cParticipants':7,'separateBatteryMinusAndOutputMinus':True,'separateSupplyAndGround':True,'separateSdaAndScl':True,'separateLedCathodesAndGround':True,'crossedGpsUart':True,'buzzerDriverPowerGroundControlSeparate':True}
 (D/'checks.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 # Read the rendered SVG, not just the table: catch overlays that can look like a short.
 import re,xml.etree.ElementTree as ET

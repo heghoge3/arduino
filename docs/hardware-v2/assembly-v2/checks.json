@@ -1,5 +1,5 @@
 {
-  "wirePaths": 72,
+  "wirePaths": 74,
   "highlight": true,
   "reset": true,
   "viewportWidths": [
@@ -7,17 +7,18 @@
     1440
   ],
   "javascriptErrors": [],
-  "pdf": "Chromium vector print; A1; 6 drawings",
+  "pdf": "Chromium vector print; A1; 7 drawings",
   "networkAssertions": {
-    "directPowerBranches": 7,
-    "groundBranches": 8,
+    "directPowerBranches": 8,
+    "groundBranches": 9,
     "lcdPowerFromMosfetDrainOnly": true,
     "i2cParticipants": 7,
     "separateBatteryMinusAndOutputMinus": true,
     "separateSupplyAndGround": true,
     "separateSdaAndScl": true,
     "separateLedCathodesAndGround": true,
-    "crossedGpsUart": true
+    "crossedGpsUart": true,
+    "buzzerDriverPowerGroundControlSeparate": true
   },
   "geometryAudit": {
     "differentNetCollinearOverlaps": [],
