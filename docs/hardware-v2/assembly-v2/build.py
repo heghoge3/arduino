@@ -153,7 +153,7 @@ switch=detail('А · ПОЛЗУНОК: обе группы отдельно, к�
 def mosfet(gps=False):
  title='Б · КЛЮЧ GPS: LOW включает питание' if gps else 'В · ПИТАНИЕ ВСЕГО LCD: LOW включает модуль'
  note='Питание 3,3 В подтверждено владельцем. Ключ и OFF новой сборки проверить.' if gps else 'Ключ разрывает VCC всего модуля. Работа SDA/SCL при OFF ещё не подтверждена.'
- resistor='RPU: номинал уточнить' if gps else 'RPU 100 кОм'
+ resistor='RPU GPS 10 кОм (R6)' if gps else 'RPU 100 кОм'
  rg='''<path class="s" d="M60 340H450"/>''' if gps else '''<path class="s" d="M60 340H160M260 340H450"/><rect class="r" x="160" y="323" width="100" height="34"/><text x="150" y="400">RG 10 кОм</text>'''
  return detail(title,1100,850,f'''
 <text x="30" y="75" class="warn">{note}</text>
@@ -167,7 +167,7 @@ def mosfet(gps=False):
 <text x="425" y="610">{'3,3 В выбраны для V2' if gps else 'Контроллер и подсветка вместе'}</text>
 <text x="425" y="660">{'GPS: GND' if gps else 'LCD: контакт GND'}</text>
 <path class="g" d="M550 710V770H800"/><text x="815" y="778">GND</text>
-<text x="30" y="815">{'В V1 между G и S было 10 кОм; для V2 значение пока не утверждено.' if gps else 'Pull-up стоит между G и S, со стороны затвора ПОСЛЕ RG.'}</text>
+<text x="30" y="815">{'R6: 10 кОм между G и S, как в V1; отдельный резистор GPS-ключа.' if gps else 'Pull-up стоит между G и S, со стороны затвора ПОСЛЕ RG.'}</text>
 <text x="690" y="210" class="warn">Не перепутать S и D!</text>
 <text x="690" y="245">Ножки переходника</text><text x="690" y="275">определить прозвонкой.</text>
 ''')
