@@ -1,5 +1,5 @@
 {
-  "wirePaths": 73,
+  "wirePaths": 72,
   "highlight": true,
   "reset": true,
   "viewportWidths": [
@@ -7,7 +7,7 @@
     1440
   ],
   "javascriptErrors": [],
-  "pdf": "Chromium vector print; A1; 5 drawings",
+  "pdf": "Chromium vector print; A1; 6 drawings",
   "networkAssertions": {
     "directPowerBranches": 7,
     "groundBranches": 8,

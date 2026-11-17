@@ -1,7 +1,7 @@
 from pathlib import Path
 import json,html,csv
 D=Path(__file__).resolve().parent
-C={'pwr':'#b83026','gnd':'#344054','sda':'#087e80','scl':'#355cbb','spi':'#7445ad','gps':'#25803e','io':'#b04b80','hold':'#b66b05','stop':'#bd2d29','led':'#986400','bat':'#a05308'}
+C={'pwr':'#b83026','gnd':'#344054','sda':'#087e80','scl':'#355cbb','spi':'#7445ad','gps':'#25803e','io':'#b04b80','hold':'#b66b05','stop':'#bd2d29','led':'#986400','bat':'#a05308','usb':'#d23939'}
 SIDE={};P={};boxes=[];labels=[];wires=[];junctions=[];records=[]
 def txt(x,y,s,size=18,fill='#1c293a',anchor='start'):
  return f'<text x="{x}" y="{y}" font-size="{size}" fill="{fill}" text-anchor="{anchor}">{html.escape(s)}</text>'
@@ -40,7 +40,7 @@ for k,(x,name) in rails.items():
 b=box('bat',40,100,250,170,'Аккумулятор LiPo','1 ячейка; полярность проверить')
 port('bat+',b,'R',175,'CELL+ · до 4,2 В','bat');port('bat-',b,'R',225,'CELL− / минус','gnd')
 b=box('tp',390,100,300,360,'TP4056 + защита','USB: вход 5 В; OUT+: батарея')
-for id,side,y,name,k in [('b+','L',175,'B+','bat'),('b-','L',225,'B−','gnd'),('out+','R',175,'OUT+ · до 4,2 В','bat'),('out-','R',225,'OUT−','gnd'),('ca','L',295,'LED CHRG: анод*','pwr'),('ck','L',335,'LED CHRG: катод*','led'),('sa','L',385,'LED STDBY: анод*','pwr'),('sk','L',425,'LED STDBY: катод*','led')]:port('tp_'+id,b,side,y,name,k)
+for id,side,y,name,k in [('b+','L',175,'B+','bat'),('b-','L',225,'B−','gnd'),('out+','R',175,'OUT+ · до 4,2 В','bat'),('out-','R',225,'OUT−','gnd'),('ca','L',295,'Анод LED · USB +5 В*','usb'),('ck','L',335,'Катод LED → R → CHRG*','led'),('sk','L',425,'Катод LED → R → STDBY*','led')]:port('tp_'+id,b,side,y,name,k)
 wire('bat+','tp_b+');wire('bat-','tp_b-')
 b=box('ina',790,100,300,360,'INA219','VIN± — силовые; VCC — логика')
 for id,side,y,name,k in [('in+','L',175,'VIN+ · силовой вход','bat'),('in-','R',175,'VIN− · после шунта','bat'),('vcc','L',295,'VCC','pwr'),('gnd','L',335,'GND','gnd'),('sda','L',385,'SDA','sda'),('scl','L',425,'SCL','scl')]:port('ina_'+id,b,side,y,name,k)
@@ -69,13 +69,14 @@ wire('ina_vcc',tap('pwr_left',590),[(750,295),(750,590)])
 wire('ina_gnd',tap('gnd_left',630),[(760,335),(760,630)])
 wire('ina_sda','sda_bus_top',[(770,385),(770,535),(1410,535)])
 wire('ina_scl','scl_bus_top',[(780,425),(780,565),(1450,565)])
-# Status LED wires: unknown pads shown as prohibited-to-solder pending identification.
-b=box('ch',40,420,250,160,'LED «Заряд»','Вместо штатного LED CHRG')
-port('ch_a',b,'R',495,'Анод +','pwr');port('ch_k',b,'R',550,'Катод K · не GND','led')
-wire('tp_ca','ch_a',[(350,295),(350,495)],blocked=True);wire('tp_ck','ch_k',[(370,335),(370,550)],blocked=True)
-b=box('ready',40,650,350,160,'LED «Готово»','Вместо штатного LED STDBY')
-port('rd_a',b,'R',720,'Анод +','pwr');port('rd_k',b,'R',775,'Катод K · не GND','led')
-wire('tp_sa','rd_a',[(330,385),(330,615),(410,615),(410,720)],blocked=True);wire('tp_sk','rd_k',[(310,425),(310,595),(430,595),(430,775)],blocked=True)
+# One common-anode LED; resistors on the charging board remain in cathode paths.
+b=box('ch',40,420,250,240,'Один LED · 3 ножки','Красный/зелёный; общий анод')
+port('ch_a',b,'R',495,'A общий · +5 В USB','usb')
+port('ch_k',b,'R',550,'K_R · красный','led')
+port('rd_k',b,'R',605,'K_G · зелёный','led')
+wire('tp_ca','ch_a',[(350,295),(350,495)],blocked=True)
+wire('tp_ck','ch_k',[(370,335),(370,550)],blocked=True)
+wire('tp_sk','rd_k',[(330,425),(330,605)],blocked=True)
 # Central MCU: schematic terminals, never claim physical placement of pads.
 esp=box('esp',650,700,380,1770,'ESP32-S3-Zero','Условный вид; GPIO ≠ № ножки')
 for id,side,y,name,k in [('3v3','R',790,'3V3','pwr'),('gnd','R',840,'GND','gnd'),('sda','R',900,'GPIO8 · SDA','sda'),('scl','R',950,'GPIO9 · SCL','scl'),('cs','L',1010,'GPIO10 · CS','spi'),('mosi','L',1050,'GPIO11 · MOSI','spi'),('sck','L',1090,'GPIO12 · SCK','spi'),('miso','L',1130,'GPIO13 · MISO','spi'),('rx','L',1420,'GPIO44 · RX','gps'),('tx','L',1460,'GPIO43 · TX','gps'),('gps','L',1730,'GPIO6 · GPS ON=LOW','gps'),('a','L',1970,'GPIO1 · кнопка A','io'),('b','L',2130,'GPIO2 · кнопка B','io'),('buzz','L',2370,'GPIO5 · PWM','io'),('int','R',1790,'GPIO4 · MPU INT','io'),('sw','R',2030,'GPIO3 · положение','io'),('hold','R',2130,'GPIO7 · HOLD','hold'),('bl','R',2260,'GPIO14 · LED ON=LOW','io')]:port('esp_'+id,esp,side,y,name,k)
@@ -187,10 +188,32 @@ strap=detail('Г · I2C: адреса, кнопки и недопустимые 
 <text x="35" y="755">Плюс и минус никогда не являются одним проводом.</text>
 <text x="35" y="805">Общий цвет — тип сигнала. Соединение есть только по точке/одинаковому имени сети.</text>
 ''')
-for name,data in [('power-detail',switch),('gps-detail',mosfet(True)),('lcd-detail',mosfet()),('straps-detail',strap)]:(D/(name+'.svg')).write_text(data)
+led=detail('Д · Один красно-зелёный LED с общим анодом',1100,690,'''
+<text x="30" y="80" class="warn">Только для платы со штатными резисторами со стороны катодов.</text>
+<rect class="r" x="35" y="120" width="290" height="440"/>
+<text x="55" y="155">НОВЫЙ LED · три ножки</text>
+<text x="55" y="230">A · общий анод</text>
+<text x="55" y="350">K_R · красный катод</text>
+<text x="55" y="470">K_G · зелёный катод</text>
+<rect class="r" x="620" y="120" width="445" height="440"/>
+<text x="640" y="155">ПЛОЩАДКИ СНЯТЫХ LED НА TP4056</text>
+<path class="p" d="M325 225H620"/>
+<text x="370" y="210">Провод 1 · +5 В</text>
+<text x="640" y="230">Любая анодная площадка → USB +5 В</text>
+<path class="h" d="M325 345H620"/>
+<text x="370" y="330">Провод 2</text>
+<text x="640" y="350">Катод «заряд» → штатный R → CHRG</text>
+<path class="h" d="M325 465H620"/>
+<text x="370" y="450">Провод 3</text>
+<text x="640" y="470">Катод «готово» → штатный R → STDBY</text>
+<text x="30" y="600">Два штатных резистора остаются. Новых резисторов для LED нет.</text>
+<text x="30" y="635" class="warn">Не соединять катоды с GND. Не питать анод от B+/OUT+.</text>
+<text x="30" y="670">Расположение символов не задаёт физический порядок ножек или площадок.</text>
+''')
+for name,data in [('power-detail',switch),('gps-detail',mosfet(True)),('lcd-detail',mosfet()),('straps-detail',strap),('led-detail',led)]:(D/(name+'.svg')).write_text(data)
 style='''body{font:17px/1.55 system-ui,sans-serif;color:#142536;background:#edf1f6;margin:0}main{max-width:1400px;margin:auto;padding:24px}h1{font-size:32px;margin:0 0 12px}h2{margin:32px 0 12px}p{max-width:85ch}a{color:#075b99}nav{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}.warning{background:#fff1dc;border-left:6px solid #ac5000;padding:16px}.danger{background:#ffe9e7;border-left:6px solid #bd2d29;padding:16px}.tools{position:sticky;top:0;background:#fff;border:1px solid #b4c2d0;padding:12px;z-index:4;display:flex;gap:10px;flex-wrap:wrap;align-items:center}button,input{font:inherit;padding:9px}button{cursor:pointer}#selection{flex-basis:100%;min-height:30px;font-weight:600}.canvas{overflow:auto;border:1px solid #98aabb;background:white;max-height:82vh;overscroll-behavior:contain}.canvas>svg{width:2040px;max-width:none;height:auto;display:block}.detail{background:#fff;border:1px solid #b4c2d0;margin-bottom:16px;overflow:auto}.detail svg{display:block;width:100%;min-width:820px;height:auto}table{width:100%;border-collapse:collapse;background:#fff}td,th{text-align:left;padding:10px;border:1px solid #c5cfda;font-size:14px}th{background:#dfe7ef}.tablewrap{overflow:auto}code{font-family:monospace}.pill{display:inline-block;padding:4px 10px;background:white;border:2px solid currentColor;margin:4px}.active-row{background:#fff1c9}.wire.dim{opacity:.06}.wire.active{opacity:1}.wire.active path:nth-child(2){stroke-width:7}@media print{body{background:white}.tools,nav,button,.noprint{display:none}.canvas{max-height:none;overflow:visible;border:0}.canvas>svg{width:100%}.detail svg{min-width:0}.detail{break-before:page}.tablewrap{overflow:visible}main{padding:0}.warning,.danger{break-inside:avoid}#wiretable{font-size:10px}}'''
 def human(id):
- names={'bat':'Аккумулятор','tp':'TP4056','ina':'INA219','dc':'Преобразователь','p1':'Узел ползунка P1','esp':'ESP32','ch':'LED Заряд','rd':'LED Готово','sd':'SD-модуль','gps':'GPS-модуль','qgps':'Ключ GPS','a':'Кнопка A','b':'Кнопка B','buzz':'Будущий драйвер пищалки','lcd':'Дисплей LCD','rtc':'Часы DS3231','bme':'BME280','mpu':'MPU6050','mag':'Компас','bl':'Ключ подсветки'}
+ names={'bat':'Аккумулятор','tp':'TP4056','ina':'INA219','dc':'Преобразователь','p1':'Узел ползунка P1','esp':'ESP32','ch':'Один двухцветный LED','rd':'Один двухцветный LED','sd':'SD-модуль','gps':'GPS-модуль','qgps':'Ключ GPS','a':'Кнопка A','b':'Кнопка B','buzz':'Будущий драйвер пищалки','lcd':'Дисплей LCD','rtc':'Часы DS3231','bme':'BME280','mpu':'MPU6050','mag':'Компас','bl':'Ключ подсветки'}
  for rail,(_,name) in rails.items():
   if id.startswith(rail+'_'):return 'Общая шина '+name
  return names.get(id.split('_')[0],id)
@@ -198,8 +221,8 @@ for r in records:
  r['fromModule']=human(r['from']);r['toModule']=human(r['to'])
 (D/'wires.json').write_text(json.dumps(records,ensure_ascii=False,indent=2))
 rows=''.join(f'<tr id="row-{r["id"]}" data-wire="{r["id"]}"><td><button data-pick="{r["id"]}">{r["id"]}</button></td><td>{html.escape(r["fromLabel"])}<br>{html.escape(r["fromModule"])}</td><td>{html.escape(r["toLabel"])}<br>{html.escape(r["toModule"])}</td><td>{"⛔ Сначала проверить" if r["blocked"] else "По базе; площадку сверить"}</td></tr>' for r in records)
-legend=''.join(f'<span class="pill" style="color:{C[k]}">{t}</span>' for k,t in [('bat','Батарея / до 4,2 В'),('pwr','Только +3,3 В'),('gnd','Минус / GND'),('sda','SDA'),('scl','SCL'),('spi','SD / SPI'),('gps','GPS / UART'),('io','Кнопки / сигналы'),('hold','EN / HOLD'),('led','Катод LED: не GND')])
-page='''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>V2 · Монтаж по одному проводу</title><style>'''+style+'''</style><main><div class="danger"><strong>Уточнение 17.11.2026:</strong> два отдельных LED на этом рисунке — прежний вариант. Для нового общего анода использовать <a href="../charging-indication.md">отдельную схему с двумя резисторами</a>. Драйвер пищалки ещё не показан: <a href="../electrical-baseline.md#additional-parts">предложение и учёт деталей</a>. Эти узлы здесь не являются окончательной монтажной схемой.</div>
+legend=''.join(f'<span class="pill" style="color:{C[k]}">{t}</span>' for k,t in [('bat','Батарея / до 4,2 В'),('pwr','Только +3,3 В'),('gnd','Минус / GND'),('sda','SDA'),('scl','SCL'),('spi','SD / SPI'),('gps','GPS / UART'),('io','Кнопки / сигналы'),('hold','EN / HOLD'),('led','Катод LED: не GND'),('usb','USB +5 В: только анод LED')])
+page='''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>V2 · Монтаж по одному проводу</title><style>'''+style+'''</style><main><div class="warning"><strong>r4 · 17.11.2026:</strong> один красно-зелёный LED с общим анодом, три провода к площадкам снятых LED. Штатные катодные резисторы сохраняются; внешние R9/R10 не нужны. Соответствие USB-C платы присланным схемам проверить прозвонкой. Драйвер пищалки в общем рисунке пока не показан: <a href="../electrical-baseline.md#additional-parts">предложение и учёт деталей</a>.</div>
 <h1>V2 · Монтаж по одному проводу</h1><p>Каждый плюс, минус и сигнал нарисован отдельной линией. Нажмите провод или его номер в таблице — остальные станут бледными, а здесь появятся оба конца.</p>
 <p>Основа: <a href="../electrical-baseline.md">действующая электрическая база</a>. Выбранная цель: отключать весь VCC LCD. Исходники 0.1.33 / wiring3 адаптированы. Опубликованная 0.1.32 / wiring2 поддерживает только LED-ветвь! Эта страница заменяет неудобные блок-схемы 15.11 как инструкцию чтения соединений. Не физическое размещение деталей и не готовая PCB.</p>
 <div class="danger"><b>Исправление r2: OUT+ TP4056 — батарея, не выход 5 В.</b> Коричневые линии до 4,2 В и красные линии 3,3 В разделены. P1A и P1B — разные группы, между их плюсами нет перемычки. 5 В подаются только на штатный USB-C зарядника.</div><div class="danger"><b>⛔ Стоп перед пайкой.</b> Расположение контактов на рисунке условное: ищите написанное имя на своём модуле. Пунктир — соединение, которое ещё нельзя паять без проверки. LCD VCC идёт от стока ключа. Совместимость I2C при отключённом VCC, площадки LED зарядника и драйвер пищалки ещё не подтверждены.</div>
@@ -213,7 +236,7 @@ page='''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewpor
 <h2 id="gps">Б · Ключ GPS — крупно</h2><div class="detail">'''+mosfet(True)+'''</div><p>Владелец подтвердил работу того же GPS от 3 и 5 В; для V2 выбраны 3,3 В. Проверить распайку и отключение через ключ в новой сборке. Схема G/S/D не устанавливает номера контактов вашего переходника. GPS TX идёт в RX ESP32 (GPIO44), GPS RX — в TX ESP32 (GPIO43).</p>
 <h2 id="lcd">В · Выбранный вариант: питание всего LCD</h2><div class="detail">'''+mosfet()+'''</div><div class="danger"><b>Выбор владельца: без вмешательства во внутренние дорожки LCD.</b> SYS_3V3 → S AO3401; D → штатный VCC дисплея; G через 10 кОм к GPIO14; 100 кОм между G и S. GND дисплея остаётся общим. SDA/SCL — общая шина с датчиками: допускаемость сигналов при VCC=0 ещё нужно подтвердить. Исходники 0.1.33 / wiring3 выполняют подачу VCC до probe и повторный power-on init. Прежняя опубликованная 0.1.32 к этому монтажу не подходит. Пунктир означает «не вводить в эксплуатацию до проверки I2C на модуле и подготовки совместимого комплекта прошивки». Если потребуется изоляция SDA/SCL, это отдельная пока не выбранная цепь.</div>
 <h2 id="straps">Г · Адреса и кнопки</h2><div class="detail">'''+strap+'''</div>
-<h2>LED зарядки: проверка перед переносом</h2><ol><li>Без питания найти LED цепи CHRG и STDBY на конкретной плате. Не назначать их по названиям LED1/LED2.</li><li>Зафиксировать анод и катод каждой площадки. На внешнем LED короткая ножка/плоская грань часто означает катод, но проверить тестером.</li><li>Снять штатный LED, сохранить его резистор. Анод внешнего — к площадке анода, катод — к площадке катода. По два отдельных провода.</li><li>Не оставлять два LED параллельно. Катод возвращается на управляющую площадку зарядника, НЕ на общую землю. Проверить заряд и завершение при OFF прибора, а не просто наличие USB.</li></ol>
+<h2 id="led">Д · Один двухцветный LED — три провода</h2><div class="detail">'''+led+'''</div><p>Снять оба штатных LED, сохранить оба штатных резистора. Общий анод — к одной бывшей анодной площадке; красный и зелёный катоды — к двум бывшим катодным площадкам. Вторую анодную площадку не подключать. На присланных схемах резисторы стоят между катодами и CHRG/STDBY. На USB-C экземпляре это проверить без питания. Ножки нового LED определить тестером. B+ и GND для этих трёх проводов не используются.</p>
 <h2>Перед включением</h2><ol><li>Без батареи и USB проверить отсутствие короткого замыкания питания и правильность полярностей. Прозвонить два независимых контакта ползунка.</li><li>Проверить DC/DC отдельно: 3,3 В, затем EN от каждой ветви. Не снимать перемычку с модуля по чужому фото.</li><li>Подключать модули по очереди, проверяя питание и I2C. У MPU адрес 0x69; у RTC 0x68.</li><li>На тестовой SD проверить OFF посреди записи и следующий ON, затем reset при ON и OTA. Ошибка SD может оставить питание включённым.</li><li>USB ESP32 не считать безопасно развязанным от внешних 3,3 В: сначала проверить E11 в базе. Размеры и посадки модулей ещё нужно измерить.</li></ol>
 <h2>Как читать названия</h2><ul><li><b>SYS_3V3</b> — общий плюс 3,3 В после преобразователя.</li><li><b>GND / GND_SYS</b> — общий минус нагрузки от OUT− зарядника. Это не перемычка к B−.</li><li><b>COM</b> — общий контакт одной группы ползунка. ON/OFF — какие контакты с ним замыкаются.</li><li><b>A / K</b> — анод / катод диода. Полоска корпуса — катод K.</li><li><b>G / S / D</b> — затвор / исток / сток транзистора. По виду переходника их не назначать.</li></ul><h2 id="wires">Каждый провод: откуда → куда</h2><p>Номер W — номер линии на схеме, не номер ножки. Все проверки экземпляра из электрической базы действуют и для сплошных линий.</p><div class="tablewrap"><table id="wiretable"><thead><tr><th>Провод</th><th>Откуда</th><th>Куда</th><th>Статус</th></tr></thead><tbody>'''+rows+'''</tbody></table></div>
 <p>Файлы V1 <code>docs/assembly.html</code> и <code>docs/wiring.html</code> использованы как образец подачи. Их GPIO, DS1302, OLED, компас и старые советы по преобразователю сюда не переносились. Для V2 действуют проверки <a href="../electrical-baseline.md#pre-pcb-checks">E01–E16</a>.</p></main><script>const data='''+json.dumps(records,ensure_ascii=False)+''';const nodes=[...document.querySelectorAll('.wire')];const svg=document.querySelector('#drawing svg');let zoom=1;function pick(id){const r=data.find(x=>x.id===id);if(!r)return;nodes.forEach(x=>{x.classList.toggle('dim',x.dataset.id!==id);x.classList.toggle('active',x.dataset.id===id)});document.querySelectorAll('#wiretable tr').forEach(x=>x.classList.toggle('active-row',x.dataset.wire===id));document.getElementById('selection').textContent=id+' · '+r.fromModule+' · '+r.fromLabel+' → '+r.toModule+' · '+r.toLabel+(r.blocked?' · ⛔ НЕ ПАЯТЬ ДО ПРОВЕРКИ':'');document.getElementById('find').value=id}nodes.forEach(x=>{x.addEventListener('click',()=>pick(x.dataset.id));x.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();pick(x.dataset.id)}})});document.querySelectorAll('[data-pick]').forEach(x=>x.onclick=()=>{pick(x.dataset.pick);document.getElementById('overview').scrollIntoView()});document.getElementById('find').oninput=e=>pick(e.target.value.trim().toUpperCase());document.getElementById('reset').onclick=()=>{nodes.forEach(x=>x.classList.remove('dim','active'));document.querySelectorAll('.active-row').forEach(x=>x.classList.remove('active-row'));document.getElementById('selection').textContent='Все провода показаны. Точка = соединение; пересечение без точки = не соединять.';document.getElementById('find').value=''};function resize(){svg.style.width=(2040*zoom)+'px'}document.getElementById('plus').onclick=()=>{zoom=Math.min(2.5,zoom+.2);resize()};document.getElementById('minus').onclick=()=>{zoom=Math.max(.35,zoom-.2);resize()};document.getElementById('fit').onclick=()=>{zoom=document.getElementById('drawing').clientWidth/2040;resize()};</script></html>'''

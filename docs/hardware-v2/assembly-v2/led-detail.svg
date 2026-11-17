@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 690" role="img" aria-label="Д · Один красно-зелёный LED с общим анодом"><style>text{font-family:DejaVu Sans,Arial,sans-serif;font-size:18px}.p{stroke:#b83026}.g{stroke:#344054}.h{stroke:#b66b05}.s{stroke:#b04b80}.p,.g,.h,.s{fill:none;stroke-width:4;stroke-linejoin:round}.r{fill:white;stroke:#1c293a;stroke-width:2}.t{fill:#1c293a}.warn{fill:#bd2d29}</style><rect width="100%" height="100%" fill="#fff"/><text x="30" y="35" font-size="25" fill="#1c293a" text-anchor="start">Д · Один красно-зелёный LED с общим анодом</text>
+<text x="30" y="80" class="warn">Только для платы со штатными резисторами со стороны катодов.</text>
+<rect class="r" x="35" y="120" width="290" height="440"/>
+<text x="55" y="155">НОВЫЙ LED · три ножки</text>
+<text x="55" y="230">A · общий анод</text>
+<text x="55" y="350">K_R · красный катод</text>
+<text x="55" y="470">K_G · зелёный катод</text>
+<rect class="r" x="620" y="120" width="445" height="440"/>
+<text x="640" y="155">ПЛОЩАДКИ СНЯТЫХ LED НА TP4056</text>
+<path class="p" d="M325 225H620"/>
+<text x="370" y="210">Провод 1 · +5 В</text>
+<text x="640" y="230">Любая анодная площадка → USB +5 В</text>
+<path class="h" d="M325 345H620"/>
+<text x="370" y="330">Провод 2</text>
+<text x="640" y="350">Катод «заряд» → штатный R → CHRG</text>
+<path class="h" d="M325 465H620"/>
+<text x="370" y="450">Провод 3</text>
+<text x="640" y="470">Катод «готово» → штатный R → STDBY</text>
+<text x="30" y="600">Два штатных резистора остаются. Новых резисторов для LED нет.</text>
+<text x="30" y="635" class="warn">Не соединять катоды с GND. Не питать анод от B+/OUT+.</text>
+<text x="30" y="670">Расположение символов не задаёт физический порядок ножек или площадок.</text>
+</svg>

@@ -8,14 +8,14 @@ with sync_playwright() as w:
  page=b.new_page(viewport={'width':1440,'height':1000},device_scale_factor=1)
  errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
  page.set_content((p/'index.html').read_text())
- assert page.locator('.wire').count()==73
+ assert page.locator('.wire').count()==72
  page.locator('#find').fill('W020')
  assert page.locator('.wire.active').count()==1 and 'W020' in page.locator('#selection').inner_text()
- assert page.locator('.wire.dim').count()==72
+ assert page.locator('.wire.dim').count()==71
  page.locator('#reset').click();assert page.locator('.wire.dim').count()==0
  page.locator('#fit').click();page.locator('#drawing').screenshot(path=str(p/'overview-preview.png'))
  # Render full vector drawings to standalone PDF via browser, independent of webpage scrolling.
- for name in ['all-wires','power-detail','gps-detail','lcd-detail','straps-detail']:
+ for name in ['all-wires','power-detail','gps-detail','lcd-detail','straps-detail','led-detail']:
   svg=(p/(name+'.svg')).read_text()
   q=b.new_page();q.set_content('<style>@page{size:A1 portrait;margin:8mm}body{margin:0}svg{width:100%;height:auto}</style>'+svg)
   q.pdf(path=str(p/(name+'.pdf')),prefer_css_page_size=True,print_background=True)
@@ -24,7 +24,7 @@ with sync_playwright() as w:
   page.set_viewport_size({'width':width,'height':1000})
   assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
  assert not errors,errors
- (p/'checks.json').write_text(json.dumps({'wirePaths':73,'highlight':True,'reset':True,'viewportWidths':[390,1440],'javascriptErrors':errors,'pdf':'Chromium vector print; A1; 5 drawings'},ensure_ascii=False,indent=2))
+ (p/'checks.json').write_text(json.dumps({'wirePaths':72,'highlight':True,'reset':True,'viewportWidths':[390,1440],'javascriptErrors':errors,'pdf':'Chromium vector print; A1; 6 drawings'},ensure_ascii=False,indent=2))
  b.close()
 
 from pathlib import Path
@@ -40,7 +40,7 @@ with sync_playwright() as w:
   p.locator('svg').screenshot(path=str(D/(name+'.png')))
  b.close()
 w=PdfWriter()
-for name in ['all-wires','power-detail','gps-detail','lcd-detail','straps-detail']:
+for name in ['all-wires','power-detail','gps-detail','lcd-detail','straps-detail','led-detail']:
  r=PdfReader(D/(name+'.pdf'));assert len(r.pages)==1,(name,len(r.pages));w.append(r)
 w.write(str(D/'v2-assembly.pdf'))
 # Validate the physical wire network, treating taps on a single drawn rail as connected.
@@ -62,11 +62,16 @@ for mod in ['esp','lcd','rtc','bme','mpu','mag','ina']:
  assert find(mod+'_sda')==find('esp_sda'),mod
  assert find(mod+'_scl')==find('esp_scl'),mod
 for a,b in [('bat-','tp_out-'),('esp_3v3','esp_gnd'),('esp_sda','esp_scl'),('esp_hold','tp_out+'),('tp_ck','tp_out-'),('tp_sk','tp_out-')]:assert find(a)!=find(b),(a,b)
+assert find('ch_a')==find('tp_ca')
+assert find('ch_k')==find('tp_ck')
+assert find('rd_k')==find('tp_sk')
+assert find('ch_a')!=find('dc_out')
+assert find('ch_k')!=find('rd_k')
 assert find('lcd_gnd')==find('tp_out-')
 assert find('lcd_vcc')==find('bl_d')
 assert find('lcd_vcc')!=find('dc_out')
 assert find('esp_rx')==find('gps_tx');assert find('esp_tx')==find('gps_rx')
-print('73 wires; 7 direct power branches plus switched LCD; 7 SDA/SCL ports; polarity/isolation assertions passed; 5-page PDF')
+print('72 wires; 7 direct power branches plus switched LCD; 7 SDA/SCL ports; polarity/isolation assertions passed; 6-page PDF')
 
 report=json.loads((D/'checks.json').read_text())
 report['networkAssertions']={'directPowerBranches':7,'groundBranches':8,'lcdPowerFromMosfetDrainOnly':True,'i2cParticipants':7,'separateBatteryMinusAndOutputMinus':True,'separateSupplyAndGround':True,'separateSdaAndScl':True,'separateLedCathodesAndGround':True,'crossedGpsUart':True}

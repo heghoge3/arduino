@@ -605,10 +605,10 @@
   {
     "id": "W024",
     "from": "tp_ca",
-    "fromLabel": "LED CHRG: анод*",
+    "fromLabel": "Анод LED · USB +5 В*",
     "to": "ch_a",
-    "toLabel": "Анод +",
-    "kind": "pwr",
+    "toLabel": "A общий · +5 В USB",
+    "kind": "usb",
     "blocked": true,
     "points": [
       [
@@ -629,14 +629,14 @@
       ]
     ],
     "fromModule": "TP4056",
-    "toModule": "LED Заряд"
+    "toModule": "Один двухцветный LED"
   },
   {
     "id": "W025",
     "from": "tp_ck",
-    "fromLabel": "LED CHRG: катод*",
+    "fromLabel": "Катод LED → R → CHRG*",
     "to": "ch_k",
-    "toLabel": "Катод K · не GND",
+    "toLabel": "K_R · красный",
     "kind": "led",
     "blocked": true,
     "points": [
@@ -658,51 +658,14 @@
       ]
     ],
     "fromModule": "TP4056",
-    "toModule": "LED Заряд"
+    "toModule": "Один двухцветный LED"
   },
   {
     "id": "W026",
-    "from": "tp_sa",
-    "fromLabel": "LED STDBY: анод*",
-    "to": "rd_a",
-    "toLabel": "Анод +",
-    "kind": "pwr",
-    "blocked": true,
-    "points": [
-      [
-        390,
-        385
-      ],
-      [
-        330,
-        385
-      ],
-      [
-        330,
-        615
-      ],
-      [
-        410,
-        615
-      ],
-      [
-        410,
-        720
-      ],
-      [
-        390,
-        720
-      ]
-    ],
-    "fromModule": "TP4056",
-    "toModule": "LED Готово"
-  },
-  {
-    "id": "W027",
     "from": "tp_sk",
-    "fromLabel": "LED STDBY: катод*",
+    "fromLabel": "Катод LED → R → STDBY*",
     "to": "rd_k",
-    "toLabel": "Катод K · не GND",
+    "toLabel": "K_G · зелёный",
     "kind": "led",
     "blocked": true,
     "points": [
@@ -711,31 +674,23 @@
         425
       ],
       [
-        310,
+        330,
         425
       ],
       [
-        310,
-        595
+        330,
+        605
       ],
       [
-        430,
-        595
-      ],
-      [
-        430,
-        775
-      ],
-      [
-        390,
-        775
+        290,
+        605
       ]
     ],
     "fromModule": "TP4056",
-    "toModule": "LED Готово"
+    "toModule": "Один двухцветный LED"
   },
   {
-    "id": "W028",
+    "id": "W027",
     "from": "esp_3v3",
     "fromLabel": "3V3",
     "to": "pwr_right_790",
@@ -756,7 +711,7 @@
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
   {
-    "id": "W029",
+    "id": "W028",
     "from": "esp_gnd",
     "fromLabel": "GND",
     "to": "gnd_right_840",
@@ -777,7 +732,7 @@
     "toModule": "Общая шина GND / OUT−"
   },
   {
-    "id": "W030",
+    "id": "W029",
     "from": "esp_sda",
     "fromLabel": "GPIO8 · SDA",
     "to": "sda_bus_900",
@@ -798,7 +753,7 @@
     "toModule": "Общая шина SDA / GPIO8"
   },
   {
-    "id": "W031",
+    "id": "W030",
     "from": "esp_scl",
     "fromLabel": "GPIO9 · SCL",
     "to": "scl_bus_950",
@@ -819,7 +774,7 @@
     "toModule": "Общая шина SCL / GPIO9"
   },
   {
-    "id": "W032",
+    "id": "W031",
     "from": "sd_cs",
     "fromLabel": "CS / SS",
     "to": "esp_cs",
@@ -840,7 +795,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W033",
+    "id": "W032",
     "from": "sd_mosi",
     "fromLabel": "DI / MOSI",
     "to": "esp_mosi",
@@ -861,7 +816,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W034",
+    "id": "W033",
     "from": "sd_sck",
     "fromLabel": "CLK / SCK",
     "to": "esp_sck",
@@ -882,7 +837,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W035",
+    "id": "W034",
     "from": "sd_miso",
     "fromLabel": "DO / MISO",
     "to": "esp_miso",
@@ -903,7 +858,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W036",
+    "id": "W035",
     "from": "sd_vcc",
     "fromLabel": "VCC",
     "to": "pwr_left_930",
@@ -924,7 +879,7 @@
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
   {
-    "id": "W037",
+    "id": "W036",
     "from": "sd_gnd",
     "fromLabel": "GND",
     "to": "gnd_left_970",
@@ -945,7 +900,7 @@
     "toModule": "Общая шина GND / OUT−"
   },
   {
-    "id": "W038",
+    "id": "W037",
     "from": "gps_gnd",
     "fromLabel": "GND",
     "to": "gnd_left_1380",
@@ -966,7 +921,7 @@
     "toModule": "Общая шина GND / OUT−"
   },
   {
-    "id": "W039",
+    "id": "W038",
     "from": "gps_tx",
     "fromLabel": "TX модуля → RX ESP",
     "to": "esp_rx",
@@ -987,7 +942,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W040",
+    "id": "W039",
     "from": "gps_rx",
     "fromLabel": "RX модуля ← TX ESP",
     "to": "esp_tx",
@@ -1008,7 +963,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W041",
+    "id": "W040",
     "from": "qgps_s",
     "fromLabel": "S · исток",
     "to": "pwr_left_1640",
@@ -1029,7 +984,7 @@
     "toModule": "Общая шина +3,3 В / SYS_3V3"
   },
   {
-    "id": "W042",
+    "id": "W041",
     "from": "qgps_d",
     "fromLabel": "D · сток",
     "to": "gps_vcc",
@@ -1058,7 +1013,7 @@
     "toModule": "GPS-модуль"
   },
   {
-    "id": "W043",
+    "id": "W042",
     "from": "qgps_g",
     "fromLabel": "Управление GPIO6",
     "to": "esp_gps",
@@ -1079,7 +1034,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W044",
+    "id": "W043",
     "from": "a_1",
     "fromLabel": "Контакт 1 · сигнал",
     "to": "esp_a",
@@ -1100,7 +1055,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W045",
+    "id": "W044",
     "from": "a_2",
     "fromLabel": "Контакт 2 · земля",
     "to": "gnd_left_2010",
@@ -1121,7 +1076,7 @@
     "toModule": "Общая шина GND / OUT−"
   },
   {
-    "id": "W046",
+    "id": "W045",
     "from": "b_1",
     "fromLabel": "Контакт 1 · сигнал",
     "to": "esp_b",
@@ -1142,7 +1097,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W047",
+    "id": "W046",
     "from": "b_2",
     "fromLabel": "Контакт 2 · земля",
     "to": "gnd_left_2170",
@@ -1163,7 +1118,7 @@
     "toModule": "Общая шина GND / OUT−"
   },
   {
-    "id": "W048",
+    "id": "W047",
     "from": "buzz_in",
     "fromLabel": "Вход будущего драйвера",
     "to": "esp_buzz",
@@ -1184,7 +1139,7 @@
     "toModule": "ESP32"
   },
   {
-    "id": "W049",
+    "id": "W048",
     "from": "bl_d",
     "fromLabel": "D AO3401 · LCD_VCC_SW",
     "to": "lcd_vcc",
@@ -1221,7 +1176,7 @@
     "toModule": "Дисплей LCD"
   },
   {
-    "id": "W050",
+    "id": "W049",
     "from": "gnd_right_830",
     "fromLabel": "GND / OUT−",
     "to": "lcd_gnd",
@@ -1242,7 +1197,7 @@
     "toModule": "Дисплей LCD"
   },
   {
-    "id": "W051",
+    "id": "W050",
     "from": "sda_bus_870",
     "fromLabel": "SDA / GPIO8",
     "to": "lcd_sda",
@@ -1263,7 +1218,7 @@
     "toModule": "Дисплей LCD"
   },
   {
-    "id": "W052",
+    "id": "W051",
     "from": "scl_bus_910",
     "fromLabel": "SCL / GPIO9",
     "to": "lcd_scl",
@@ -1284,7 +1239,7 @@
     "toModule": "Дисплей LCD"
   },
   {
-    "id": "W053",
+    "id": "W052",
     "from": "pwr_right_1060",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "rtc_vcc",
@@ -1305,7 +1260,7 @@
     "toModule": "Часы DS3231"
   },
   {
-    "id": "W054",
+    "id": "W053",
     "from": "gnd_right_1100",
     "fromLabel": "GND / OUT−",
     "to": "rtc_gnd",
@@ -1326,7 +1281,7 @@
     "toModule": "Часы DS3231"
   },
   {
-    "id": "W055",
+    "id": "W054",
     "from": "sda_bus_1140",
     "fromLabel": "SDA / GPIO8",
     "to": "rtc_sda",
@@ -1347,7 +1302,7 @@
     "toModule": "Часы DS3231"
   },
   {
-    "id": "W056",
+    "id": "W055",
     "from": "scl_bus_1180",
     "fromLabel": "SCL / GPIO9",
     "to": "rtc_scl",
@@ -1368,7 +1323,7 @@
     "toModule": "Часы DS3231"
   },
   {
-    "id": "W057",
+    "id": "W056",
     "from": "pwr_right_1330",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "bme_vcc",
@@ -1389,7 +1344,7 @@
     "toModule": "BME280"
   },
   {
-    "id": "W058",
+    "id": "W057",
     "from": "gnd_right_1370",
     "fromLabel": "GND / OUT−",
     "to": "bme_gnd",
@@ -1410,7 +1365,7 @@
     "toModule": "BME280"
   },
   {
-    "id": "W059",
+    "id": "W058",
     "from": "sda_bus_1410",
     "fromLabel": "SDA / GPIO8",
     "to": "bme_sda",
@@ -1431,7 +1386,7 @@
     "toModule": "BME280"
   },
   {
-    "id": "W060",
+    "id": "W059",
     "from": "scl_bus_1450",
     "fromLabel": "SCL / GPIO9",
     "to": "bme_scl",
@@ -1452,7 +1407,7 @@
     "toModule": "BME280"
   },
   {
-    "id": "W061",
+    "id": "W060",
     "from": "pwr_right_1600",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "mpu_vcc",
@@ -1473,7 +1428,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W062",
+    "id": "W061",
     "from": "gnd_right_1640",
     "fromLabel": "GND / OUT−",
     "to": "mpu_gnd",
@@ -1494,7 +1449,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W063",
+    "id": "W062",
     "from": "sda_bus_1680",
     "fromLabel": "SDA / GPIO8",
     "to": "mpu_sda",
@@ -1515,7 +1470,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W064",
+    "id": "W063",
     "from": "scl_bus_1720",
     "fromLabel": "SCL / GPIO9",
     "to": "mpu_scl",
@@ -1536,7 +1491,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W065",
+    "id": "W064",
     "from": "esp_int",
     "fromLabel": "GPIO4 · MPU INT",
     "to": "mpu_int",
@@ -1561,7 +1516,7 @@
     "toModule": "MPU6050"
   },
   {
-    "id": "W066",
+    "id": "W065",
     "from": "pwr_right_1970",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "mag_vcc",
@@ -1582,7 +1537,7 @@
     "toModule": "Компас"
   },
   {
-    "id": "W067",
+    "id": "W066",
     "from": "gnd_right_2010",
     "fromLabel": "GND / OUT−",
     "to": "mag_gnd",
@@ -1603,7 +1558,7 @@
     "toModule": "Компас"
   },
   {
-    "id": "W068",
+    "id": "W067",
     "from": "sda_bus_2050",
     "fromLabel": "SDA / GPIO8",
     "to": "mag_sda",
@@ -1624,7 +1579,7 @@
     "toModule": "Компас"
   },
   {
-    "id": "W069",
+    "id": "W068",
     "from": "scl_bus_2090",
     "fromLabel": "SCL / GPIO9",
     "to": "mag_scl",
@@ -1645,7 +1600,7 @@
     "toModule": "Компас"
   },
   {
-    "id": "W070",
+    "id": "W069",
     "from": "esp_sw",
     "fromLabel": "GPIO3 · положение",
     "to": "p1_state",
@@ -1674,7 +1629,7 @@
     "toModule": "Узел ползунка P1"
   },
   {
-    "id": "W071",
+    "id": "W070",
     "from": "esp_hold",
     "fromLabel": "GPIO7 · HOLD",
     "to": "p1_hold",
@@ -1703,7 +1658,7 @@
     "toModule": "Узел ползунка P1"
   },
   {
-    "id": "W072",
+    "id": "W071",
     "from": "pwr_right_2360",
     "fromLabel": "+3,3 В / SYS_3V3",
     "to": "bl_s",
@@ -1724,7 +1679,7 @@
     "toModule": "Ключ подсветки"
   },
   {
-    "id": "W073",
+    "id": "W072",
     "from": "esp_bl",
     "fromLabel": "GPIO14 · LED ON=LOW",
     "to": "bl_g",
