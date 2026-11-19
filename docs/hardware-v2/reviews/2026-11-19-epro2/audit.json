@@ -1,0 +1,2335 @@
+{
+  "source": "ProPrj_polimer v2_2026-11-19.epro2",
+  "sha256": "f23e5cbb78b3d48874ca141fb3c04fcaa48c81470cfac49f6d339546ea1c895f",
+  "scope": "Read-only static extraction; no EasyEDA ERC/DRC or hardware acceptance",
+  "components": {
+    "U1": {
+      "symbol": "ESP32-S3-ZERO_2",
+      "device": "ESP32-S3-Zero",
+      "deviceId": "35cb1512290e8fcc",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "5V",
+          "schematicNet": "U1.1",
+          "pcbNet": ""
+        },
+        {
+          "number": "2",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "3",
+          "name": "3V3",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "4",
+          "name": "IO1",
+          "schematicNet": "H1.1 / U1.4",
+          "pcbNet": "$1N65"
+        },
+        {
+          "number": "5",
+          "name": "IO2",
+          "schematicNet": "H2.1 / U1.5",
+          "pcbNet": "$1N66"
+        },
+        {
+          "number": "6",
+          "name": "IO3",
+          "schematicNet": "R1.1 / SW1.5 / U1.6",
+          "pcbNet": "$1N48"
+        },
+        {
+          "number": "7",
+          "name": "IO4",
+          "schematicNet": "U1.7 / U3.8",
+          "pcbNet": "$1N43"
+        },
+        {
+          "number": "8",
+          "name": "IO5",
+          "schematicNet": "R7.1 / U1.8",
+          "pcbNet": "$1N71"
+        },
+        {
+          "number": "9",
+          "name": "IO6",
+          "schematicNet": "Q2.1 / R6.1 / U1.9",
+          "pcbNet": "$1N63"
+        },
+        {
+          "number": "10",
+          "name": "IO7",
+          "schematicNet": "D2.2 / U1.10",
+          "pcbNet": "$1N18"
+        },
+        {
+          "number": "11",
+          "name": "IO8",
+          "schematicNet": "CN1.4 / U1.11 / U10.4 / U3.4 / U5.4 / U7.4 / U8.2",
+          "pcbNet": "$1N27"
+        },
+        {
+          "number": "12",
+          "name": "IO9",
+          "schematicNet": "CN1.3 / U1.12 / U10.3 / U3.3 / U5.3 / U7.3 / U8.3",
+          "pcbNet": "$1N28"
+        },
+        {
+          "number": "13",
+          "name": "IO10",
+          "schematicNet": "U1.13 / U6.2",
+          "pcbNet": "$1N31"
+        },
+        {
+          "number": "14",
+          "name": "IO11",
+          "schematicNet": "U1.14 / U6.3",
+          "pcbNet": "$1N32"
+        },
+        {
+          "number": "15",
+          "name": "IO12",
+          "schematicNet": "U1.15 / U6.4",
+          "pcbNet": "$1N33"
+        },
+        {
+          "number": "16",
+          "name": "IO13",
+          "schematicNet": "U1.16 / U6.5",
+          "pcbNet": "$1N34"
+        },
+        {
+          "number": "17",
+          "name": "RX",
+          "schematicNet": "U1.17 / U4.3",
+          "pcbNet": "$1N58"
+        },
+        {
+          "number": "18",
+          "name": "TX",
+          "schematicNet": "U1.18 / U4.2",
+          "pcbNet": "$1N59"
+        },
+        {
+          "number": "19",
+          "name": "IO14",
+          "schematicNet": "R2.1 / U1.19",
+          "pcbNet": "$1N52"
+        }
+      ],
+      "footprint": "ESP32 S3 ZERO",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -8.99998,
+          "yMm": 10.16,
+          "holeMm": null
+        },
+        {
+          "number": "2",
+          "xMm": -8.99998,
+          "yMm": 7.62,
+          "holeMm": null
+        },
+        {
+          "number": "3",
+          "xMm": -8.99998,
+          "yMm": 5.08,
+          "holeMm": null
+        },
+        {
+          "number": "4",
+          "xMm": -8.99998,
+          "yMm": 2.54,
+          "holeMm": null
+        },
+        {
+          "number": "5",
+          "xMm": -8.99998,
+          "yMm": 0.0,
+          "holeMm": null
+        },
+        {
+          "number": "6",
+          "xMm": -8.99998,
+          "yMm": -2.54,
+          "holeMm": null
+        },
+        {
+          "number": "7",
+          "xMm": -8.99998,
+          "yMm": -5.08,
+          "holeMm": null
+        },
+        {
+          "number": "8",
+          "xMm": -8.99998,
+          "yMm": -7.62,
+          "holeMm": null
+        },
+        {
+          "number": "9",
+          "xMm": -8.99998,
+          "yMm": -10.16,
+          "holeMm": null
+        },
+        {
+          "number": "10",
+          "xMm": 8.99998,
+          "yMm": -10.16,
+          "holeMm": null
+        },
+        {
+          "number": "11",
+          "xMm": 8.99998,
+          "yMm": -7.62,
+          "holeMm": null
+        },
+        {
+          "number": "12",
+          "xMm": 8.99998,
+          "yMm": -5.08,
+          "holeMm": null
+        },
+        {
+          "number": "13",
+          "xMm": 8.99998,
+          "yMm": -2.54,
+          "holeMm": null
+        },
+        {
+          "number": "14",
+          "xMm": 8.99998,
+          "yMm": 0.0,
+          "holeMm": null
+        },
+        {
+          "number": "15",
+          "xMm": 8.99998,
+          "yMm": 2.54,
+          "holeMm": null
+        },
+        {
+          "number": "16",
+          "xMm": 8.99998,
+          "yMm": 5.08,
+          "holeMm": null
+        },
+        {
+          "number": "17",
+          "xMm": 8.99998,
+          "yMm": 7.62,
+          "holeMm": null
+        },
+        {
+          "number": "18",
+          "xMm": 8.99998,
+          "yMm": 10.16,
+          "holeMm": null
+        },
+        {
+          "number": "1",
+          "xMm": -7.62,
+          "yMm": 10.16,
+          "holeMm": 1.0
+        },
+        {
+          "number": "2",
+          "xMm": -7.62,
+          "yMm": 7.62,
+          "holeMm": 1.0
+        },
+        {
+          "number": "3",
+          "xMm": -7.62,
+          "yMm": 5.08,
+          "holeMm": 1.0
+        },
+        {
+          "number": "4",
+          "xMm": -7.62,
+          "yMm": 2.54,
+          "holeMm": 1.0
+        },
+        {
+          "number": "5",
+          "xMm": -7.62,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "6",
+          "xMm": -7.62,
+          "yMm": -2.54,
+          "holeMm": 1.0
+        },
+        {
+          "number": "7",
+          "xMm": -7.62,
+          "yMm": -5.08,
+          "holeMm": 1.0
+        },
+        {
+          "number": "8",
+          "xMm": -7.62,
+          "yMm": -7.62,
+          "holeMm": 1.0
+        },
+        {
+          "number": "9",
+          "xMm": -7.62,
+          "yMm": -10.16,
+          "holeMm": 1.0
+        },
+        {
+          "number": "11",
+          "xMm": 7.62,
+          "yMm": -7.62,
+          "holeMm": 1.0
+        },
+        {
+          "number": "12",
+          "xMm": 7.62,
+          "yMm": -5.08,
+          "holeMm": 1.0
+        },
+        {
+          "number": "13",
+          "xMm": 7.62,
+          "yMm": -2.54,
+          "holeMm": 1.0
+        },
+        {
+          "number": "14",
+          "xMm": 7.62,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "15",
+          "xMm": 7.62,
+          "yMm": 2.54,
+          "holeMm": 1.0
+        },
+        {
+          "number": "16",
+          "xMm": 7.62,
+          "yMm": 5.08,
+          "holeMm": 1.0
+        },
+        {
+          "number": "17",
+          "xMm": 7.62,
+          "yMm": 7.62,
+          "holeMm": 1.0
+        },
+        {
+          "number": "18",
+          "xMm": 7.62,
+          "yMm": 10.16,
+          "holeMm": 1.0
+        },
+        {
+          "number": "10",
+          "xMm": 7.62,
+          "yMm": -10.16,
+          "holeMm": 1.0
+        },
+        {
+          "number": "19",
+          "xMm": 6.40541,
+          "yMm": -14.367,
+          "holeMm": null
+        },
+        {
+          "number": "19",
+          "xMm": 6.40541,
+          "yMm": -12.98702,
+          "holeMm": 1.0
+        }
+      ]
+    },
+    "U2": {
+      "symbol": "TP4056充电源模块板(TYPE-C)",
+      "device": "TP4056充电源模块板(Type-C)",
+      "deviceId": "e89b76aca86dd891",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "OUT+",
+          "schematicNet": "SW1.2 / U10.8 / U2.1",
+          "pcbNet": "$1N15"
+        },
+        {
+          "number": "2",
+          "name": "B+",
+          "schematicNet": "CN2.1 / U2.2",
+          "pcbNet": "$1N12"
+        },
+        {
+          "number": "3",
+          "name": "B-",
+          "schematicNet": "CN2.2 / U2.3",
+          "pcbNet": "$1N13"
+        },
+        {
+          "number": "5",
+          "name": "IN+",
+          "schematicNet": "U2.5",
+          "pcbNet": ""
+        },
+        {
+          "number": "6",
+          "name": "IN-",
+          "schematicNet": "U2.6",
+          "pcbNet": ""
+        },
+        {
+          "number": "4",
+          "name": "OUT-",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        }
+      ],
+      "footprint": "PWRM-TH_TP4056",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": 11.72497,
+          "yMm": 7.18,
+          "holeMm": 1.2
+        },
+        {
+          "number": "2",
+          "xMm": 11.72497,
+          "yMm": 4.01,
+          "holeMm": 1.2
+        },
+        {
+          "number": "3",
+          "xMm": 11.72497,
+          "yMm": -4.01,
+          "holeMm": 1.2
+        },
+        {
+          "number": "4",
+          "xMm": 11.72497,
+          "yMm": -7.18,
+          "holeMm": 1.2
+        },
+        {
+          "number": "5",
+          "xMm": -11.725,
+          "yMm": 7.18,
+          "holeMm": 1.2
+        },
+        {
+          "number": "6",
+          "xMm": -11.725,
+          "yMm": -7.18,
+          "holeMm": 1.2
+        }
+      ]
+    },
+    "U3": {
+      "symbol": "PZ254V-11-08P-RD_3",
+      "device": "PZ254V-11-08P-RD",
+      "deviceId": "3b5064a266fc8911",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "VCC",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "2",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "3",
+          "name": "SCL",
+          "schematicNet": "CN1.3 / U1.12 / U10.3 / U3.3 / U5.3 / U7.3 / U8.3",
+          "pcbNet": "$1N28"
+        },
+        {
+          "number": "4",
+          "name": "SDA",
+          "schematicNet": "CN1.4 / U1.11 / U10.4 / U3.4 / U5.4 / U7.4 / U8.2",
+          "pcbNet": "$1N27"
+        },
+        {
+          "number": "5",
+          "name": "XDA",
+          "schematicNet": "U3.5",
+          "pcbNet": ""
+        },
+        {
+          "number": "6",
+          "name": "XCL",
+          "schematicNet": "U3.6",
+          "pcbNet": ""
+        },
+        {
+          "number": "7",
+          "name": "AD0",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "8",
+          "name": "INT",
+          "schematicNet": "U1.7 / U3.8",
+          "pcbNet": "$1N43"
+        }
+      ],
+      "footprint": "COMM-TH_MPU6050_MODULE",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -8.89,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "2",
+          "xMm": -6.35,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "3",
+          "xMm": -3.81,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "4",
+          "xMm": -1.27,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "5",
+          "xMm": 1.27,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "6",
+          "xMm": 3.81,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "7",
+          "xMm": 6.35,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "8",
+          "xMm": 8.89,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        }
+      ]
+    },
+    "U4": {
+      "symbol": "PZ254V-11-05P-RD_4",
+      "device": "PZ254V-11-05P-RD",
+      "deviceId": "d1a171c68afe41bd",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "PPS",
+          "schematicNet": "U4.1",
+          "pcbNet": ""
+        },
+        {
+          "number": "2",
+          "name": "RX",
+          "schematicNet": "U1.18 / U4.2",
+          "pcbNet": "$1N59"
+        },
+        {
+          "number": "3",
+          "name": "TX",
+          "schematicNet": "U1.17 / U4.3",
+          "pcbNet": "$1N58"
+        },
+        {
+          "number": "4",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "5",
+          "name": "VCC",
+          "schematicNet": "Q2.3 / U4.5",
+          "pcbNet": "$1N61"
+        }
+      ],
+      "footprint": "HDR-TH_5P-P2.54-V-M",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -5.08,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "2",
+          "xMm": -2.54,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "3",
+          "xMm": 0.0,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "4",
+          "xMm": 2.54,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "5",
+          "xMm": 5.08,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        }
+      ]
+    },
+    "U5": {
+      "symbol": "PZ254V-11-05P-RD_3",
+      "device": "PZ254V-11-05P-RD",
+      "deviceId": "d1a171c68afe41bd",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "VCC",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "2",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "3",
+          "name": "SCL",
+          "schematicNet": "CN1.3 / U1.12 / U10.3 / U3.3 / U5.3 / U7.3 / U8.3",
+          "pcbNet": "$1N28"
+        },
+        {
+          "number": "4",
+          "name": "SDA",
+          "schematicNet": "CN1.4 / U1.11 / U10.4 / U3.4 / U5.4 / U7.4 / U8.2",
+          "pcbNet": "$1N27"
+        },
+        {
+          "number": "5",
+          "name": "DRDY",
+          "schematicNet": "U5.5",
+          "pcbNet": ""
+        }
+      ],
+      "footprint": "HDR-TH_5P-P2.54-V-M",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -5.08,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "2",
+          "xMm": -2.54,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "3",
+          "xMm": 0.0,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "4",
+          "xMm": 2.54,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "5",
+          "xMm": 5.08,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        }
+      ]
+    },
+    "SW1": {
+      "symbol": "SS-22F25-G050",
+      "device": "SS-22F25-G050",
+      "deviceId": "bb7d0d30baadc7e8",
+      "value": null,
+      "pins": [
+        {
+          "number": "6",
+          "name": "6",
+          "schematicNet": "SW1.6",
+          "pcbNet": ""
+        },
+        {
+          "number": "5",
+          "name": "5",
+          "schematicNet": "R1.1 / SW1.5 / U1.6",
+          "pcbNet": "$1N48"
+        },
+        {
+          "number": "4",
+          "name": "4",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "3",
+          "name": "3",
+          "schematicNet": "D1.2 / SW1.3",
+          "pcbNet": "$1N16"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "SW1.2 / U10.8 / U2.1",
+          "pcbNet": "$1N15"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "SW1.1",
+          "pcbNet": ""
+        }
+      ],
+      "footprint": "SW-TH_SS-22F25-G050",
+      "pads": [
+        {
+          "number": "6",
+          "xMm": 3.99997,
+          "yMm": -1.29995,
+          "holeMm": 2.0
+        },
+        {
+          "number": "5",
+          "xMm": -3e-05,
+          "yMm": -1.29995,
+          "holeMm": 2.0
+        },
+        {
+          "number": "4",
+          "xMm": -4.00002,
+          "yMm": -1.29995,
+          "holeMm": 2.0
+        },
+        {
+          "number": "3",
+          "xMm": 3.99997,
+          "yMm": 1.3,
+          "holeMm": 2.0
+        },
+        {
+          "number": "2",
+          "xMm": -3e-05,
+          "yMm": 1.3,
+          "holeMm": 2.0
+        },
+        {
+          "number": "1",
+          "xMm": -4.00002,
+          "yMm": 1.3,
+          "holeMm": 2.0
+        }
+      ]
+    },
+    "Q1": {
+      "symbol": "AO3401_C305433",
+      "device": "AO3401",
+      "deviceId": "055ce59cba03ca73",
+      "value": null,
+      "pins": [
+        {
+          "number": "3",
+          "name": "D",
+          "schematicNet": "CN1.1 / Q1.3",
+          "pcbNet": "$1N56"
+        },
+        {
+          "number": "1",
+          "name": "G",
+          "schematicNet": "Q1.1 / R2.2 / R4.1",
+          "pcbNet": "$1N53"
+        },
+        {
+          "number": "2",
+          "name": "S",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        }
+      ],
+      "footprint": "SOT-23-3_L2.9-W1.6-P1.90-LS2.8-BR",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": 1.23507,
+          "yMm": -0.94996,
+          "holeMm": 0.0
+        },
+        {
+          "number": "2",
+          "xMm": 1.23507,
+          "yMm": 0.94996,
+          "holeMm": 0.0
+        },
+        {
+          "number": "3",
+          "xMm": -1.23507,
+          "yMm": 0.0,
+          "holeMm": 0.0
+        }
+      ]
+    },
+    "Q2": {
+      "symbol": "AO3401_C305433",
+      "device": "AO3401",
+      "deviceId": "055ce59cba03ca73",
+      "value": null,
+      "pins": [
+        {
+          "number": "3",
+          "name": "D",
+          "schematicNet": "Q2.3 / U4.5",
+          "pcbNet": "$1N61"
+        },
+        {
+          "number": "1",
+          "name": "G",
+          "schematicNet": "Q2.1 / R6.1 / U1.9",
+          "pcbNet": "$1N63"
+        },
+        {
+          "number": "2",
+          "name": "S",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        }
+      ],
+      "footprint": "SOT-23-3_L2.9-W1.6-P1.90-LS2.8-BR",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": 1.23507,
+          "yMm": -0.94996,
+          "holeMm": 0.0
+        },
+        {
+          "number": "2",
+          "xMm": 1.23507,
+          "yMm": 0.94996,
+          "holeMm": 0.0
+        },
+        {
+          "number": "3",
+          "xMm": -1.23507,
+          "yMm": 0.0,
+          "holeMm": 0.0
+        }
+      ]
+    },
+    "D1": {
+      "symbol": "1N4148_C13769",
+      "device": "1N4148",
+      "deviceId": "9d5e1223fe1aab82",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "D1.1 / D2.1 / R3.1 / U9.3",
+          "pcbNet": "$1N19"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "D1.2 / SW1.3",
+          "pcbNet": "$1N16"
+        }
+      ],
+      "footprint": "DO-35_BD2.0-L4.0-P8.0-D0.5-RD",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.99999,
+          "yMm": 5e-05,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.99999,
+          "yMm": 5e-05,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "D2": {
+      "symbol": "1N4148_C13769",
+      "device": "1N4148",
+      "deviceId": "9d5e1223fe1aab82",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "D1.1 / D2.1 / R3.1 / U9.3",
+          "pcbNet": "$1N19"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "D2.2 / U1.10",
+          "pcbNet": "$1N18"
+        }
+      ],
+      "footprint": "DO-35_BD2.0-L4.0-P8.0-D0.5-RD",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.99999,
+          "yMm": 5e-05,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.99999,
+          "yMm": 5e-05,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "R1": {
+      "symbol": "Res",
+      "device": "Res_AXIAL-1/8W",
+      "deviceId": "89e3843d25827358",
+      "value": "10kΩ",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "R1.1 / SW1.5 / U1.6",
+          "pcbNet": "$1N48"
+        }
+      ],
+      "footprint": "RES-TH_BD1.8-L3.2-P7.20-D0.4",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "R2": {
+      "symbol": "Res",
+      "device": "Res_AXIAL-1/8W",
+      "deviceId": "89e3843d25827358",
+      "value": "10kΩ",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "Q1.1 / R2.2 / R4.1",
+          "pcbNet": "$1N53"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "R2.1 / U1.19",
+          "pcbNet": "$1N52"
+        }
+      ],
+      "footprint": "RES-TH_BD1.8-L3.2-P7.20-D0.4",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "R3": {
+      "symbol": "Res",
+      "device": "Res_AXIAL-1/8W",
+      "deviceId": "89e3843d25827358",
+      "value": "100kΩ",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "D1.1 / D2.1 / R3.1 / U9.3",
+          "pcbNet": "$1N19"
+        }
+      ],
+      "footprint": "RES-TH_BD1.8-L3.2-P7.20-D0.4",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "R4": {
+      "symbol": "Res",
+      "device": "Res_AXIAL-1/8W",
+      "deviceId": "89e3843d25827358",
+      "value": "100kΩ",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "Q1.1 / R2.2 / R4.1",
+          "pcbNet": "$1N53"
+        }
+      ],
+      "footprint": "RES-TH_BD1.8-L3.2-P7.20-D0.4",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "R5": {
+      "symbol": "Res",
+      "device": "Res_AXIAL-1/8W",
+      "deviceId": "89e3843d25827358",
+      "value": "100kΩ",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "Q3.2 / R5.1 / R7.2",
+          "pcbNet": "$1N72"
+        }
+      ],
+      "footprint": "RES-TH_BD1.8-L3.2-P7.20-D0.4",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "H1": {
+      "symbol": "PZ254V-11-02P-RD",
+      "device": "PZ254V-11-02P-RD",
+      "deviceId": "6bb45b43471f09f3",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "H1.1 / U1.4",
+          "pcbNet": "$1N65"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        }
+      ],
+      "footprint": "HDR-TH_2P-P2.54-V-M_RED",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -1.27,
+          "yMm": 0.0,
+          "holeMm": 1.2
+        },
+        {
+          "number": "2",
+          "xMm": 1.27,
+          "yMm": 0.0,
+          "holeMm": 1.2
+        }
+      ]
+    },
+    "H2": {
+      "symbol": "PZ254V-11-02P-RD",
+      "device": "PZ254V-11-02P-RD",
+      "deviceId": "6bb45b43471f09f3",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "H2.1 / U1.5",
+          "pcbNet": "$1N66"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        }
+      ],
+      "footprint": "HDR-TH_2P-P2.54-V-M_RED",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -1.27,
+          "yMm": 0.0,
+          "holeMm": 1.2
+        },
+        {
+          "number": "2",
+          "xMm": 1.27,
+          "yMm": 0.0,
+          "holeMm": 1.2
+        }
+      ]
+    },
+    "BUZZER1": {
+      "symbol": "TMB12065-3V",
+      "device": "TMB12065-3V",
+      "deviceId": "88b0f09b0fb65668",
+      "value": "2.7kHz",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "BUZZER1.2 / D3.2 / Q3.3",
+          "pcbNet": "$1N74"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        }
+      ],
+      "footprint": "BUZ-TH_BD12.0-P7.60-D0.6-FD",
+      "pads": [
+        {
+          "number": "2",
+          "xMm": 3.79997,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "1",
+          "xMm": -3.79997,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        }
+      ]
+    },
+    "CN2": {
+      "symbol": "PH2.0-2P_C9900095162_1",
+      "device": "PH2.0-2P",
+      "deviceId": "6f8e4e71ecaa12d6",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "+",
+          "schematicNet": "CN2.1 / U2.2",
+          "pcbNet": "$1N12"
+        },
+        {
+          "number": "2",
+          "name": "-",
+          "schematicNet": "CN2.2 / U2.3",
+          "pcbNet": "$1N13"
+        }
+      ],
+      "footprint": "CONN-TH_2P-P2.00_BOSSIE_BX-PH2.0-2PZZ",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -1.0,
+          "yMm": 0.0,
+          "holeMm": 0.90002
+        },
+        {
+          "number": "2",
+          "xMm": 1.0,
+          "yMm": 0.0,
+          "holeMm": 0.90002
+        }
+      ]
+    },
+    "CN1": {
+      "symbol": "PH2.0-LI-4P_1",
+      "device": "PH2.0-LI-4P",
+      "deviceId": "bafb57b97d21e707",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "VCC",
+          "schematicNet": "CN1.1 / Q1.3",
+          "pcbNet": "$1N56"
+        },
+        {
+          "number": "2",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "3",
+          "name": "SCL",
+          "schematicNet": "CN1.3 / U1.12 / U10.3 / U3.3 / U5.3 / U7.3 / U8.3",
+          "pcbNet": "$1N28"
+        },
+        {
+          "number": "4",
+          "name": "SDA",
+          "schematicNet": "CN1.4 / U1.11 / U10.4 / U3.4 / U5.4 / U7.4 / U8.2",
+          "pcbNet": "$1N27"
+        }
+      ],
+      "footprint": "CONN-TH_4P-P2.50_X8821WV-04K-N0SN",
+      "pads": [
+        {
+          "number": "4",
+          "xMm": 3.74904,
+          "yMm": 0.50038,
+          "holeMm": 1.19888
+        },
+        {
+          "number": "3",
+          "xMm": 1.24968,
+          "yMm": 0.50038,
+          "holeMm": 1.19888
+        },
+        {
+          "number": "2",
+          "xMm": -1.24968,
+          "yMm": 0.50038,
+          "holeMm": 1.19888
+        },
+        {
+          "number": "1",
+          "xMm": -3.74904,
+          "yMm": 0.50038,
+          "holeMm": 1.19888
+        }
+      ]
+    },
+    "U6": {
+      "symbol": "YXY-PM2.54-1X6PIN-DIP-H8.5Y_1",
+      "device": "YXY-PM2.54-1X6PIN-DIP-H8.5Y",
+      "deviceId": "3c270e0bd477367d",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "3V3",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "2",
+          "name": "CS",
+          "schematicNet": "U1.13 / U6.2",
+          "pcbNet": "$1N31"
+        },
+        {
+          "number": "3",
+          "name": "MOSI",
+          "schematicNet": "U1.14 / U6.3",
+          "pcbNet": "$1N32"
+        },
+        {
+          "number": "4",
+          "name": "CLK",
+          "schematicNet": "U1.15 / U6.4",
+          "pcbNet": "$1N33"
+        },
+        {
+          "number": "5",
+          "name": "MISO",
+          "schematicNet": "U1.16 / U6.5",
+          "pcbNet": "$1N34"
+        },
+        {
+          "number": "6",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        }
+      ],
+      "footprint": "HDR-TH_6P-P2.54-V-F-H5.7",
+      "pads": [
+        {
+          "number": "6",
+          "xMm": 6.35,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "5",
+          "xMm": 3.81,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "4",
+          "xMm": 1.27,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "3",
+          "xMm": -1.27,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "2",
+          "xMm": -3.81,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        },
+        {
+          "number": "1",
+          "xMm": -6.35,
+          "yMm": 0.0,
+          "holeMm": 1.0
+        }
+      ]
+    },
+    "U7": {
+      "symbol": "2.54-1*6_2",
+      "device": "2.54-1*6",
+      "deviceId": "eda5243ee11eb1b0",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "VCC",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "2",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "3",
+          "name": "SCL",
+          "schematicNet": "CN1.3 / U1.12 / U10.3 / U3.3 / U5.3 / U7.3 / U8.3",
+          "pcbNet": "$1N28"
+        },
+        {
+          "number": "4",
+          "name": "SDA",
+          "schematicNet": "CN1.4 / U1.11 / U10.4 / U3.4 / U5.4 / U7.4 / U8.2",
+          "pcbNet": "$1N27"
+        },
+        {
+          "number": "5",
+          "name": "SCB",
+          "schematicNet": "U7.5",
+          "pcbNet": ""
+        },
+        {
+          "number": "6",
+          "name": "SDO",
+          "schematicNet": "U7.6",
+          "pcbNet": ""
+        }
+      ],
+      "footprint": "HDR-TH_6P-P2.54-V-M",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -6.35,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "2",
+          "xMm": -3.81,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "3",
+          "xMm": -1.27,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "4",
+          "xMm": 1.27,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "5",
+          "xMm": 3.81,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "6",
+          "xMm": 6.35,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        }
+      ]
+    },
+    "U8": {
+      "symbol": "2.54-1*5_1",
+      "device": "2.54-1*5",
+      "deviceId": "433cc188165978bb",
+      "value": null,
+      "pins": [
+        {
+          "number": "5",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "4",
+          "name": "NC",
+          "schematicNet": "U8.4",
+          "pcbNet": ""
+        },
+        {
+          "number": "3",
+          "name": "SCL",
+          "schematicNet": "CN1.3 / U1.12 / U10.3 / U3.3 / U5.3 / U7.3 / U8.3",
+          "pcbNet": "$1N28"
+        },
+        {
+          "number": "2",
+          "name": "SDA",
+          "schematicNet": "CN1.4 / U1.11 / U10.4 / U3.4 / U5.4 / U7.4 / U8.2",
+          "pcbNet": "$1N27"
+        },
+        {
+          "number": "1",
+          "name": "VCC",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        }
+      ],
+      "footprint": "HDR-TH_5P-P2.54-V-M",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -5.08,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "2",
+          "xMm": -2.54,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "3",
+          "xMm": 0.0,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "4",
+          "xMm": 2.54,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        },
+        {
+          "number": "5",
+          "xMm": 5.08,
+          "yMm": 0.0,
+          "holeMm": 1.10002
+        }
+      ]
+    },
+    "R6": {
+      "symbol": "Res",
+      "device": "Res_AXIAL-1/8W",
+      "deviceId": "89e3843d25827358",
+      "value": "10kΩ",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "Q2.1 / R6.1 / U1.9",
+          "pcbNet": "$1N63"
+        }
+      ],
+      "footprint": "RES-TH_BD1.8-L3.2-P7.20-D0.4",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "R7": {
+      "symbol": "Res",
+      "device": "Res_AXIAL-1/8W",
+      "deviceId": "89e3843d25827358",
+      "value": "220Ω",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "Q3.2 / R5.1 / R7.2",
+          "pcbNet": "$1N72"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "R7.1 / U1.8",
+          "pcbNet": "$1N71"
+        }
+      ],
+      "footprint": "RES-TH_BD1.8-L3.2-P7.20-D0.4",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "R8": {
+      "symbol": "Res",
+      "device": "Res_AXIAL-1/8W",
+      "deviceId": "89e3843d25827358",
+      "value": "100kΩ",
+      "pins": [
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        }
+      ],
+      "footprint": "RES-TH_BD1.8-L3.2-P7.20-D0.4",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.59994,
+          "yMm": 0.0,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "D3": {
+      "symbol": "1N4148_C13769",
+      "device": "1N4148",
+      "deviceId": "9d5e1223fe1aab82",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "1",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "2",
+          "name": "2",
+          "schematicNet": "BUZZER1.2 / D3.2 / Q3.3",
+          "pcbNet": "$1N74"
+        }
+      ],
+      "footprint": "DO-35_BD2.0-L4.0-P8.0-D0.5-RD",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": -3.99999,
+          "yMm": 5e-05,
+          "holeMm": 0.8
+        },
+        {
+          "number": "2",
+          "xMm": 3.99999,
+          "yMm": 5e-05,
+          "holeMm": 0.8
+        }
+      ]
+    },
+    "Q3": {
+      "symbol": "2N2222",
+      "device": "2N2222A",
+      "deviceId": "879f10e0e9885a6a",
+      "value": null,
+      "pins": [
+        {
+          "number": "3",
+          "name": "C",
+          "schematicNet": "BUZZER1.2 / D3.2 / Q3.3",
+          "pcbNet": "$1N74"
+        },
+        {
+          "number": "2",
+          "name": "B",
+          "schematicNet": "Q3.2 / R5.1 / R7.2",
+          "pcbNet": "$1N72"
+        },
+        {
+          "number": "1",
+          "name": "E",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        }
+      ],
+      "footprint": "TO-92-3_L4.9-W3.7-P1.27-L",
+      "pads": [
+        {
+          "number": "3",
+          "xMm": 1.27,
+          "yMm": 0.0,
+          "holeMm": 0.70002
+        },
+        {
+          "number": "2",
+          "xMm": 0.0,
+          "yMm": 0.0,
+          "holeMm": 0.70002
+        },
+        {
+          "number": "1",
+          "xMm": -1.27,
+          "yMm": 0.0,
+          "holeMm": 0.70002
+        }
+      ]
+    },
+    "U9": {
+      "symbol": "TPS61070DDCR_1",
+      "device": "TPS61070DDCR",
+      "deviceId": "9b680526b0504ba0",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "2",
+          "name": "VIN",
+          "schematicNet": "U10.7 / U9.2",
+          "pcbNet": "$1N21"
+        },
+        {
+          "number": "3",
+          "name": "EN",
+          "schematicNet": "D1.1 / D2.1 / R3.1 / U9.3",
+          "pcbNet": "$1N19"
+        },
+        {
+          "number": "5",
+          "name": "OUT",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "6",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        }
+      ],
+      "footprint": "TPS63020",
+      "pads": [
+        {
+          "number": "1",
+          "xMm": 1.397,
+          "yMm": -1.905,
+          "holeMm": 1.6
+        },
+        {
+          "number": "1",
+          "xMm": 1.397,
+          "yMm": 0.381,
+          "holeMm": 1.6
+        },
+        {
+          "number": "2",
+          "xMm": 1.397,
+          "yMm": -11.938,
+          "holeMm": 1.6
+        },
+        {
+          "number": "2",
+          "xMm": 1.397,
+          "yMm": -14.224,
+          "holeMm": 1.6
+        },
+        {
+          "number": "6",
+          "xMm": 24.638,
+          "yMm": 0.381,
+          "holeMm": 1.6
+        },
+        {
+          "number": "6",
+          "xMm": 24.638,
+          "yMm": -1.905,
+          "holeMm": 1.6
+        },
+        {
+          "number": "5",
+          "xMm": 24.638,
+          "yMm": -11.938,
+          "holeMm": 1.6
+        },
+        {
+          "number": "5",
+          "xMm": 24.638,
+          "yMm": -14.224,
+          "holeMm": 1.6
+        },
+        {
+          "number": "3",
+          "xMm": 6.858,
+          "yMm": -16.891,
+          "holeMm": 0.9144
+        }
+      ]
+    },
+    "U10": {
+      "symbol": "TPS61070DDCR_2",
+      "device": "TPS61070DDCR",
+      "deviceId": "9b680526b0504ba0",
+      "value": null,
+      "pins": [
+        {
+          "number": "1",
+          "name": "VCC",
+          "schematicNet": "VCC",
+          "pcbNet": "VCC"
+        },
+        {
+          "number": "2",
+          "name": "GND",
+          "schematicNet": "GND",
+          "pcbNet": "GND"
+        },
+        {
+          "number": "3",
+          "name": "SCL",
+          "schematicNet": "CN1.3 / U1.12 / U10.3 / U3.3 / U5.3 / U7.3 / U8.3",
+          "pcbNet": "$1N28"
+        },
+        {
+          "number": "5",
+          "name": "VIN-",
+          "schematicNet": "U10.5",
+          "pcbNet": ""
+        },
+        {
+          "number": "6",
+          "name": "VIN+",
+          "schematicNet": "U10.6",
+          "pcbNet": ""
+        },
+        {
+          "number": "7",
+          "name": "VIN-",
+          "schematicNet": "U10.7 / U9.2",
+          "pcbNet": "$1N21"
+        },
+        {
+          "number": "8",
+          "name": "VIN+",
+          "schematicNet": "SW1.2 / U10.8 / U2.1",
+          "pcbNet": "$1N15"
+        },
+        {
+          "number": "4",
+          "name": "SDA",
+          "schematicNet": "CN1.4 / U1.11 / U10.4 / U3.4 / U5.4 / U7.4 / U8.2",
+          "pcbNet": "$1N27"
+        }
+      ],
+      "footprint": "INA219",
+      "pads": [
+        {
+          "number": "2",
+          "xMm": -8.509,
+          "yMm": -1.016,
+          "holeMm": 1.1
+        },
+        {
+          "number": "4",
+          "xMm": -8.509,
+          "yMm": -6.096,
+          "holeMm": 1.1
+        },
+        {
+          "number": "3",
+          "xMm": -8.509,
+          "yMm": -3.556,
+          "holeMm": 1.1
+        },
+        {
+          "number": "6",
+          "xMm": -8.509,
+          "yMm": -11.176,
+          "holeMm": 1.1
+        },
+        {
+          "number": "5",
+          "xMm": -8.509,
+          "yMm": -8.636,
+          "holeMm": 1.1
+        },
+        {
+          "number": "8",
+          "xMm": 7.366,
+          "yMm": -6.477,
+          "holeMm": 1.5
+        },
+        {
+          "number": "7",
+          "xMm": 7.366,
+          "yMm": -3.175,
+          "holeMm": 1.5
+        },
+        {
+          "number": "1",
+          "xMm": -8.509,
+          "yMm": 1.524,
+          "holeMm": 1.1
+        }
+      ]
+    }
+  },
+  "componentCount": 30,
+  "symbolPinCount": 122,
+  "wireSegmentCount": 236,
+  "schematicNetCount": 43,
+  "checks": [
+    {
+      "check": "battery positive",
+      "pins": [
+        "CN2.1",
+        "U2.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "battery negative",
+      "pins": [
+        "CN2.2",
+        "U2.3"
+      ],
+      "pass": true
+    },
+    {
+      "check": "protected battery output",
+      "pins": [
+        "U2.1",
+        "U10.8",
+        "SW1.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "converter input after shunt",
+      "pins": [
+        "U10.7",
+        "U9.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "system 3V3",
+      "pins": [
+        "U9.5",
+        "U1.3",
+        "U3.1",
+        "U5.1",
+        "U6.1",
+        "U7.1",
+        "U8.1",
+        "U10.1",
+        "Q1.2",
+        "Q2.2",
+        "BUZZER1.1",
+        "D3.1",
+        "R1.2",
+        "R6.2",
+        "R4.2",
+        "R8.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "system ground",
+      "pins": [
+        "U2.4",
+        "U1.2",
+        "U3.2",
+        "U4.4",
+        "U5.2",
+        "U6.6",
+        "U7.2",
+        "U8.5",
+        "U9.1",
+        "U9.6",
+        "U10.2",
+        "CN1.2",
+        "Q3.1",
+        "R5.2",
+        "R3.2",
+        "R8.2",
+        "SW1.4",
+        "H1.2",
+        "H2.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "I2C SDA GPIO8",
+      "pins": [
+        "U1.11",
+        "U3.4",
+        "U5.4",
+        "U7.4",
+        "U8.2",
+        "U10.4",
+        "CN1.4"
+      ],
+      "pass": true
+    },
+    {
+      "check": "I2C SCL GPIO9",
+      "pins": [
+        "U1.12",
+        "U3.3",
+        "U5.3",
+        "U7.3",
+        "U8.3",
+        "U10.3",
+        "CN1.3"
+      ],
+      "pass": true
+    },
+    {
+      "check": "button A GPIO1",
+      "pins": [
+        "U1.4",
+        "H1.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "button B GPIO2",
+      "pins": [
+        "U1.5",
+        "H2.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "slider GPIO3",
+      "pins": [
+        "U1.6",
+        "SW1.5",
+        "R1.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "MPU INT GPIO4",
+      "pins": [
+        "U1.7",
+        "U3.8"
+      ],
+      "pass": true
+    },
+    {
+      "check": "buzzer PWM GPIO5",
+      "pins": [
+        "U1.8",
+        "R7.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "GPS gate GPIO6",
+      "pins": [
+        "U1.9",
+        "Q2.1",
+        "R6.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "HOLD GPIO7 to D2 anode",
+      "pins": [
+        "U1.10",
+        "D2.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "SD CS GPIO10",
+      "pins": [
+        "U1.13",
+        "U6.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "SD MOSI GPIO11",
+      "pins": [
+        "U1.14",
+        "U6.3"
+      ],
+      "pass": true
+    },
+    {
+      "check": "SD SCK GPIO12",
+      "pins": [
+        "U1.15",
+        "U6.4"
+      ],
+      "pass": true
+    },
+    {
+      "check": "SD MISO GPIO13",
+      "pins": [
+        "U1.16",
+        "U6.5"
+      ],
+      "pass": true
+    },
+    {
+      "check": "GPS TX to ESP RX GPIO44",
+      "pins": [
+        "U1.17",
+        "U4.3"
+      ],
+      "pass": true
+    },
+    {
+      "check": "ESP TX GPIO43 to GPS RX",
+      "pins": [
+        "U1.18",
+        "U4.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "LCD GPIO14 series resistor",
+      "pins": [
+        "U1.19",
+        "R2.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "LCD gate and pullup",
+      "pins": [
+        "Q1.1",
+        "R2.2",
+        "R4.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "LCD switched power",
+      "pins": [
+        "Q1.3",
+        "CN1.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "GPS switched power",
+      "pins": [
+        "Q2.3",
+        "U4.5"
+      ],
+      "pass": true
+    },
+    {
+      "check": "MPU AD0 high",
+      "pins": [
+        "U3.7",
+        "U9.5"
+      ],
+      "pass": true
+    },
+    {
+      "check": "slider ON to D1 anode",
+      "pins": [
+        "SW1.3",
+        "D1.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "EN and diode cathodes",
+      "pins": [
+        "D1.1",
+        "D2.1",
+        "U9.3",
+        "R3.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "buzzer base",
+      "pins": [
+        "R7.2",
+        "Q3.2",
+        "R5.1"
+      ],
+      "pass": true
+    },
+    {
+      "check": "buzzer collector and flyback anode",
+      "pins": [
+        "Q3.3",
+        "BUZZER1.2",
+        "D3.2"
+      ],
+      "pass": true
+    },
+    {
+      "check": "no direct 3V3-ground short",
+      "pins": [
+        "U9.5",
+        "U2.4"
+      ],
+      "pass": true
+    },
+    {
+      "check": "battery minus separate from protected ground",
+      "pins": [
+        "U2.3",
+        "U2.4"
+      ],
+      "pass": true
+    },
+    {
+      "check": "shunt not bypassed in carrier wires",
+      "pins": [
+        "U10.7",
+        "U10.8"
+      ],
+      "pass": true
+    },
+    {
+      "check": "SDA separate from SCL",
+      "pins": [
+        "U1.11",
+        "U1.12"
+      ],
+      "pass": true
+    },
+    {
+      "check": "GPS drain not tied to slider input",
+      "pins": [
+        "Q2.3",
+        "SW1.5"
+      ],
+      "pass": true
+    },
+    {
+      "check": "GPS power switched",
+      "pins": [
+        "Q2.3",
+        "U9.5"
+      ],
+      "pass": true
+    },
+    {
+      "check": "LCD power switched",
+      "pins": [
+        "Q1.3",
+        "U9.5"
+      ],
+      "pass": true
+    },
+    {
+      "check": "EN separate from GPIO7 by diode",
+      "pins": [
+        "U9.3",
+        "U1.10"
+      ],
+      "pass": true
+    },
+    {
+      "check": "R1 nominal 10kΩ",
+      "pass": true
+    },
+    {
+      "check": "R2 nominal 10kΩ",
+      "pass": true
+    },
+    {
+      "check": "R3 nominal 100kΩ",
+      "pass": true
+    },
+    {
+      "check": "R4 nominal 100kΩ",
+      "pass": true
+    },
+    {
+      "check": "R5 nominal 100kΩ",
+      "pass": true
+    },
+    {
+      "check": "R6 nominal 10kΩ",
+      "pass": true
+    },
+    {
+      "check": "R7 nominal 220Ω",
+      "pass": true
+    },
+    {
+      "check": "R8 nominal 100kΩ",
+      "pass": true
+    }
+  ],
+  "missingPcbNets": [],
+  "pcbNetConflicts": [],
+  "missingFootprintPadNumbers": [],
+  "pcbTracks": 426,
+  "warning": "Internal module connections, cable orientation, geometries and USB/EN behaviour need separate checks"
+}
