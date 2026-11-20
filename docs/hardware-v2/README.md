@@ -41,6 +41,7 @@ USB ESP32 и SD доступны после открытия. Программн
 | [power-review/README.md](power-review/README.md) | Проверка и симуляция запасного отдельного ключа, ограничения |
 | [journal.md](journal.md) | История решений и изменений |
 | [prototype-review.md](prototype-review.md) | Наблюдения по пяти фото альфа-прототипа |
+| [costing.md](costing.md) | Смета одного V2, временная и целевая батареи, фактические расходы |
 | [procurement.md](procurement.md) | Предварительный крепёж, производства PCB и расчёт цен |
 | [source/vabugeode-v2-design-brief.txt](source/vabugeode-v2-design-brief.txt) | Исторический исходный документ 1.1 от 03.11.2026, не текущая распиновка |
 
